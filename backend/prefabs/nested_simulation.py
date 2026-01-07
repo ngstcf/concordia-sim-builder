@@ -38,6 +38,7 @@ from concordia.typing import prefab as prefab_lib
 from concordia.agents import entity_agent_with_logging
 from concordia.components import agent as agent_components
 from concordia.typing import entity_component
+from concordia.typing import entity as entity_lib
 
 
 @dataclasses.dataclass
@@ -129,8 +130,16 @@ class NestedSimulationConfig(prefab_lib.Prefab):
         return agent
 
 
-class NestedSimulationComponent(entity_component.ComponentT):
-    """Component that can run nested simulations and extract observations."""
+class NestedSimulationComponent(
+    entity_component.ContextComponent,
+    entity_component.ComponentWithLogging
+):
+    """Component that can run nested simulations and extract observations.
+
+    This component provides agents with the ability to run mini-simulations
+    as part of their decision-making process, following the PhoneGameMaster
+    pattern from the Concordia paper.
+    """
 
     def __init__(
         self,
@@ -139,6 +148,7 @@ class NestedSimulationComponent(entity_component.ComponentT):
         nested_config: Any,
         max_steps: int = 5,
         extraction_prompt: str = 'What were the key observations?',
+        pre_act_label: str = '\nNested Simulation',
     ):
         """Initialize the nested simulation component.
 
@@ -148,12 +158,14 @@ class NestedSimulationComponent(entity_component.ComponentT):
             nested_config: Configuration for the nested simulation
             max_steps: Maximum steps for nested simulation
             extraction_prompt: Prompt for extracting key observations
+            pre_act_label: Label for pre-act output
         """
         self._model = model
         self._parent_context = parent_context
         self._nested_config = nested_config
         self._max_steps = max_steps
         self._extraction_prompt = extraction_prompt
+        self._pre_act_label = pre_act_label
         self._name = "nested_simulation"
         self._nested_result = None
 
@@ -169,6 +181,25 @@ class NestedSimulationComponent(entity_component.ComponentT):
                 f"Result: {self._nested_result}"
             )
         return "Nested simulation available but not yet run."
+
+    def set_state(self, state: str) -> None:
+        """Set state from string (for deserialization)."""
+        # Parse state to restore nested_result if available
+        if "completed" in state and "Result:" in state:
+            # Extract result from state string
+            self._nested_result = {"status": "completed", "summary": state.split("Result: ")[1] if "Result: " in state else state}
+
+    def pre_act(
+        self,
+        component_name: str,
+        action_spec: Optional[entity_lib.ActionSpec] = None,
+    ) -> str:
+        """Provide current state before acting."""
+        return self.get_state()
+
+    def post_act(self, event: str) -> str:
+        """Process event after acting (optional)."""
+        return ""  # No post-processing needed
 
     def run_nested_simulation(
         self,

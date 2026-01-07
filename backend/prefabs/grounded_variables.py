@@ -14,6 +14,7 @@ from enum import Enum
 
 from concordia.language_model import language_model
 from concordia.typing import entity_component
+from concordia.typing import entity as entity_lib
 
 
 class VariableType(str, Enum):
@@ -136,7 +137,7 @@ class GroundedVariablesComponent(
     def pre_act(
         self,
         component_name: str,
-        action_spec: Optional[entity_component.ActionSpec] = None,
+        action_spec: Optional[entity_lib.ActionSpec] = None,
     ) -> str:
         """Provide current variable values before the GM acts."""
         return self.get_state()
