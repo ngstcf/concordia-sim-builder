@@ -77,6 +77,21 @@ class AgentConfig(BaseModel):
         }
 
 
+class VariableConfig(BaseModel):
+    """Configuration for a grounded variable."""
+    name: str = Field(..., description="Variable name")
+    variable_type: Literal["numerical", "categorical", "boolean", "percentage"] = Field(
+        "numerical",
+        description="Type of variable"
+    )
+    description: str = Field("", description="Variable description")
+    default_value: Optional[Any] = Field(None, description="Default value")
+    min_value: Optional[float] = Field(None, description="Minimum value (for numerical/percentage)")
+    max_value: Optional[float] = Field(None, description="Maximum value (for numerical/percentage)")
+    allowed_values: Optional[List[str]] = Field(None, description="Allowed values (for categorical)")
+    update_rule: Optional[str] = Field(None, description="Description of how variable updates")
+
+
 class GameMasterConfig(BaseModel):
     """Configuration for the game master."""
     prefab: str = Field(..., description="Game master prefab type")
@@ -88,6 +103,10 @@ class GameMasterConfig(BaseModel):
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
         description="Additional prefab-specific parameters"
+    )
+    grounded_variables: Optional[List[VariableConfig]] = Field(
+        None,
+        description="Optional grounded variables to track during simulation"
     )
 
     class Config:

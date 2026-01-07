@@ -2336,6 +2336,141 @@ async def get_nested_simulation_demo_template():
     }
 
 
+@router.get("/templates/grounded-variables-demo")
+async def get_grounded_variables_demo_template():
+    """
+    Template: Grounded Variables Demo
+
+    This template demonstrates the grounded variables capability where the
+    Game Master tracks and updates variables during the simulation.
+
+    Use case: A resource management simulation where the GM tracks:
+    - Team morale (0-100)
+    - Budget remaining ($0-$10000)
+    - Task completion status
+    - Project health (categorical: on_track, at_risk, critical)
+    """
+    return {
+        "name": "Grounded Variables Demo - Project Management",
+        "description": "Demonstrates grounded variables tracking where the GM monitors and updates key metrics during the simulation",
+        "config": {
+            "premise": "A team is working on a critical software project with a tight deadline. The project manager must balance team morale, budget, and progress.",
+            "max_steps": 20,
+            "shared_memories": [
+                "The project deadline is in 2 weeks.",
+                "The initial budget is $10,000.",
+                "Team morale starts at 70/100.",
+                "The project is currently on track.",
+                "There are 5 team members working on the project.",
+            ],
+            "agents": [
+                {
+                    "id": "manager",
+                    "name": "Project Manager",
+                    "prefab": "basic__Entity",
+                    "goal": "Complete the project on time and within budget while keeping the team motivated",
+                    "memories": [
+                        "Has managed similar projects before.",
+                        "Knows that overworking the team reduces morale.",
+                        "Budget is running low.",
+                        "Needs to make tradeoffs between speed and quality.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "developer_1",
+                    "name": "Senior Developer",
+                    "prefab": "basic__Entity",
+                    "goal": "Write high-quality code and mentor junior developers",
+                    "memories": [
+                        "Experienced developer who cares about code quality.",
+                        "Gets frustrated when rushed.",
+                        "Wants the project to succeed.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "developer_2",
+                    "name": "Junior Developer",
+                    "prefab": "basic__Entity",
+                    "goal": "Learn and contribute to the project",
+                    "memories": [
+                        "Eager to learn but needs guidance.",
+                        "Willing to put in extra hours.",
+                        "Looks up to the senior developer.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "project tracker",
+                "acting_order": "game_master_choice",
+                "parameters": {},
+                "grounded_variables": [
+                    {
+                        "name": "team_morale",
+                        "variable_type": "numerical",
+                        "description": "Overall team morale and satisfaction (0-100)",
+                        "default_value": 70,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Changes based on workload, recognition, and setbacks"
+                    },
+                    {
+                        "name": "budget_remaining",
+                        "variable_type": "numerical",
+                        "description": "Remaining project budget in dollars",
+                        "default_value": 10000,
+                        "min_value": 0,
+                        "max_value": 10000,
+                        "update_rule": "Decreases with each decision and action taken"
+                    },
+                    {
+                        "name": "tasks_completed",
+                        "variable_type": "numerical",
+                        "description": "Number of tasks completed",
+                        "default_value": 0,
+                        "min_value": 0,
+                        "max_value": 50,
+                        "update_rule": "Increases when the team completes tasks"
+                    },
+                    {
+                        "name": "project_health",
+                        "variable_type": "categorical",
+                        "description": "Overall project status",
+                        "default_value": "on_track",
+                        "allowed_values": ["on_track", "at_risk", "critical", "completed", "failed"],
+                        "update_rule": "Changes based on morale, budget, and progress"
+                    },
+                    {
+                        "name": "crisis_mode",
+                        "variable_type": "boolean",
+                        "description": "Whether the project is in crisis",
+                        "default_value": False,
+                        "update_rule": "Becomes true if budget < 2000 or morale < 30"
+                    },
+                    {
+                        "name": "completion_percentage",
+                        "variable_type": "percentage",
+                        "description": "Project completion percentage",
+                        "default_value": 20,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Increases as tasks are completed"
+                    }
+                ]
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
+        }
+    }
+
+
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
     """Get list of recent simulation logs."""

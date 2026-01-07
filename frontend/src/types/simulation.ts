@@ -57,6 +57,18 @@ export interface NestedSimulationConfig {
   extraction_prompt?: string;
 }
 
+// Variable Configuration for Grounded Variables
+export interface VariableConfig {
+  name: string;
+  variable_type: 'numerical' | 'categorical' | 'boolean' | 'percentage';
+  description: string;
+  default_value?: any;
+  min_value?: number;
+  max_value?: number;
+  allowed_values?: string[];
+  update_rule?: string;
+}
+
 // Agent Configuration
 export interface AgentConfig {
   id: string;
@@ -75,6 +87,7 @@ export interface GameMasterConfig {
   name: string;
   acting_order: ActingOrder;
   parameters: Record<string, any>;
+  grounded_variables?: VariableConfig[];
 }
 
 // Main Simulation Configuration

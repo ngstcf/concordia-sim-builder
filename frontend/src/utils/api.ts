@@ -393,6 +393,14 @@ export async function getNestedSimulationTemplate(): Promise<SimulationTemplate>
 }
 
 /**
+ * Get the grounded variables demo template (Grounded Variables tracking demo)
+ */
+export async function getGroundedVariablesTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/grounded-variables-demo');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication
