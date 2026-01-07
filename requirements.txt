@@ -1,0 +1,53 @@
+# Production Requirements - Pinned for Reproducibility
+# Generated: 2025-01-07
+# Python: 3.11+
+#
+# For development with unpinned dependencies, see requirements-dev.bak
+#
+# CONCORDIA VERSION IS PINNED - Do not update without testing
+# See CHANGELOG.md for upgrade procedure
+
+# Core Framework - PINNED VERSION
+gdm-concordia==2.1.0
+
+# NLP / Embeddings
+sentence-transformers==5.2.0
+
+# LLM Provider Clients
+openai==2.14.0
+anthropic==0.75.0
+google-genai==1.56.0
+google-generativeai==0.8.6
+
+# Environment Configuration
+python-dotenv==1.2.1
+
+# Web Framework
+fastapi==0.128.0
+uvicorn[standard]==0.40.0
+
+# Data Validation
+pydantic==2.12.5
+pydantic-settings==2.12.0
+
+# HTTP Client
+httpx==0.28.1
+httpx-sse==0.4.3
+
+# Google Cloud dependencies (for Vertex AI / Gemini)
+google-ai-generativelanguage==0.6.15
+google-api-core==2.28.1
+google-api-python-client==2.187.0
+google-auth==2.45.0
+google-cloud-aiplatform==1.132.0
+google-cloud-storage==3.7.0
+google-cloud-bigquery==3.39.0
+google-cloud-resource-manager==1.15.0
+google-auth-httplib2==0.3.0
+google-resumable-media==2.8.0
+google-crc32c==1.8.0
+googleapis-common-protos==1.72.0
+grpc-google-iam-v1==0.14.3
+
+# Web Scraping
+beautifulsoup4==4.12.3

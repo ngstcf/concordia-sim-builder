@@ -1,0 +1,26 @@
+# pinned-concordia-version - DO NOT UPDATE WITHOUT TESTING
+# This pins the exact version of Concordia that was tested and validated
+# with all templates and custom code in this project.
+#
+# Before updating:
+# 1. Run all simulations to verify compatibility
+# 2. Check template endpoints still work
+# 3. Verify scripted entity prefab still functions
+# 4. Test LLM provider integrations
+#
+# Last validated: 2025-01-07
+# Pinned version: gdm-concordia 2.1.0
+
+# Core Concordia framework (pinned)
+gdm-concordia==2.1.0
+
+# All other dependencies can float normally
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+sentence-transformers>=2.2.0
+openai>=1.0.0
+anthropic>=0.18.0
+google-genai>=1.0.0
+httpx>=0.25.0

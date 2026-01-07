@@ -1,0 +1,86 @@
+# Environment variables with API keys
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Simulation output
+negotiation_results.json
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Sentence transformers cache
+.cache/
+
+# Ignore sentence-transformers models cache, but not backend/models/
+sentence-transformers/
+
+LLM-Providers-Quick-Ref.md
+
+# Ignore all files in logs/ directory
+logs/*
+
+# But track the directory itself (with .gitkeep)
+!logs/.gitkeep
+
+myreadme.*
+
+# Redundant/development files (use README.md instead)
+SIMULATION_BUILDER_README.md
+Peace-Negotiation-Simulation-Readme.md
+concordia_cheatsheet.md
+negotiatepeace.py
+
+# Untracked documentation
+blog_article.md
+documentation.html
+simulation_for_sdgs.md
+GLM_SETUP.md
+
+# Test scripts
+test_glm.py
+test_glm_integration.py
+test_glm_models_concordia.pyarxiv_paper.md
+images/
+backend/tests/

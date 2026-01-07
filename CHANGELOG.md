@@ -1,0 +1,109 @@
+# Concordia Compatibility Changelog
+
+## Version 2.1.0 (Current - Validated 2025-01-07)
+
+### What Works
+- ✅ All entity prefabs (basic, basic_with_plan, basic_scripted, minimal, etc.)
+- ✅ All game master prefabs (generic, dialogic, game_theoretic, etc.)
+- ✅ Custom LLM wrappers (OpenAI, DeepSeek, Gemini, Anthropic, GLM, Ollama)
+- ✅ Template system with 14+ templates
+- ✅ Scripted entity prefab (`basic_scripted__Entity`)
+- ✅ SSE streaming for simulation execution
+- ✅ Analytics and recent simulations endpoints
+
+### Known Issues
+- ⚠️ GLM models may return empty responses (not recommended for production)
+- ⚠️ Ollama with certain models (deepseek-r1:70b) may have compatibility issues
+- ⚠️ Large model simulations (>15 steps, 5+ agents) may timeout on slower hardware
+
+### Template List (Validated)
+1. Peace Negotiation - Russia-Ukraine talks
+2. Coffee Shop Demo - Quick 5-step test
+3. Planning Agent - Strategic product launch
+4. **Scripted Entity** - Focus group moderator (NEW)
+5. Dialogic Conversation - Therapy session
+6. Strategic Game - Prisoner's Dilemma
+7. Interviewer - Employee survey
+8. Formative Memories - High school reunion
+9. Marketplace - Farmers market trading
+10. State Formation - SDG 16 simulation
+11. Labor Action - SDG 8 simulation
+12. Commons Dilemma - SDG 12/13 simulation
+13. Disaster Response - SDG 11/13 simulation
+14. Inequality Mobility - SDG 10 simulation
+
+### Breaking Changes from Future Versions
+(To be filled when upgrading)
+
+---
+
+## Upgrade Procedure
+
+When upgrading gdm-concordia:
+
+1. **Create test branch**
+   ```bash
+   git checkout -b test-concordia-upgrade
+   ```
+
+2. **Update version in requirements-concordia.txt**
+
+3. **Install new version**
+   ```bash
+   source env/bin/activate
+   pip install -r requirements-concordia.txt
+   ```
+
+4. **Run validation tests**
+   ```bash
+   # Test each template
+   curl http://localhost:8000/api/simulations/templates/coffee-shop
+   curl http://localhost:8000/api/simulations/templates/scripted-entity
+   # ... test all templates
+   ```
+
+5. **Run actual simulations**
+   - Coffee shop (5 steps, 2 agents)
+   - Scripted entity (15 steps, 5 agents)
+   - Strategic game (4 steps, 2 agents)
+
+6. **Check for errors**
+   - Empty agent responses?
+   - API compatibility issues?
+   - Import errors?
+
+7. **Document any changes needed**
+   - Update this CHANGELOG
+   - Update code if Concordia APIs changed
+   - Update templates if needed
+
+8. **If tests pass, merge to main**
+
+---
+
+## Notes for Developers
+
+### Key Files That Depend on Concordia
+
+- `backend/services/simulation_builder.py` - Prefab loading and instantiation
+- `backend/models/schemas.py` - Pydantic models matching Concordia types
+- `backend/api/simulations.py` - Template definitions using prefab params
+- `backend/models/llm_wrappers.py` - LLM wrappers implementing Concordia API
+
+### Critical Concordia APIs We Use
+
+```python
+from concordia.language_model import language_model
+from concordia.prefabs import prefab_lib
+from concordia.prefabs.entity import basic_scripted
+from concordia.associative_memory import basic_associative_memory
+from concordia.framework.agents import basic_agent
+```
+
+### Custom Components We've Added
+
+1. **Custom LLM Wrappers** - Wrap OpenAI-compatible APIs for Concordia
+2. **Temperature Configured Model** - Allows runtime temperature control
+3. **Scripted Act Component** - Already in Concordia, we use it
+4. **Template System** - Our addition, not in core Concordia
+5. **SSE Streaming** - Our addition for real-time progress

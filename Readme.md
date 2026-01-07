@@ -1,0 +1,635 @@
+# Concordia Simulation Builder
+
+A modern web application for visually creating and running agent-based social simulations powered by Google DeepMind's [Concordia](https://github.com/google-deepmind/concordia) library.
+
+![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
+![Python](https://img.shields.io/badge/Python-3.10+-green)
+![React](https://img.shields.io/badge/React-18+-blue)
+![License](https://img.shields.io/badge/License-Apache%202.0-orange)
+
+## ✨ Features
+
+- **🎨 Visual Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
+- **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
+- **⚡ Real-time Progress Streaming** ✨ - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
+- **📊 Analytics Dashboard** ✨ - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
+- **📂 Recent Simulations Browser** ✨ - Easily view and analyze previous simulation results
+- **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
+- **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
+- **🌐 Multiple LLM Support** - OpenAI, DeepSeek (recommended), Gemini, Anthropic, GLM, and Ollama
+- **💾 Import/Export** - Save and share simulation configurations as JSON
+- **📝 Automatic Logging** - All simulations saved with timestamped, descriptive filenames
+
+## 🎯 Use Cases
+
+- **Social Science Research** - Model and study complex social interactions
+- **Game Design** - Test NPC behaviors and dialogue systems
+- **Education** - Teach negotiation, conflict resolution, and social dynamics
+- **Creative Writing** - Explore character interactions and story outcomes
+- **Business Scenarios** - Simulate meetings, negotiations, and team dynamics
+
+## 🛠️ Tech Stack
+
+**Backend:**
+- Python 3.10+ with FastAPI
+- Google DeepMind Concordia library
+- Pydantic for data validation
+- Sentence Transformers for embeddings
+
+**Frontend:**
+- React 18 with TypeScript
+- Vite for fast development
+- Tailwind CSS v4 for styling
+- React Router for navigation
+- TanStack Query for data management
+
+## 📦 Installation
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Node.js 18 or higher
+- API keys for at least one LLM provider (OpenAI, DeepSeek, Gemini, Anthropic, or GLM), OR Ollama for local models
+
+### Backend Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/ngstcf/concordia-sim-builder.git
+cd concordia-sim-builder
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies (includes pinned gdm-concordia version)
+pip install -r requirements.txt
+```
+
+**Note:** The `gdm-concordia` version is pinned to `2.1.0` to ensure compatibility with all templates and features. See [CHANGELOG.md](CHANGELOG.md) for upgrade procedures.
+
+### Frontend Setup
+
+```bash
+cd frontend
+npm install
+```
+
+### Environment Configuration
+
+Create a `.env` file in the root directory:
+
+```bash
+# LLM Provider Configuration
+OPENAI_API_KEY=sk-xxx                    # For OpenAI models
+DEEPSEEK_API_KEY=sk-xxx                  # For DeepSeek (recommended)
+GEMINI_API_KEY=xxx                       # For Gemini models
+ANTHROPIC_API_KEY=sk-xxx                # For Claude models
+GLM_API_KEY=xxx                          # For GLM (Zhipu AI) models
+# OLLAMA_BASE_URL=http://localhost:11434/v1  # Optional: Custom Ollama endpoint
+```
+
+### Using Ollama (Local Models)
+
+For completely local simulations without API costs, you can use [Ollama](https://ollama.com):
+
+**Performance Requirements:**
+Ollama works well when running on hardware with sufficient resources:
+- **RAM**: 8GB+ for 7B models, 16GB+ recommended for larger models
+- **CPU**: Multi-core processor recommended (local models are CPU-intensive)
+- **GPU**: Optional but significantly improves inference speed
+- For best performance, consider using a hosted Ollama service or cloud-based LLMs (DeepSeek, OpenAI)
+
+**When to use Ollama:**
+- ✅ Privacy-sensitive simulations (data stays local)
+- ✅ Testing and development without API costs
+- ✅ Machines with good CPU/GPU performance
+- ✅ Hosted Ollama services with sufficient server resources
+
+1. **Install Ollama:**
+   ```bash
+   # macOS/Linux
+   curl -fsSL https://ollama.com/install.sh | sh
+
+   # Or download from https://ollama.com for Windows
+   ```
+
+2. **Pull a model:**
+   ```bash
+   # Llama 3 (8B) - Recommended balance of quality and speed
+   ollama pull llama3
+
+   # For faster performance with smaller models
+   ollama pull llama3:2
+
+   # Other options: mistral, codellama, phi3, gemma2, qwen2
+   ```
+
+3. **Start Ollama:**
+   ```bash
+   ollama serve
+   ```
+
+4. **Configure in the web UI:**
+   - Select "Ollama (Local)" as the provider
+   - Enter the model name (e.g., "llama3")
+   - No API key required for local Ollama!
+
+**Available Ollama models:** `llama3`, `llama3:2`, `mistral`, `codellama`, `phi3`, `gemma2`, `qwen2`
+
+**⚠️ Important Note on Ollama Timeouts:**
+- Local models like Ollama can experience timeout issues, especially with larger models or slower hardware
+- Typical timeout symptoms: "Timeout on attempt X/3. Retrying in Y seconds..."
+- If you experience frequent timeouts, consider using **DeepSeek** (recommended) instead
+- Hosted Ollama services (e.g., on powerful servers) work well for production use
+
+### Using Hosted Ollama Services (OpenWebUI, etc.)
+
+If you're using a hosted Ollama service (like OpenWebUI) that requires authentication:
+
+1. Set the `OLLAMA_BASE_URL` to your hosted service endpoint
+2. Set `OLLAMA_API_KEY` to your API key (if required)
+3. In the web UI, select "Ollama (Local)" and enter your API key
+
+```bash
+# Example .env configuration for hosted Ollama
+OLLAMA_BASE_URL=https://your-openwebui-instance.com/v1
+OLLAMA_API_KEY=your-api-key-here
+```
+
+### Using GLM (Zhipu AI)
+
+**⚠️ NOT RECOMMENDED for Concordia simulations**
+
+GLM models have compatibility issues with Concordia's prompt format and frequently return empty responses, causing simulations to fail. GLM may work for basic text generation but does not work reliably with Concordia's agent observation system.
+
+**Issues:**
+- Returns empty responses for many Concordia prompt types
+- Agents fail to generate observations, breaking simulations
+- Not suitable for production use with Concordia
+
+**Recommended alternatives:**
+- **DeepSeek** - DeepSeek V3.2 serves as a superior cost alternative to GPT-4-class models (10-50× cheaper with better coding/math benchmarks) and a strong GPT-5 competitor on reasoning tasks
+- **OpenAI/Anthropic** - Premium options with full compatibility
+
+GLM is kept as an option for experimentation or basic testing, but **DeepSeek is strongly recommended** instead.
+
+### Configuring Game-Theoretic Simulations
+
+For simulations using `game_theoretic_and_dramaturgic__GameMaster` (Prisoner's Dilemma, Marketplace):
+
+**Important Configuration Rules:**
+- `max_steps` = Number of game rounds (e.g., 4 rounds = max_steps: 4)
+- `num_rounds` in scene parameters = Must equal `max_steps`
+- **Formula**: `num_rounds = max_steps` (NOT multiplied by participants)
+
+Example for 4-round Prisoner's Dilemma with 2 players:
+```json
+{
+  "max_steps": 4,
+  "game_master": {
+    "parameters": {
+      "scenes": [{
+        "num_rounds": 4  // Must equal max_steps
+      }]
+    }
+  }
+}
+```
+
+Total individual actions = num_rounds × participants (e.g., 4 × 2 = 8 actions)
+
+**Scene Premise Format:**
+The scene's `premise` must be a **dictionary** mapping each participant to their individual context:
+
+```json
+{
+  "premise": {
+    "Agent1": ["Context specific to Agent1", "More context..."],
+    "Agent2": ["Context specific to Agent2", "More context..."]
+  }
+}
+```
+
+Using a string instead of a dictionary will cause: `TypeError: string indices must be integers, not 'str'`
+
+**Analytics:**
+Game-theoretic simulations automatically track action choices (COOPERATE/DEFECT, BUY/SELL/HOLD) in the analytics dashboard with robust extraction supporting any action format.
+
+**Frontend Configuration:**
+
+```bash
+# Simulation timeout in milliseconds (default: 1800000 = 30 minutes)
+# Increase this for very long simulations (e.g., 3600000 = 60 minutes)
+VITE_SIMULATION_TIMEOUT=1800000
+```
+
+## 🚀 Running the Application
+
+### Start Backend (Terminal 1)
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Start FastAPI server
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Backend runs at: `http://localhost:8000`
+
+API Documentation: `http://localhost:8000/docs`
+
+### Start Frontend (Terminal 2)
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend runs at: `http://localhost:5173`
+
+## 📖 Usage Guide
+
+### 1. Building a Simulation
+
+1. **Set the Premise** - Describe the scenario and setting
+2. **Configure Parameters**
+   - **Max Steps**: How many rounds of action (each agent acts once per step)
+   - More steps = longer, more detailed simulations
+3. **Add Agents**
+   - Click "Add Agent" to create a new character
+   - Set their name, goal, and initial memories
+   - Choose an appropriate prefab (e.g., `basic__Entity`)
+4. **Configure Game Master**
+   - Choose the acting order (fixed or game_master_choice)
+   - Set the narrator name
+5. **Add Shared Memories** - Context known to all agents
+
+### 2. Running a Simulation
+
+1. Navigate to the **Runner** tab
+2. Configure LLM settings:
+   - Select your provider (**DeepSeek recommended** for cost/quality and full compatibility)
+   - Choose model name
+   - Set temperature (0.8-1.2 for creative, 0.1-0.4 for focused)
+3. Click **"Run Simulation"**
+4. **✨ Watch real-time progress in the web UI** showing:
+   - Current step completion (e.g., "3/5 steps completed")
+   - Elapsed time and estimated remaining time
+   - Progress bar filling as simulation advances
+5. View results in the embedded log viewer with tabs for:
+   - **Simulation Log** - Full HTML output with agent interactions
+   - **Statistical Dashboard** - Metrics, agent activity, text statistics
+   - **Timeline Visualization** - Step-by-step event timeline
+   - **Actions View** - Per-agent action breakdown with goals
+   - **Natural Language Summary** - AI-generated analysis
+6. Download HTML logs for sharing or archiving
+
+**Console Logs**: Detailed progress also shown in terminal with timing information
+
+### 3. Using Templates
+
+**Basic Templates:**
+- **Peace Negotiation** - Russia-Ukraine peace talks with UN mediator (20 steps)
+- **Coffee Shop Demo** - Quick 5-step demo for testing basic interactions
+
+**Prefab Type Templates:**
+- **Planning Agent** (`/templates/planning-agent`) - Strategic scenario with `basic_with_plan__Entity`
+  - Startup team coordinating product launch strategy
+  - Agents with multi-step planning capabilities
+  - Best for: Complex coordination scenarios
+
+- **Scripted Entity** (`/templates/scripted-entity`) - Focus group discussion with `basic_scripted__Entity`
+  - Scripted moderator guides 4 diverse participants through a debate
+  - Demonstrates how scripted agents can orchestrate authentic interactions
+  - Best for: Facilitated discussions, controlled scenarios, group dynamics
+
+- **Dialogic Conversation** (`/templates/dialogic-conversation`) - Therapy session with `dialogic__GameMaster`
+  - Counselor-patient dialogue with auto-termination
+  - Focus on conversation flow
+  - Best for: Dialogue-heavy scenarios
+
+- **Strategic Game** (`/templates/strategic-game`) - Prisoner's Dilemma with `game_theoretic_and_dramaturgic__GameMaster`
+  - Iterated Prisoner's Dilemma tournament (4 rounds)
+  - Payoffs, scores, and strategic decisions (COOPERATE/DEFECT)
+  - Analytics dashboard shows action counts per agent
+  - Best for: Game theory scenarios
+
+- **Marketplace** (`/templates/marketplace`) - Farmers market with `game_theoretic_and_dramaturgic__GameMaster`
+  - Economic trading simulation (10 rounds)
+  - Three vendors making BUY/SELL/HOLD decisions
+  - Game-theoretic structure with payoffs and analytics
+  - Best for: Economic/trading scenarios with strategic choices
+
+- **Interviewer** (`/templates/interviewer`) - Employee survey with `interviewer__GameMaster`
+  - Structured questionnaire administration
+  - HR conducting satisfaction survey
+  - Best for: Survey/interview scenarios
+
+- **Formative Memories** (`/templates/formative-memories`) - High school reunion with character backstories
+  - Rich character development via `player_specific_context`
+  - Agents with detailed formative memories
+  - Best for: Character-driven narratives
+
+## 📚 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/simulations/prefabs` | GET | List available entity/game master prefabs |
+| `/api/simulations/providers` | GET | List supported LLM providers |
+| `/api/simulations/validate` | POST | Validate simulation configuration |
+| `/api/simulations/execute` | POST | Run simulation with **real-time progress streaming** ✨ |
+| `/api/simulations/execute-simple` | POST | Run simulation (non-streaming, for testing) |
+| `/api/simulations/export-template` | GET | Get blank configuration template |
+| `/api/simulations/import` | POST | Import configuration from JSON |
+| `/api/simulations/recent` | GET | List recent simulation logs |
+| `/api/simulations/logs/{filename}` | GET | Get specific simulation log HTML |
+| `/api/simulations/logs/{filename}/analytics` | GET | Get analytics for simulation log ✨ |
+| `/api/simulations/status` | GET | Get status of all running simulations |
+| `/api/simulations/status/{task_id}` | GET | Get status of specific simulation |
+| `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation |
+| `/api/simulations/templates/peace-negotiation` | GET | Peace negotiation template |
+| `/api/simulations/templates/coffee-shop` | GET | Coffee shop demo template |
+| `/api/simulations/templates/planning-agent` | GET | Planning agent template |
+| `/api/simulations/templates/scripted-entity` | GET | Scripted entity (focus group moderator) template |
+| `/api/simulations/templates/dialogic-conversation` | GET | Dialogic conversation template |
+| `/api/simulations/templates/strategic-game` | GET | Strategic game theory template |
+| `/api/simulations/templates/interviewer` | GET | Interview/survey template |
+| `/api/simulations/templates/formative-memories` | GET | Character backstory template |
+| `/api/simulations/templates/marketplace` | GET | Marketplace trading template |
+| `/api/simulations/templates/state-formation` | GET | State formation simulation (SDG 16) |
+| `/api/simulations/templates/labor-action` | GET | Labor strike simulation (SDG 8) |
+| `/api/simulations/templates/commons-dilemma` | GET | Fishery management simulation (SDG 12/13) |
+| `/api/simulations/templates/disaster-response` | GET | Flood evacuation simulation (SDG 11/13) |
+| `/api/simulations/templates/inequality-mobility` | GET | Educational opportunity simulation (SDG 10) |
+
+✨ **New**: Real-time progress streaming and analytics endpoints now available!
+
+## 🎨 Supported Prefabs
+
+### Entity Prefabs (Agents)
+
+| Prefab | Description | Best For |
+|--------|-------------|----------|
+| `basic__Entity` | Standard agent with "three key questions" decision framework | Most scenarios |
+| `basic_with_plan__Entity` | Adds strategic planning with time horizons | Complex coordination |
+| `basic_scripted__Entity` | Follows predefined scripts | Testing, controlled scenarios |
+| `minimal__Entity` | Simplified decision-making | Lightweight simulations |
+| `fake_assistant_with_configurable_system_prompt__Entity` | AI assistant with custom system prompt | Simulating AI personas |
+
+### Game Master Prefabs
+
+| Prefab | Description | Best For |
+|--------|-------------|----------|
+| `generic__GameMaster` | Standard narrative control | Most simulations |
+| `dialogic__GameMaster` | Conversation-focused with auto-termination | Dialogue-heavy scenarios |
+| `dialogic_and_dramaturgic__GameMaster` | Enhanced dialogue with dramatic structure | Rich conversations |
+| `game_theoretic_and_dramaturgic__GameMaster` | Matrix games with payoffs/scores | Strategic negotiations |
+| `interviewer__GameMaster` | Administers questionnaires | Surveys, interviews |
+| `psychology_experiment__GameMaster` | Experimental protocols | Research scenarios |
+| `scripted__GameMaster` | Follows predetermined narrative | Controlled storytelling |
+| `marketplace__GameMaster` | Economic trading systems | Market simulations |
+
+### Initializer Prefabs
+
+| Prefab | Description |
+|--------|-------------|
+| `formative_memories_initializer__GameMaster` | Creates character backgrounds from `player_specific_context` before main simulation |
+
+## 🔧 Configuration Examples
+
+### Simple Coffee Shop Encounter
+
+```json
+{
+  "premise": "Alice meets Bob at a coffee shop on Monday morning.",
+  "max_steps": 5,
+  "agents": [
+    {
+      "name": "Alice",
+      "goal": "Find out what Bob is working on",
+      "prefab": "basic__Entity",
+      "memories": ["Alice is friendly and curious"]
+    },
+    {
+      "name": "Bob",
+      "goal": "Finish work with minimal distractions",
+      "prefab": "basic__Entity",
+      "memories": ["Bob has a deadline"]
+    }
+  ]
+}
+```
+
+### Complex Negotiation
+
+```json
+{
+  "premise": "Peace negotiation between two conflicting parties.",
+  "max_steps": 20,
+  "agents": [
+    {
+      "name": "Party A Representative",
+      "goal": "Secure territorial recognition",
+      "prefab": "basic__Entity",
+      "memories": ["Territory is non-negotiable core interest"]
+    },
+    {
+      "name": "Party B Representative",
+      "goal": "Restore territorial integrity",
+      "prefab": "basic__Entity",
+      "memories": ["Sovereignty must be fully restored"]
+    }
+  ],
+  "shared_memories": ["International observers are present", "Media is watching"]
+}
+```
+
+## 🐛 Troubleshooting
+
+### Backend Issues
+
+**ImportError: No module named 'concordia'**
+```bash
+pip install gdm-concordia --upgrade
+```
+
+**CUDA/gpu errors**
+```bash
+# For systems without GPU, install CPU version:
+pip install sentence-transformers --no-deps
+pip install transformers torch
+```
+
+### Frontend Issues
+
+**Port already in use**
+```bash
+# Kill process on port 5173
+lsof -ti:5173 | xargs kill -9
+```
+
+**CORS errors**
+- Ensure backend is running on port 8000
+- Check frontend `.env` has correct `VITE_API_URL`
+
+### LLM Provider Issues
+
+**API key errors**
+- Verify `.env` file is in root directory
+- Check API key has sufficient credits
+- Try different provider if one is down
+
+**Ollama timeout errors**
+- Symptoms: "Timeout on attempt X/3. Retrying in Y seconds..."
+- This is common with local models, especially larger ones or on slower hardware
+- **Solution**: Use **DeepSeek** instead (fully compatible and reliable)
+
+**GLM compatibility issues**
+- **⚠️ GLM models are NOT recommended for Concordia simulations**
+- GLM returns empty responses for many Concordia prompt types, making simulations fail
+- Symptoms: "GLM returned empty response" followed by fallback text
+- Solutions:
+  1. **Use DeepSeek instead** - fully compatible and cost-effective
+  2. Or use OpenAI/Anthropic for premium quality
+  3. GLM may work for basic text generation but fails with Concordia's agent observations
+
+**DeepSeek connection issues**
+- Verify API key is correct and has credits
+- Check network connectivity to `https://api.deepseek.com`
+- Try model `deepseek-chat` or `deepseek-coder`
+
+## 📂 Project Structure
+
+```
+concordia-sim-builder/
+├── backend/
+│   ├── api/
+│   │   └── simulations.py          # API endpoints + analytics
+│   ├── models/
+│   │   ├── schemas.py              # Pydantic models
+│   │   └── llm_wrappers.py         # LLM provider wrappers
+│   ├── services/
+│   │   ├── simulation_builder.py   # Simulation construction
+│   │   ├── simulation_runner.py    # Execution with streaming + logging
+│   │   ├── simulation_state.py     # Task state management
+│   │   └── llm_factory.py          # LLM provider factory
+│   └── main.py                      # FastAPI app with .env loading
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── SimulationBuilder/   # Builder UI
+│   │   │   ├── SimulationRunner/    # Runner UI with progress
+│   │   │   │   ├── StatisticalDashboard.tsx    # ✨ Analytics
+│   │   │   │   ├── TimelineVisualization.tsx  # ✨ Timeline
+│   │   │   │   ├── ActionsView.tsx            # ✨ Actions
+│   │   │   │   └── NaturalLanguageSummary.tsx # ✨ Summary
+│   │   │   ├── RecentSimulations/  # ✨ Recent logs browser
+│   │   │   └── shared/             # Shared components
+│   │   ├── contexts/
+│   │   │   └── SimulationContext.tsx # Global state
+│   │   ├── types/
+│   │   │   └── simulation.ts        # TypeScript types
+│   │   └── utils/
+│   │       └── api.ts              # API client
+│   └── package.json
+├── logs/                            # Auto-generated simulation logs
+├── negotiatepeace.py                # Original CLI simulation
+└── requirements.txt                 # Python dependencies
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Tips
+
+- Add new prefabs in `backend/services/simulation_builder.py`
+- Create new templates in `backend/api/simulations.py`
+- Frontend components use React Context for state management
+- All simulations are automatically saved to `logs/` directory
+
+## 📜 License
+
+This project uses the [Concordia library](https://github.com/google-deepmind/concordia) (Apache-2.0 license).
+
+This project is licensed under the Apache 2.0 License - see the LICENSE file for details.
+
+## 📖 Citation
+
+If you use this software in your research, please cite:
+
+```bibtex
+@software{concordia_sim_builder,
+  title={Concordia Simulation Builder: A Web-Based Visual Interface for Multi-Agent Social Simulation},
+  author={Ng Chong},
+  year={2026},
+  url={https://github.com/ngstcf/concordia-sim-builder}
+}
+```
+
+**OR**
+
+```bibtex
+@software{concordia_sim_builder,
+  title={Concordia Simulation Builder: A Web-Based Visual Interface for Multi-Agent Social Simulation},
+  author={Chong, Ng S. T.},
+  year={2026},
+  url={https://github.com/ngstcf/concordia-sim-builder},
+  institution={United Nations University}
+}
+```
+
+## 🙏 Acknowledgments
+
+- **Google DeepMind** for the [Concordia](https://github.com/google-deepmind/concordia) framework
+- **Concordia Contributors** for building an amazing simulation library
+- **FastAPI** for the excellent web framework
+- **React Community** for the amazing ecosystem
+
+## 📞 Resources
+
+- **Online Documentation**: [c3.unu.edu/projects/ai/simulator/](https://c3.unu.edu/projects/ai/simulator/)
+- **GitHub Issues**: Report bugs or request features
+- **Simulation Logs**: Review existing logs in the `logs/` directory
+- **Known Issues**: See [CONCORDIA_ISSUES.md](CONCORDIA_ISSUES.md) for documented framework limitations
+
+## ⚠️ Known Limitations
+
+### Game-Theoretic Simulation Issue
+
+The `game_theoretic_and_dramaturgic__GameMaster` prefab has a confirmed issue where participant turn-taking is not symmetric. In a 2-agent game with 8 steps, instead of alternating (Agent A, Agent B, Agent A, Agent B...), one agent may act only once while the other acts 7 times.
+
+**Impact**: Strategic game simulations (Prisoner's Dilemma, etc.) may not produce expected symmetric outcomes.
+
+**Workaround**: Use generic game master prefabs or manually manage turn sequences for now. See [CONCORDIA_ISSUES.md](CONCORDIA_ISSUES.md) for details.
+
+**Status**: Documented bug in Concordia framework - tracking for upstream fix.
+
+## 🌟 Roadmap
+
+- [x] **Analytics Dashboard** - Statistical analysis and natural language summaries of simulation results ✅
+- [x] **Real-time Progress Streaming** - Watch simulations unfold live in the browser with step-by-step progress ✅
+- [x] **GLM Integration** - Fast, reliable Chinese/English language models ✅
+- [x] **Console Progress Logging** - Detailed real-time logs during simulation execution ✅
+- [x] **Timeline Visualization** - Step-by-step event timeline ✅
+- [x] **Actions View** - Per-agent action breakdown with extracted goals ✅
+- [x] **Game-Theoretic Analytics** - Robust action extraction for strategic games (Prisoner's Dilemma, Marketplace) ✅
+- [ ] **Visual graph editor for agent relationships** - Drag-and-drop interface to create and visualize agent social networks, influence maps, and communication flows
+- [ ] **Simulation comparison tool** - Run multiple simulations with varied parameters and compare outcomes side-by-side with statistical analysis
+- [ ] **Export to PDF/Markdown** - Generate publication-ready reports from simulation results in multiple formats
+- [ ] **Agent behavior analytics** - Track and visualize agent metrics over time (cooperation rates, sentiment evolution, decision patterns)
+- [ ] **Multi-player mode with human agents** - Allow humans to join simulations as agents, interacting with AI agents
+- [ ] **Cloud deployment option** - One-click deployment to cloud platforms for collaborative research and shared access
+
+---
+
+**Built using [Concordia](https://github.com/google-deepmind/concordia) by [Ng Chong](https://github.com/ngstcf)**
