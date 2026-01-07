@@ -21,6 +21,7 @@ import {
   getDisasterResponseTemplate,
   getInequalityMobilityTemplate,
   getContextAwareModeratorTemplate,
+  getVaccineHesitancyTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -35,6 +36,7 @@ const TEMPLATES = [
   { id: 'planning', name: 'Planning Agent', description: 'Strategic product launch', category: 'Prefab Types' },
   { id: 'scripted-entity', name: 'Scripted Entity', description: 'Focus group moderator (exact responses)', category: 'Prefab Types' },
   { id: 'context-aware-moderator', name: 'Context-Aware Moderator', description: 'Support group with adaptive responses', category: 'Prefab Types' },
+  { id: 'vaccine-hesitancy', name: 'Vaccine Hesitancy Study', description: 'Psychological component research demo', category: 'Research' },
   { id: 'dialogic', name: 'Dialogic Conversation', description: 'Therapy session', category: 'Prefab Types' },
   { id: 'strategic', name: 'Strategic Game', description: 'Prisoner\'s Dilemma', category: 'Prefab Types' },
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
@@ -53,6 +55,7 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   planning: getPlanningAgentTemplate,
   'scripted-entity': getScriptedEntityTemplate,
   'context-aware-moderator': getContextAwareModeratorTemplate,
+  'vaccine-hesitancy': getVaccineHesitancyTemplate,
   dialogic: getDialogicConversationTemplate,
   strategic: getStrategicGameTemplate,
   interviewer: getInterviewerTemplate,

@@ -1997,6 +1997,233 @@ async def get_context_aware_moderator_template():
     }
 
 
+@router.get("/templates/vaccine-hesitancy")
+async def get_vaccine_hesitancy_template():
+    """
+    Template: Vaccine Hesitancy and Social Contagion Study
+    Use for: Research on how cognitive biases and social identity affect vaccine acceptance
+
+    This template demonstrates the psychological component system by modeling a community
+    discussion about vaccination. Agents have different psychological profiles affecting
+    how they process information and make decisions.
+
+    RESEARCH APPLICATION:
+    This template enables researchers to:
+    - Isolate effects of specific psychological mechanisms (confirmation bias, social identity)
+    - Test different message frames and messenger characteristics
+    - Study how cognitive biases interact with social dynamics
+    - Measure attitude change and persuasion effectiveness
+
+    KEY COMPONENTS DEMONSTRATED:
+    - personality_traits: Big Five model (openness, conscientiousness, etc.)
+    - cognitive_bias: Confirmation bias, availability heuristic
+    - social_identity: Group membership and identification strength
+    - theory_of_planned_behavior: Attitude, norms, perceived control
+    - values: Core values and moral framework
+
+    EXPERIMENTAL CONDITIONS:
+    - Baseline: No psychological components
+    - Cognitive bias only: Tests biased information processing
+    - Full model: Tests interaction of multiple psychological factors
+
+    MEASURED OUTCOMES:
+    - Vaccine acceptance decision (binary)
+    - Attitude strength change (pre/post comparison)
+    - Information recall accuracy
+    - Social influence patterns
+    - Emotional responses
+    """
+    return {
+        "name": "Vaccine Hesitancy - Psychological Component Study",
+        "description": "A research simulation investigating how cognitive biases (confirmation bias, availability heuristic) and social identity dynamics affect vaccine acceptance. Demonstrates the customizable psychological component system.",
+        "config": {
+            "premise": "A community health clinic is hosting an open discussion about COVID-19 vaccination. Dr. Sarah Chen, a public health advocate, is facilitating the conversation. Community members with different backgrounds, beliefs, and psychological profiles are participating to share their perspectives and make decisions about vaccination.",
+            "max_steps": 20,
+            "agents": [
+                {
+                    "id": "health_worker",
+                    "name": "Dr. Sarah Chen",
+                    "prefab": "basic__Entity",
+                    "goal": "Provide accurate information about vaccination and address community concerns respectfully",
+                    "memories": [
+                        "You are Dr. Sarah Chen, a public health physician with 15 years of experience",
+                        "You believe vaccination is critically important for community health",
+                        "You've seen firsthand the devastating effects of preventable diseases",
+                        "You approach hesitancy with empathy, not judgment",
+                        "You know that building trust takes time and genuine listening",
+                        "You're prepared to answer questions honestly, even uncertain ones",
+                        "You respect personal autonomy while strongly advocating for vaccination"
+                    ],
+                    "randomize_choices": False,
+                    "components": {
+                        "personality_traits": {
+                            "traits": {
+                                "openness": 5,
+                                "conscientiousness": 5,
+                                "agreeableness": 4,
+                                "extraversion": 3,
+                                "neuroticism": 2
+                            }
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "recommend vaccination",
+                            "attitude": "strongly_favorable",
+                            "subjective_norm": "strongly_favorable",
+                            "perceived_control": "high"
+                        }
+                    }
+                },
+                {
+                    "id": "skeptic_1",
+                    "name": "Mike Johnson",
+                    "prefab": "basic__Entity",
+                    "goal": "Express concerns about vaccine safety and protect personal freedom",
+                    "memories": [
+                        "You are Mike Johnson, a 45-year-old small business owner",
+                        "You've read extensively online about vaccine side effects",
+                        "You distrust pharmaceutical companies and their profit motives",
+                        "You value personal freedom and autonomy above all else",
+                        "You believe natural immunity is superior to vaccine-acquired immunity",
+                        "You see vaccine mandates as government overreach",
+                        "You're part of online communities that share your views"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "confirmation_bias",
+                            "bias_strength": "strong"
+                        },
+                        "social_identity": {
+                            "group_membership": ["libertarian_community", "natural_health_advocates"],
+                            "identification_strength": "strong"
+                        },
+                        "values": {
+                            "core_values": ["freedom", "autonomy", "natural_living"],
+                            "value_conflict": "freedom_vs_collectivism"
+                        }
+                    }
+                },
+                {
+                    "id": "undecided_1",
+                    "name": "Maria Garcia",
+                    "prefab": "basic__Entity",
+                    "goal": "Gather information to make an informed decision about vaccination",
+                    "memories": [
+                        "You are Maria Garcia, a 32-year-old teacher",
+                        "You've heard mixed information about vaccines from different sources",
+                        "You trust your family doctor but also worry about side effects",
+                        "You're concerned about COVID-19 but also about the new vaccines",
+                        "You want to do the right thing for your family and community",
+                        "You feel overwhelmed by conflicting information",
+                        "You're looking for trustworthy sources to guide your decision"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "availability_heuristic",
+                            "bias_strength": "moderate"
+                        },
+                        "emotion": {
+                            "current_emotion": "anxiety",
+                            "emotion_intensity": "moderate"
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "get_vaccinated",
+                            "attitude": "ambivalent",
+                            "subjective_norm": "neutral",
+                            "perceived_control": "moderate"
+                        }
+                    }
+                },
+                {
+                    "id": "community_member_1",
+                    "name": "James Wilson",
+                    "prefab": "basic__Entity",
+                    "goal": "Share positive vaccination experience and encourage others",
+                    "memories": [
+                        "You are James Wilson, a 55-year-old factory worker",
+                        "You got vaccinated as soon as you were eligible",
+                        "You had mild side effects (sore arm, fatigue for a day)",
+                        "You're glad you got vaccinated to protect your family",
+                        "Your elderly mother also got vaccinated safely",
+                        "You want to reassure others who are hesitant",
+                        "You trust science and medical professionals"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "personality_traits": {
+                            "traits": {
+                                "openness": 3,
+                                "conscientiousness": 4,
+                                "agreeableness": 5,
+                                "extraversion": 4,
+                                "neuroticism": 3
+                            }
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "get_vaccinated",
+                            "attitude": "favorable",
+                            "subjective_norm": "favorable",
+                            "perceived_control": "high"
+                        }
+                    }
+                },
+                {
+                    "id": "concerned_parent",
+                    "name": "Lisa Thompson",
+                    "prefab": "basic__Entity",
+                    "goal": "Ask questions about vaccine safety for children",
+                    "memories": [
+                        "You are Lisa Thompson, a 38-year-old mother of two",
+                        "Your children are ages 8 and 12",
+                        "You're generally pro-vaccine but worry about new vaccines",
+                        "You've heard conflicting information about risks",
+                        "You want to protect your children but also be cautious",
+                        "You know other parents who are choosing not to vaccinate",
+                        "You're looking for balanced, honest information"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "availability_heuristic",
+                            "bias_strength": "moderate"
+                        },
+                        "emotion": {
+                            "current_emotion": "worry",
+                            "emotion_intensity": "moderate"
+                        },
+                        "values": {
+                            "core_values": ["family_safety", "caution", "protection"]
+                        }
+                    }
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Community Health Discussion",
+                "acting_order": "game_master_choice",
+                "params": {
+                    "extra_components": {
+                        "grounded_variables_intro": (
+                            "Track key outcomes throughout this discussion:\n"
+                            "- Vaccine acceptance: Count who decides to get vaccinated\n"
+                            "- Attitude shifts: Note changes in participants' stances\n"
+                            "- Information quality: Track accurate vs. inaccurate claims\n"
+                            "- Emotional tone: Monitor fear, hope, anger, reassurance"
+                        )
+                    }
+                }
+            },
+            "llm_settings": {
+                "provider": "gemini",
+                "model": "gemini-2.0-flash-exp",
+                "embedder_model": "all-MiniLM-L6-v2",
+                "temperature": 0.85
+            }
+        }
+    }
+
+
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
     """Get list of recent simulation logs."""
