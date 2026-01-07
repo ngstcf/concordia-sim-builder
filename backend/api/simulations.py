@@ -1880,6 +1880,7 @@ async def get_context_aware_moderator_template():
                 "name": "Group Session Manager",
                 "acting_order": "game_master_choice",
                 "parameters": {
+                    "player_names": ["Sarah", "Marcus", "Elena", "David"],
                     "drive_role": "interviewer",
                     "drive_role_name": "Sarah"
                 }
