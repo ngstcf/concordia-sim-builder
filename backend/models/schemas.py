@@ -2,7 +2,7 @@
 Pydantic schemas for simulation configuration and API requests/responses.
 """
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal, Union
 from enum import Enum
 
 
@@ -31,6 +31,25 @@ class LLMProvider(str, Enum):
     GLM = "glm"  # Zhipu AI (GLM models)
 
 
+class NestedSimulationConfig(BaseModel):
+    """Configuration for a nested simulation within the main simulation."""
+    premise: str = Field(..., description="Premise of the nested simulation")
+    max_steps: int = Field(5, ge=1, le=50, description="Max steps for nested simulation")
+    agents: List['AgentConfig'] = Field(
+        ...,
+        min_items=1,
+        description="Agents in the nested simulation"
+    )
+    shared_memories: List[str] = Field(
+        default_factory=list,
+        description="Shared memories for nested simulation"
+    )
+    extraction_prompt: Optional[str] = Field(
+        None,
+        description="Custom prompt for extracting observations from nested sim"
+    )
+
+
 class AgentConfig(BaseModel):
     """Configuration for a simulation agent."""
     id: str = Field(..., description="Unique identifier for the agent")
@@ -40,6 +59,10 @@ class AgentConfig(BaseModel):
     memories: List[str] = Field(default_factory=list, description="Pre-loaded memories")
     components: Optional[Dict[str, Any]] = Field(None, description="Additional components")
     randomize_choices: bool = Field(True, description="Whether to randomize action choices")
+    nested_simulation: Optional[NestedSimulationConfig] = Field(
+        None,
+        description="Optional nested simulation this agent can run"
+    )
 
     class Config:
         json_schema_extra = {
@@ -242,3 +265,8 @@ class SimulationResult(BaseModel):
     events: List[SimulationEvent]
     final_summary: Optional[str] = None
     html_log: Optional[str] = None
+
+
+# Resolve forward references
+NestedSimulationConfig.model_rebuild()
+AgentConfig.model_rebuild()

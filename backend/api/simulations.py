@@ -2234,6 +2234,108 @@ async def get_vaccine_hesitancy_template():
     }
 
 
+@router.get("/templates/nested-simulation-demo")
+async def get_nested_simulation_demo_template():
+    """
+    Template: Nested Simulation Demo (PhoneGameMaster Pattern)
+
+    This template demonstrates the nested simulation capability where an agent
+    can run a mini-simulation as part of their decision-making process.
+
+    Use case: An agent simulates a conversation with a friend to decide what
+    to bring to a party, then uses that insight in the main simulation.
+    """
+    return {
+        "name": "Nested Simulation Demo - Phone Call Planning",
+        "description": "Demonstrates nested simulations where agents run mini-simulations to inform their decisions in the main simulation",
+        "config": {
+            "premise": "Alice is planning what to bring to a dinner party. She calls her friend Bob to discuss what would be good to bring.",
+            "max_steps": 15,
+            "shared_memories": [
+                "There is a dinner party happening this weekend.",
+                "Alice is deciding what to bring.",
+                "She wants to call her friend Bob for advice.",
+                "The host has requested guests bring something to share.",
+            ],
+            "agents": [
+                {
+                    "id": "alice",
+                    "name": "Alice",
+                    "prefab": "basic__Entity",
+                    "goal": "Decide what to bring to the dinner party by consulting with Bob",
+                    "memories": [
+                        "Alice loves cooking and trying new recipes.",
+                        "She wants to impress the other guests.",
+                        "She's considering bringing a dessert or an appetizer.",
+                        "She wants to make sure no one else is bringing the same thing.",
+                    ],
+                    "randomize_choices": True,
+                    # Nested simulation: Alice simulates a conversation with Bob
+                    "nested_simulation": {
+                        "premise": "Alice calls Bob to ask what she should bring to the dinner party. Bob knows what other guests are bringing.",
+                        "max_steps": 5,
+                        "shared_memories": [
+                            "Alice is calling Bob for advice about the dinner party.",
+                            "Bob knows what other guests are planning to bring.",
+                            "They are close friends who often cook together.",
+                        ],
+                        "agents": [
+                            {
+                                "id": "alice_nested",
+                                "name": "Alice",
+                                "prefab": "basic__Entity",
+                                "goal": "Find out what would be good to bring to the party",
+                                "memories": [
+                                    "Alice is considering her options.",
+                                    "She trusts Bob's judgment.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "bob_nested",
+                                "name": "Bob",
+                                "prefab": "basic__Entity",
+                                "goal": "Help Alice decide what to bring",
+                                "memories": [
+                                    "Bob knows that Maria is bringing a main dish.",
+                                    "Bob knows that Carlos is bringing drinks.",
+                                    "Bob thinks a dessert would be perfect.",
+                                ],
+                                "randomize_choices": True,
+                            }
+                        ],
+                        "extraction_prompt": "What did Alice learn about what to bring to the party? What did Bob say others are bringing?"
+                    }
+                },
+                {
+                    "id": "bob_main",
+                    "name": "Bob",
+                    "prefab": "basic__Entity",
+                    "goal": "Help Alice decide what to bring to the dinner party",
+                    "memories": [
+                        "Bob is Alice's friend.",
+                        "Bob is knowledgeable about food and parties.",
+                        "Bob wants to help Alice make a good impression.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "conversation guide",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
+        }
+    }
+
+
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
     """Get list of recent simulation logs."""

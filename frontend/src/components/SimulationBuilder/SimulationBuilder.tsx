@@ -22,6 +22,7 @@ import {
   getInequalityMobilityTemplate,
   getContextAwareModeratorTemplate,
   getVaccineHesitancyTemplate,
+  getNestedSimulationTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -37,6 +38,7 @@ const TEMPLATES = [
   { id: 'scripted-entity', name: 'Scripted Entity', description: 'Focus group moderator (exact responses)', category: 'Prefab Types' },
   { id: 'context-aware-moderator', name: 'Context-Aware Moderator', description: 'Support group with adaptive responses', category: 'Prefab Types' },
   { id: 'vaccine-hesitancy', name: 'Vaccine Hesitancy Study', description: 'Psychological component research demo', category: 'Research' },
+  { id: 'nested-simulation', name: 'Nested Simulation Demo', description: 'PhoneGameMaster pattern (mini-sims)', category: 'Advanced' },
   { id: 'dialogic', name: 'Dialogic Conversation', description: 'Therapy session', category: 'Prefab Types' },
   { id: 'strategic', name: 'Strategic Game', description: 'Prisoner\'s Dilemma', category: 'Prefab Types' },
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
@@ -56,6 +58,7 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   'scripted-entity': getScriptedEntityTemplate,
   'context-aware-moderator': getContextAwareModeratorTemplate,
   'vaccine-hesitancy': getVaccineHesitancyTemplate,
+  'nested-simulation': getNestedSimulationTemplate,
   dialogic: getDialogicConversationTemplate,
   strategic: getStrategicGameTemplate,
   interviewer: getInterviewerTemplate,
@@ -121,6 +124,7 @@ export default function SimulationBuilder() {
   const basicTemplates = TEMPLATES.filter(t => t.category === 'Basic');
   const prefabTemplates = TEMPLATES.filter(t => t.category === 'Prefab Types');
   const researchTemplates = TEMPLATES.filter(t => t.category === 'Research');
+  const advancedTemplates = TEMPLATES.filter(t => t.category === 'Advanced');
   const sdgTemplates = TEMPLATES.filter(t => t.category === 'SDG Scenarios');
 
   return (
@@ -159,6 +163,13 @@ export default function SimulationBuilder() {
               </optgroup>
               <optgroup label="Research Studies">
                 {researchTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.description}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Advanced Features">
+                {advancedTemplates.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name} - {t.description}
                   </option>

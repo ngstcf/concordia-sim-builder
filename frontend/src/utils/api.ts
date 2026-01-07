@@ -385,6 +385,14 @@ export async function getVaccineHesitancyTemplate(): Promise<SimulationTemplate>
 }
 
 /**
+ * Get the nested simulation demo template (PhoneGameMaster pattern demo)
+ */
+export async function getNestedSimulationTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/nested-simulation-demo');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication

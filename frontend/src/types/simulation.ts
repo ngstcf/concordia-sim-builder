@@ -48,6 +48,15 @@ export interface ScriptLine {
   line: string;
 }
 
+// Nested Simulation Configuration
+export interface NestedSimulationConfig {
+  premise: string;
+  max_steps: number;
+  agents: AgentConfig[];
+  shared_memories: string[];
+  extraction_prompt?: string;
+}
+
 // Agent Configuration
 export interface AgentConfig {
   id: string;
@@ -57,6 +66,7 @@ export interface AgentConfig {
   memories: string[];
   components?: Record<string, any>;
   randomize_choices: boolean;
+  nested_simulation?: NestedSimulationConfig;
 }
 
 // Game Master Configuration
