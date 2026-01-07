@@ -151,6 +151,80 @@ async def get_provider_models(
         except Exception as e:
             return {'provider': provider, 'models': [], 'error': str(e)}
 
+    elif provider == LLMProvider.GEMINI.value:
+        # For Gemini, use their models API
+        key = api_key or os.getenv('GEMINI_API_KEY')
+        if not key:
+            return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Gemini uses query parameter for API key
+                response = await client.get(
+                    f'https://generativelanguage.googleapis.com/v1beta/models?key={key}'
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models = []
+                    for model in data.get('models', []):
+                        # Extract base model name from the resource name
+                        # Format: models/gemini-1.5-flash-001 -> baseModelId: gemini-1.5-flash
+                        base_model_id = model.get('baseModelId', '')
+                        display_name = model.get('displayName', base_model_id)
+
+                        if base_model_id:  # Only include models with baseModelId
+                            models.append({
+                                'id': base_model_id,
+                                'name': display_name,
+                                'description': model.get('description', ''),
+                                'input_token_limit': model.get('inputTokenLimit'),
+                                'output_token_limit': model.get('outputTokenLimit'),
+                                'supports_thinking': model.get('thinking', False)
+                            })
+                    return {'provider': provider, 'models': models}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
+    elif provider == LLMProvider.ANTHROPIC.value:
+        # For Anthropic, use their models API
+        key = api_key or os.getenv('ANTHROPIC_API_KEY')
+        if not key:
+            return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        try:
+            headers = {
+                'X-Api-Key': key,
+                'anthropic-version': '2023-06-01'
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    'https://api.anthropic.com/v1/models',
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models = []
+                    for model in data.get('data', []):
+                        model_id = model.get('id', '')
+                        # Only include Claude models
+                        if model_id.startswith('claude-'):
+                            models.append({
+                                'id': model_id,
+                                'name': model.get('display_name', model_id),
+                                'created_at': model.get('created_at')
+                            })
+                    return {'provider': provider, 'models': models}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
     else:
         # For other providers, return static known models
         provider_info = next(

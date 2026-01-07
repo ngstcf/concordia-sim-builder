@@ -347,6 +347,25 @@ export async function getContextAwareModeratorTemplate(): Promise<SimulationTemp
 }
 
 /**
+ * Get available models for a specific provider
+ * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
+ * @param api_key - Optional API key for authentication
+ * @param base_url - Optional custom base URL (for Ollama)
+ */
+export async function getProviderModels(
+  provider: string,
+  api_key?: string,
+  base_url?: string
+): Promise<{ provider: string; models: Array<{ id: string; name: string; [key: string]: any }>; error?: string }> {
+  const params: any = {};
+  if (api_key) params.api_key = api_key;
+  if (base_url) params.base_url = base_url;
+
+  const response = await api.get(`/api/simulations/models/${provider}`, { params });
+  return response.data;
+}
+
+/**
  * Health check
  */
 export async function healthCheck(): Promise<{ status: string }> {
