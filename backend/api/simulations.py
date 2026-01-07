@@ -12,6 +12,7 @@ from backend.models.schemas import (
     ValidationResult,
     PrefabInfo,
     ExecutionRequest,
+    ComponentValidationRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -65,20 +66,18 @@ async def get_component_templates():
 
 
 @router.post("/components/validate")
-async def validate_component_parameters(
-    template_id: str,
-    parameters: dict
-):
+async def validate_component_parameters(request: ComponentValidationRequest):
     """
     Validate component parameters against a template's schema.
 
     Args:
-        template_id: The component template ID to validate against
-        parameters: The parameters to validate
+        request: Validation request with template_id and parameters
 
     Returns:
         Validation result with any errors found
     """
+    template_id = request.template_id
+    parameters = request.parameters
     try:
         from backend.prefabs.components import COMPONENT_TEMPLATES
 

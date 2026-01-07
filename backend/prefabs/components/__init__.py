@@ -9,30 +9,13 @@ psychological models as component architectures.
 """
 from concordia.language_model import language_model
 from concordia.typing import entity_component
+from typing import Any
 
 
 def personality_traits_component(
     model: language_model.LanguageModel,
     traits: dict[str, str | int],
-) -> entity_component.Component:
-    """
-    Create a component representing an agent's personality traits.
-
-    Based on the Big Five personality model (Costa & McCrae, 1992):
-    - Openness to Experience
-    - Conscientiousness
-    - Extraversion
-    - Agreeableness
-    - Neuroticism
-
-    Args:
-        model: The language model to use
-        traits: Dictionary of trait names and their values (1-5 scale)
-            Example: {"openness": 4, "conscientiousness": 3, ...}
-
-    Returns:
-        A component that represents the agent's personality
-    """
+) -> entity_component.ComponentT:
     from concordia.components.agent import trait
 
     trait_descriptions = []
@@ -53,7 +36,7 @@ def cognitive_bias_component(
     model: language_model.LanguageModel,
     bias_type: str,
     bias_strength: str = "moderate",
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component representing a cognitive bias that affects decision-making.
 
@@ -96,7 +79,7 @@ def social_identity_component(
     model: language_model.LanguageModel,
     group_membership: list[str],
     identification_strength: str = "moderate",
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component representing social identity and group memberships.
 
@@ -132,7 +115,7 @@ def emotion_component(
     model: language_model.LanguageModel,
     current_emotion: str,
     emotion_intensity: str = "moderate",
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component representing the agent's current emotional state.
 
@@ -167,7 +150,7 @@ def theory_of_planned_behavior_component(
     attitude: str,
     subjective_norm: str,
     perceived_control: str,
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component implementing Ajzen's Theory of Planned Behavior (1991).
 
@@ -206,7 +189,7 @@ def values_component(
     model: language_model.LanguageModel,
     core_values: list[str],
     value_conflict: str | None = None,
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component representing the agent's core values and moral framework.
 
@@ -382,7 +365,7 @@ def create_component_from_template(
     template_id: str,
     model: language_model.LanguageModel,
     parameters: dict,
-) -> entity_component.Component:
+) -> entity_component.ComponentT:
     """
     Create a component instance from a template.
 

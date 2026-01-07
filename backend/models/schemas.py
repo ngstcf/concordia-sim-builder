@@ -181,21 +181,20 @@ class ExecutionRequest(BaseModel):
                             "prefab": "basic__Entity",
                             "goal": "Make new friends"
                         }
-                    ],
-                    "game_master": {
-                        "prefab": "generic__GameMaster",
-                        "name": "Narrator",
-                        "acting_order": "fixed"
-                    }
+                    ]
                 },
                 "llm_settings": {
-                    "provider": "deepseek",
-                    "model_name": "deepseek-chat",
-                    "embedder_model": "all-MiniLM-L6-v2",
-                    "temperature": 1.0
+                    "provider": "gemini",
+                    "model": "gemini-2.0-flash-exp"
                 }
             }
         }
+
+
+class ComponentValidationRequest(BaseModel):
+    """Request to validate component parameters."""
+    template_id: str = Field(..., description="Component template ID")
+    parameters: Dict[str, Any] = Field(..., description="Parameters to validate")
 
 
 # Simulation event types for streaming

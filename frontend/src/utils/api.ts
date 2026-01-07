@@ -64,9 +64,9 @@ export async function validateComponentParameters(
   templateId: string,
   parameters: Record<string, any>
 ): Promise<{ valid: boolean; errors: string[] }> {
-  const response = await api.post('/api/simulations/components/validate', null, {
-    params: { template_id: templateId },
-    data: parameters
+  const response = await api.post('/api/simulations/components/validate', {
+    template_id: templateId,
+    parameters
   });
   return response.data;
 }
