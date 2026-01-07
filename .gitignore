@@ -61,7 +61,14 @@ LLM-Providers-Quick-Ref.md
 # Ignore all files in logs/ directory
 logs/*
 
-# But track the directory itself (with .gitkeep)
+# Exceptions: track only these specific simulation HTML files
+!logs/20260106_204951_Sarah Williams_Robert Thompson_Javier Rodrigue_and_2_more_A_coastal_town_receives_an_urgent_flood_warning_a.html
+!logs/20260106_185149_Alex_Sam_Two_players_engage_in_an_iterated_Prisoners_Dilem.html
+!logs/20260106_163127_Agent R_Agent U_Peace_Negotiation_Setting_Date_January_2026_Loca.html
+!logs/20260106_150200_Elena Vasquez_David Kim_Amina Johnson_and_1_more_A_manufacturing_company_announces_a_15_wage_cut_c.html
+!logs/20260106_130257_Marcus Chen_Sofia Rodriguez_James Morrison_and_1_more_A_group_of_settlers_arrive_in_a_resource_rich_fron.html
+
+# Track the directory itself (with .gitkeep)
 !logs/.gitkeep
 
 myreadme.*
