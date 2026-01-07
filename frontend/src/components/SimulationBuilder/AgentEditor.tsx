@@ -493,6 +493,135 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               Components add psychological traits, biases, and behavioral patterns based on research.
             </p>
           </div>
+
+          {/* Nested Simulation - optional advanced feature */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Nested Simulation
+                  <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Advanced</span>
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const hasNestedSim = agent?.nested_simulation;
+                  if (hasNestedSim) {
+                    updateAgent(agentId, { nested_simulation: undefined });
+                  } else {
+                    updateAgent(agentId, {
+                      nested_simulation: {
+                        premise: '',
+                        max_steps: 5,
+                        agents: [],
+                        shared_memories: [],
+                        extraction_prompt: 'What were the key observations from this simulation?'
+                      }
+                    });
+                  }
+                }}
+                className={`text-sm font-medium px-3 py-1.5 rounded-md transition ${
+                  agent?.nested_simulation
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                }`}
+              >
+                {agent?.nested_simulation ? '− Remove Nested Sim' : '+ Add Nested Sim'}
+              </button>
+            </div>
+
+            {agent?.nested_simulation ? (
+              <div className="space-y-3 bg-purple-50 p-4 rounded-md border border-purple-200">
+                <p className="text-xs text-gray-600 mb-3">
+                  This agent can run a mini-simulation as part of their decision-making process (e.g., simulating a conversation to plan ahead).
+                </p>
+
+                {/* Premise */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Mini-Simulation Premise
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.premise}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, premise: e.target.value }
+                    })}
+                    placeholder="e.g., 'Alice calls Bob to ask what to bring to the party'"
+                  />
+                </div>
+
+                {/* Max Steps */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Max Steps (1-50)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.max_steps}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, max_steps: parseInt(e.target.value) || 5 }
+                    })}
+                  />
+                </div>
+
+                {/* Shared Memories */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Shared Memories (one per line)
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm font-mono text-xs"
+                    value={agent.nested_simulation.shared_memories.join('\n')}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: {
+                        ...agent.nested_simulation!,
+                        shared_memories: e.target.value.split('\n').filter(m => m.trim())
+                      }
+                    })}
+                    placeholder="Context known to all agents in the mini-simulation..."
+                  />
+                </div>
+
+                {/* Extraction Prompt */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Extraction Prompt (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.extraction_prompt || ''}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, extraction_prompt: e.target.value }
+                    })}
+                    placeholder="What should the agent learn from this simulation?"
+                  />
+                </div>
+
+                <p className="text-xs text-gray-500 italic">
+                  💡 Tip: Configure the mini-simulation agents by copying this agent and modifying it, then reference in JSON import/export.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">
+                No nested simulation configured. Agents can run mini-simulations to inform their decisions.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
