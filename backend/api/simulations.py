@@ -12,6 +12,7 @@ from backend.models.schemas import (
     ValidationResult,
     PrefabInfo,
     ExecutionRequest,
+    ComponentValidationRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -41,6 +42,105 @@ async def get_prefabs():
 async def get_providers():
     """Get list of available LLM providers."""
     return get_available_providers()
+
+
+@router.get("/components/templates")
+async def get_component_templates():
+    """Get all available component templates for agent customization."""
+    try:
+        from backend.prefabs.components import COMPONENT_TEMPLATES
+        return {
+            "templates": [
+                {
+                    "id": template_id,
+                    "name": template["name"],
+                    "description": template["description"],
+                    "parameters": template["parameters"],
+                    "category": template.get("category", "general")
+                }
+                for template_id, template in COMPONENT_TEMPLATES.items()
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get component templates: {str(e)}")
+
+
+@router.post("/components/validate")
+async def validate_component_parameters(request: ComponentValidationRequest):
+    """
+    Validate component parameters against a template's schema.
+
+    Args:
+        request: Validation request with template_id and parameters
+
+    Returns:
+        Validation result with any errors found
+    """
+    template_id = request.template_id
+    parameters = request.parameters
+    try:
+        from backend.prefabs.components import COMPONENT_TEMPLATES
+
+        if template_id not in COMPONENT_TEMPLATES:
+            return {
+                "valid": False,
+                "errors": [f"Unknown component template: {template_id}"]
+            }
+
+        template = COMPONENT_TEMPLATES[template_id]
+        param_schema = template["parameters"]
+        errors = []
+
+        # Validate each parameter
+        for param_name, param_config in param_schema.items():
+            if param_name not in parameters:
+                if "default" not in param_config:
+                    errors.append(f"Missing required parameter: {param_name}")
+                continue
+
+            value = parameters[param_name]
+
+            # Type validation
+            expected_type = param_config.get("type")
+            if expected_type == "string":
+                if not isinstance(value, str):
+                    errors.append(f"Parameter '{param_name}' must be a string")
+            elif expected_type == "integer":
+                if not isinstance(value, int):
+                    errors.append(f"Parameter '{param_name}' must be an integer")
+            elif expected_type == "float":
+                if not isinstance(value, (int, float)):
+                    errors.append(f"Parameter '{param_name}' must be a number")
+            elif expected_type == "boolean":
+                if not isinstance(value, bool):
+                    errors.append(f"Parameter '{param_name}' must be a boolean")
+            elif expected_type == "dict":
+                if not isinstance(value, dict):
+                    errors.append(f"Parameter '{param_name}' must be a dictionary")
+            elif expected_type == "array":
+                if not isinstance(value, list):
+                    errors.append(f"Parameter '{param_name}' must be an array")
+
+            # Enum validation
+            if "enum" in param_config:
+                valid_values = param_config["enum"]
+                if value not in valid_values:
+                    errors.append(
+                        f"Parameter '{param_name}' must be one of: {', '.join(valid_values)}"
+                    )
+
+            # Range validation
+            if "min" in param_config and value < param_config["min"]:
+                errors.append(f"Parameter '{param_name}' must be at least {param_config['min']}")
+            if "max" in param_config and value > param_config["max"]:
+                errors.append(f"Parameter '{param_name}' must be at most {param_config['max']}")
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
 
 @router.get("/models/{provider}")
@@ -144,6 +244,80 @@ async def get_provider_models(
                         for m in data.get('data', [])
                         if m['id'].startswith(('gpt-', 'o1-'))
                     ]
+                    return {'provider': provider, 'models': models}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
+    elif provider == LLMProvider.GEMINI.value:
+        # For Gemini, use their models API
+        key = api_key or os.getenv('GEMINI_API_KEY')
+        if not key:
+            return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Gemini uses query parameter for API key
+                response = await client.get(
+                    f'https://generativelanguage.googleapis.com/v1beta/models?key={key}'
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models = []
+                    for model in data.get('models', []):
+                        # Extract base model name from the resource name
+                        # Format: models/gemini-1.5-flash-001 -> baseModelId: gemini-1.5-flash
+                        base_model_id = model.get('baseModelId', '')
+                        display_name = model.get('displayName', base_model_id)
+
+                        if base_model_id:  # Only include models with baseModelId
+                            models.append({
+                                'id': base_model_id,
+                                'name': display_name,
+                                'description': model.get('description', ''),
+                                'input_token_limit': model.get('inputTokenLimit'),
+                                'output_token_limit': model.get('outputTokenLimit'),
+                                'supports_thinking': model.get('thinking', False)
+                            })
+                    return {'provider': provider, 'models': models}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
+    elif provider == LLMProvider.ANTHROPIC.value:
+        # For Anthropic, use their models API
+        key = api_key or os.getenv('ANTHROPIC_API_KEY')
+        if not key:
+            return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        try:
+            headers = {
+                'X-Api-Key': key,
+                'anthropic-version': '2023-06-01'
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    'https://api.anthropic.com/v1/models',
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models = []
+                    for model in data.get('data', []):
+                        model_id = model.get('id', '')
+                        # Only include Claude models
+                        if model_id.startswith('claude-'):
+                            models.append({
+                                'id': model_id,
+                                'name': model.get('display_name', model_id),
+                                'created_at': model.get('created_at')
+                            })
                     return {'provider': provider, 'models': models}
 
                 return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
@@ -1721,7 +1895,6 @@ async def get_context_aware_moderator_template():
         "config": {
             "premise": "A weekly support group meeting for people dealing with job loss and career transitions. The counselor Sarah facilitates the discussion, following a structured agenda but responding naturally to each participant's situation and emotions.",
             "max_steps": 12,
-            "engine_type": "interview",
             "agents": [
                 {
                     "id": "counselor",
@@ -1802,13 +1975,10 @@ async def get_context_aware_moderator_template():
                 }
             ],
             "game_master": {
-                "prefab": "interviewer__GameMaster",
+                "prefab": "generic__GameMaster",
                 "name": "Group Session Manager",
                 "acting_order": "game_master_choice",
-                "parameters": {
-                    "drive_role": "interviewer",
-                    "drive_role_name": "Sarah"
-                }
+                "parameters": {}
             },
             "shared_memories": [
                 "This is an anonymous support group - what's shared here stays here.",
@@ -1823,6 +1993,480 @@ async def get_context_aware_moderator_template():
             "provider": "deepseek",
             "model_name": "deepseek-chat",
             "temperature": 0.85
+        }
+    }
+
+
+@router.get("/templates/vaccine-hesitancy")
+async def get_vaccine_hesitancy_template():
+    """
+    Template: Vaccine Hesitancy and Social Contagion Study
+    Use for: Research on how cognitive biases and social identity affect vaccine acceptance
+
+    This template demonstrates the psychological component system by modeling a community
+    discussion about vaccination. Agents have different psychological profiles affecting
+    how they process information and make decisions.
+
+    RESEARCH APPLICATION:
+    This template enables researchers to:
+    - Isolate effects of specific psychological mechanisms (confirmation bias, social identity)
+    - Test different message frames and messenger characteristics
+    - Study how cognitive biases interact with social dynamics
+    - Measure attitude change and persuasion effectiveness
+
+    KEY COMPONENTS DEMONSTRATED:
+    - personality_traits: Big Five model (openness, conscientiousness, etc.)
+    - cognitive_bias: Confirmation bias, availability heuristic
+    - social_identity: Group membership and identification strength
+    - theory_of_planned_behavior: Attitude, norms, perceived control
+    - values: Core values and moral framework
+
+    EXPERIMENTAL CONDITIONS:
+    - Baseline: No psychological components
+    - Cognitive bias only: Tests biased information processing
+    - Full model: Tests interaction of multiple psychological factors
+
+    MEASURED OUTCOMES:
+    - Vaccine acceptance decision (binary)
+    - Attitude strength change (pre/post comparison)
+    - Information recall accuracy
+    - Social influence patterns
+    - Emotional responses
+    """
+    return {
+        "name": "Vaccine Hesitancy - Psychological Component Study",
+        "description": "A research simulation investigating how cognitive biases (confirmation bias, availability heuristic) and social identity dynamics affect vaccine acceptance. Demonstrates the customizable psychological component system.",
+        "config": {
+            "premise": "A community health clinic is hosting an open discussion about COVID-19 vaccination. Dr. Sarah Chen, a public health advocate, is facilitating the conversation. Community members with different backgrounds, beliefs, and psychological profiles are participating to share their perspectives and make decisions about vaccination.",
+            "max_steps": 20,
+            "shared_memories": [
+                "This is a community health clinic hosting an open discussion about vaccination.",
+                "The discussion is voluntary and participants come with different perspectives.",
+                "The goal is to share information and experiences, not to debate or convince.",
+                "All viewpoints are welcome, but misinformation should be gently corrected.",
+                "The facilitator Dr. Chen has medical expertise but cannot give personal medical advice.",
+                "COVID-19 vaccines have been approved by regulatory authorities and are widely available.",
+                "Some participants have strong opinions based on personal experiences and online research.",
+                "The community has experienced both COVID-19 cases and vaccine side effects."
+            ],
+            "agents": [
+                {
+                    "id": "health_worker",
+                    "name": "Dr. Sarah Chen",
+                    "prefab": "basic__Entity",
+                    "goal": "Provide accurate information about vaccination and address community concerns respectfully",
+                    "memories": [
+                        "You are Dr. Sarah Chen, a public health physician with 15 years of experience",
+                        "You believe vaccination is critically important for community health",
+                        "You've seen firsthand the devastating effects of preventable diseases",
+                        "You approach hesitancy with empathy, not judgment",
+                        "You know that building trust takes time and genuine listening",
+                        "You're prepared to answer questions honestly, even uncertain ones",
+                        "You respect personal autonomy while strongly advocating for vaccination"
+                    ],
+                    "randomize_choices": False,
+                    "components": {
+                        "personality_traits": {
+                            "traits": {
+                                "openness": 5,
+                                "conscientiousness": 5,
+                                "agreeableness": 4,
+                                "extraversion": 3,
+                                "neuroticism": 2
+                            }
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "recommend vaccination",
+                            "attitude": "strongly_favorable",
+                            "subjective_norm": "strongly_favorable",
+                            "perceived_control": "high"
+                        }
+                    }
+                },
+                {
+                    "id": "skeptic_1",
+                    "name": "Mike Johnson",
+                    "prefab": "basic__Entity",
+                    "goal": "Express concerns about vaccine safety and protect personal freedom",
+                    "memories": [
+                        "You are Mike Johnson, a 45-year-old small business owner",
+                        "You've read extensively online about vaccine side effects",
+                        "You distrust pharmaceutical companies and their profit motives",
+                        "You value personal freedom and autonomy above all else",
+                        "You believe natural immunity is superior to vaccine-acquired immunity",
+                        "You see vaccine mandates as government overreach",
+                        "You're part of online communities that share your views"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "confirmation_bias",
+                            "bias_strength": "strong"
+                        },
+                        "social_identity": {
+                            "group_membership": ["libertarian_community", "natural_health_advocates"],
+                            "identification_strength": "strong"
+                        },
+                        "values": {
+                            "core_values": ["freedom", "autonomy", "natural_living"],
+                            "value_conflict": "freedom_vs_collectivism"
+                        }
+                    }
+                },
+                {
+                    "id": "undecided_1",
+                    "name": "Maria Garcia",
+                    "prefab": "basic__Entity",
+                    "goal": "Gather information to make an informed decision about vaccination",
+                    "memories": [
+                        "You are Maria Garcia, a 32-year-old teacher",
+                        "You've heard mixed information about vaccines from different sources",
+                        "You trust your family doctor but also worry about side effects",
+                        "You're concerned about COVID-19 but also about the new vaccines",
+                        "You want to do the right thing for your family and community",
+                        "You feel overwhelmed by conflicting information",
+                        "You're looking for trustworthy sources to guide your decision"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "availability_heuristic",
+                            "bias_strength": "moderate"
+                        },
+                        "emotion": {
+                            "current_emotion": "anxiety",
+                            "emotion_intensity": "moderate"
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "get_vaccinated",
+                            "attitude": "ambivalent",
+                            "subjective_norm": "neutral",
+                            "perceived_control": "moderate"
+                        }
+                    }
+                },
+                {
+                    "id": "community_member_1",
+                    "name": "James Wilson",
+                    "prefab": "basic__Entity",
+                    "goal": "Share positive vaccination experience and encourage others",
+                    "memories": [
+                        "You are James Wilson, a 55-year-old factory worker",
+                        "You got vaccinated as soon as you were eligible",
+                        "You had mild side effects (sore arm, fatigue for a day)",
+                        "You're glad you got vaccinated to protect your family",
+                        "Your elderly mother also got vaccinated safely",
+                        "You want to reassure others who are hesitant",
+                        "You trust science and medical professionals"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "personality_traits": {
+                            "traits": {
+                                "openness": 3,
+                                "conscientiousness": 4,
+                                "agreeableness": 5,
+                                "extraversion": 4,
+                                "neuroticism": 3
+                            }
+                        },
+                        "theory_of_planned_behavior": {
+                            "behavior": "get_vaccinated",
+                            "attitude": "favorable",
+                            "subjective_norm": "favorable",
+                            "perceived_control": "high"
+                        }
+                    }
+                },
+                {
+                    "id": "concerned_parent",
+                    "name": "Lisa Thompson",
+                    "prefab": "basic__Entity",
+                    "goal": "Ask questions about vaccine safety for children",
+                    "memories": [
+                        "You are Lisa Thompson, a 38-year-old mother of two",
+                        "Your children are ages 8 and 12",
+                        "You're generally pro-vaccine but worry about new vaccines",
+                        "You've heard conflicting information about risks",
+                        "You want to protect your children but also be cautious",
+                        "You know other parents who are choosing not to vaccinate",
+                        "You're looking for balanced, honest information"
+                    ],
+                    "randomize_choices": True,
+                    "components": {
+                        "cognitive_bias": {
+                            "bias_type": "availability_heuristic",
+                            "bias_strength": "moderate"
+                        },
+                        "emotion": {
+                            "current_emotion": "worry",
+                            "emotion_intensity": "moderate"
+                        },
+                        "values": {
+                            "core_values": ["family_safety", "caution", "protection"]
+                        }
+                    }
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Community Health Discussion",
+                "acting_order": "game_master_choice",
+                "params": {
+                    "extra_components": {
+                        "grounded_variables_intro": (
+                            "Track key outcomes throughout this discussion:\n"
+                            "- Vaccine acceptance: Count who decides to get vaccinated\n"
+                            "- Attitude shifts: Note changes in participants' stances\n"
+                            "- Information quality: Track accurate vs. inaccurate claims\n"
+                            "- Emotional tone: Monitor fear, hope, anger, reassurance"
+                        )
+                    }
+                }
+            },
+            "llm_settings": {
+                "provider": "gemini",
+                "model": "gemini-2.0-flash-exp",
+                "embedder_model": "all-MiniLM-L6-v2",
+                "temperature": 0.85
+            }
+        }
+    }
+
+
+@router.get("/templates/nested-simulation-demo")
+async def get_nested_simulation_demo_template():
+    """
+    Template: Nested Simulation Demo (PhoneGameMaster Pattern)
+
+    This template demonstrates the nested simulation capability where an agent
+    can run a mini-simulation as part of their decision-making process.
+
+    Use case: An agent simulates a conversation with a friend to decide what
+    to bring to a party, then uses that insight in the main simulation.
+    """
+    return {
+        "name": "Nested Simulation Demo - Phone Call Planning",
+        "description": "Demonstrates nested simulations where agents run mini-simulations to inform their decisions in the main simulation",
+        "config": {
+            "premise": "Alice is planning what to bring to a dinner party. She calls her friend Bob to discuss what would be good to bring.",
+            "max_steps": 15,
+            "shared_memories": [
+                "There is a dinner party happening this weekend.",
+                "Alice is deciding what to bring.",
+                "She wants to call her friend Bob for advice.",
+                "The host has requested guests bring something to share.",
+            ],
+            "agents": [
+                {
+                    "id": "alice",
+                    "name": "Alice",
+                    "prefab": "basic__Entity",
+                    "goal": "Decide what to bring to the dinner party by consulting with Bob",
+                    "memories": [
+                        "Alice loves cooking and trying new recipes.",
+                        "She wants to impress the other guests.",
+                        "She's considering bringing a dessert or an appetizer.",
+                        "She wants to make sure no one else is bringing the same thing.",
+                    ],
+                    "randomize_choices": True,
+                    # Nested simulation: Alice simulates a conversation with Bob
+                    "nested_simulation": {
+                        "premise": "Alice calls Bob to ask what she should bring to the dinner party. Bob knows what other guests are bringing.",
+                        "max_steps": 5,
+                        "shared_memories": [
+                            "Alice is calling Bob for advice about the dinner party.",
+                            "Bob knows what other guests are planning to bring.",
+                            "They are close friends who often cook together.",
+                        ],
+                        "agents": [
+                            {
+                                "id": "alice_nested",
+                                "name": "Alice",
+                                "prefab": "basic__Entity",
+                                "goal": "Find out what would be good to bring to the party",
+                                "memories": [
+                                    "Alice is considering her options.",
+                                    "She trusts Bob's judgment.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "bob_nested",
+                                "name": "Bob",
+                                "prefab": "basic__Entity",
+                                "goal": "Help Alice decide what to bring",
+                                "memories": [
+                                    "Bob knows that Maria is bringing a main dish.",
+                                    "Bob knows that Carlos is bringing drinks.",
+                                    "Bob thinks a dessert would be perfect.",
+                                ],
+                                "randomize_choices": True,
+                            }
+                        ],
+                        "extraction_prompt": "What did Alice learn about what to bring to the party? What did Bob say others are bringing?"
+                    }
+                },
+                {
+                    "id": "bob_main",
+                    "name": "Bob",
+                    "prefab": "basic__Entity",
+                    "goal": "Help Alice decide what to bring to the dinner party",
+                    "memories": [
+                        "Bob is Alice's friend.",
+                        "Bob is knowledgeable about food and parties.",
+                        "Bob wants to help Alice make a good impression.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "conversation guide",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
+        }
+    }
+
+
+@router.get("/templates/grounded-variables-demo")
+async def get_grounded_variables_demo_template():
+    """
+    Template: Grounded Variables Demo
+
+    This template demonstrates the grounded variables capability where the
+    Game Master tracks and updates variables during the simulation.
+
+    Use case: A resource management simulation where the GM tracks:
+    - Team morale (0-100)
+    - Budget remaining ($0-$10000)
+    - Task completion status
+    - Project health (categorical: on_track, at_risk, critical)
+    """
+    return {
+        "name": "Grounded Variables Demo - Project Management",
+        "description": "Demonstrates grounded variables tracking where the GM monitors and updates key metrics during the simulation",
+        "config": {
+            "premise": "A team is working on a critical software project with a tight deadline. The project manager must balance team morale, budget, and progress.",
+            "max_steps": 20,
+            "shared_memories": [
+                "The project deadline is in 2 weeks.",
+                "The initial budget is $10,000.",
+                "Team morale starts at 70/100.",
+                "The project is currently on track.",
+                "There are 5 team members working on the project.",
+            ],
+            "agents": [
+                {
+                    "id": "manager",
+                    "name": "Project Manager",
+                    "prefab": "basic__Entity",
+                    "goal": "Complete the project on time and within budget while keeping the team motivated",
+                    "memories": [
+                        "Has managed similar projects before.",
+                        "Knows that overworking the team reduces morale.",
+                        "Budget is running low.",
+                        "Needs to make tradeoffs between speed and quality.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "developer_1",
+                    "name": "Senior Developer",
+                    "prefab": "basic__Entity",
+                    "goal": "Write high-quality code and mentor junior developers",
+                    "memories": [
+                        "Experienced developer who cares about code quality.",
+                        "Gets frustrated when rushed.",
+                        "Wants the project to succeed.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "developer_2",
+                    "name": "Junior Developer",
+                    "prefab": "basic__Entity",
+                    "goal": "Learn and contribute to the project",
+                    "memories": [
+                        "Eager to learn but needs guidance.",
+                        "Willing to put in extra hours.",
+                        "Looks up to the senior developer.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "project tracker",
+                "acting_order": "game_master_choice",
+                "parameters": {},
+                "grounded_variables": [
+                    {
+                        "name": "team_morale",
+                        "variable_type": "numerical",
+                        "description": "Overall team morale and satisfaction (0-100)",
+                        "default_value": 70,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Changes based on workload, recognition, and setbacks"
+                    },
+                    {
+                        "name": "budget_remaining",
+                        "variable_type": "numerical",
+                        "description": "Remaining project budget in dollars",
+                        "default_value": 10000,
+                        "min_value": 0,
+                        "max_value": 10000,
+                        "update_rule": "Decreases with each decision and action taken"
+                    },
+                    {
+                        "name": "tasks_completed",
+                        "variable_type": "numerical",
+                        "description": "Number of tasks completed",
+                        "default_value": 0,
+                        "min_value": 0,
+                        "max_value": 50,
+                        "update_rule": "Increases when the team completes tasks"
+                    },
+                    {
+                        "name": "project_health",
+                        "variable_type": "categorical",
+                        "description": "Overall project status",
+                        "default_value": "on_track",
+                        "allowed_values": ["on_track", "at_risk", "critical", "completed", "failed"],
+                        "update_rule": "Changes based on morale, budget, and progress"
+                    },
+                    {
+                        "name": "crisis_mode",
+                        "variable_type": "boolean",
+                        "description": "Whether the project is in crisis",
+                        "default_value": False,
+                        "update_rule": "Becomes true if budget < 2000 or morale < 30"
+                    },
+                    {
+                        "name": "completion_percentage",
+                        "variable_type": "percentage",
+                        "description": "Project completion percentage",
+                        "default_value": 20,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Increases as tasks are completed"
+                    }
+                ]
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
         }
     }
 

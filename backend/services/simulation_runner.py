@@ -20,6 +20,10 @@ from backend.models.schemas import (
 from backend.services.simulation_builder import build_simulation
 from backend.services.simulation_state import simulation_state
 
+# Apply global patches to handle verbose LLM responses in binary choice questions
+# This patches ActionSpec.validate() to normalize verbose yes/no responses
+from backend.utils.thought_chain_fix import apply_all_patches
+apply_all_patches()
 
 # Ensure logs directory exists
 LOGS_DIR = Path("logs")

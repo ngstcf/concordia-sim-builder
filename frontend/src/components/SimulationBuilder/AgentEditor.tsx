@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { getComponentTemplates } from '../../utils/api';
 import type { ScriptLine } from '../../types/simulation';
 
 interface AgentEditorProps {
@@ -17,6 +18,12 @@ interface ScriptPrompt {
   line: string;
 }
 
+interface ComponentConfig {
+  templateId: string;
+  name: string;
+  parameters: Record<string, any>;
+}
+
 export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const { config, updateAgent } = useSimulation();
   const agent = config.agents.find(a => a.id === agentId);
@@ -27,6 +34,23 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const [memories, setMemories] = useState(agent?.memories?.join('\n') || '');
   const [randomize, setRandomize] = useState(agent?.randomize_choices ?? true);
   const [scriptPrompts, setScriptPrompts] = useState<ScriptPrompt[]>([]);
+  const [componentConfigs, setComponentConfigs] = useState<ComponentConfig[]>([]);
+  const [availableComponents, setAvailableComponents] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
+    category: string;
+  }>>([]);
+
+  useEffect(() => {
+    // Load component templates
+    getComponentTemplates().then(data => {
+      setAvailableComponents(data.templates);
+    }).catch(err => {
+      console.error('Failed to load component templates:', err);
+    });
+  }, []);
 
   useEffect(() => {
     if (agent) {
@@ -47,6 +71,17 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       } else {
         setScriptPrompts([]);
       }
+
+      // Load existing component configurations (excluding script)
+      const existingComponents = agent.components || {};
+      const componentEntries = Object.entries(existingComponents)
+        .filter(([key]) => key !== 'script')
+        .map(([key, value]) => ({
+          templateId: key,
+          name: key,
+          parameters: value as Record<string, any>
+        }));
+      setComponentConfigs(componentEntries);
     }
   }, [agent]);
 
@@ -54,9 +89,19 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
 
   const handleSave = () => {
     const isScriptedPrefab = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
-    const components = isScriptedPrefab && scriptPrompts.length > 0
-      ? { script: scriptPrompts.map(p => ({ name: p.name, line: p.line })) }
-      : agent?.components;
+
+    // Build components object
+    const components: Record<string, any> = {};
+
+    // Add script component if scripted prefab
+    if (isScriptedPrefab && scriptPrompts.length > 0) {
+      components.script = scriptPrompts.map(p => ({ name: p.name, line: p.line }));
+    }
+
+    // Add psychological component configurations
+    componentConfigs.forEach(comp => {
+      components[comp.templateId] = comp.parameters;
+    });
 
     updateAgent(agentId, {
       name,
@@ -64,7 +109,7 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       goal: goal || undefined,
       memories: memories.split('\n').filter(m => m.trim()),
       randomize_choices: randomize,
-      components
+      components: Object.keys(components).length > 0 ? components : undefined
     });
     onClose();
   };
@@ -94,6 +139,35 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       [newPrompts[index], newPrompts[targetIndex]] = [newPrompts[targetIndex], newPrompts[index]];
       setScriptPrompts(newPrompts);
     }
+  };
+
+  const addComponent = (templateId: string) => {
+    const template = availableComponents.find(c => c.id === templateId);
+    if (!template) return;
+
+    // Get default values for parameters
+    const defaultParams: Record<string, any> = {};
+    Object.entries(template.parameters).forEach(([key, config]: [string, any]) => {
+      if (config.default !== undefined) {
+        defaultParams[key] = config.default;
+      }
+    });
+
+    setComponentConfigs([...componentConfigs, {
+      templateId,
+      name: template.name,
+      parameters: defaultParams
+    }]);
+  };
+
+  const updateComponentParameter = (index: number, paramKey: string, value: any) => {
+    const newConfigs = [...componentConfigs];
+    newConfigs[index].parameters[paramKey] = value;
+    setComponentConfigs(newConfigs);
+  };
+
+  const removeComponent = (index: number) => {
+    setComponentConfigs(componentConfigs.filter((_, i) => i !== index));
   };
 
   const isScripted = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
@@ -276,6 +350,278 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               </p>
             </div>
           )}
+
+          {/* Psychological Components - available for all agent types */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Psychological Components
+              </label>
+              <select
+                className="text-sm border border-gray-300 rounded-md shadow-sm py-1.5 px-2"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addComponent(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="">+ Add Component...</option>
+                {availableComponents
+                  .filter(template => !componentConfigs.some(c => c.templateId === template.id))
+                  .map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {componentConfigs.length === 0 ? (
+              <p className="text-sm text-gray-500 italic">
+                No components added. Components modify agent behavior based on psychological theories.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {componentConfigs.map((config, index) => {
+                  const template = availableComponents.find(c => c.id === config.templateId);
+                  if (!template) return null;
+
+                  return (
+                    <div
+                      key={config.templateId}
+                      className="border border-gray-300 rounded-md p-3 bg-blue-50"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">
+                            {template.name}
+                          </span>
+                          <p className="text-xs text-gray-600">{template.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeComponent(index)}
+                          className="p-1 text-red-400 hover:text-red-600"
+                          title="Remove component"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Parameter inputs */}
+                      <div className="space-y-2 mt-3">
+                        {Object.entries(template.parameters).map(([paramKey, paramConfig]: [string, any]) => (
+                          <div key={paramKey}>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              {paramConfig.description || paramKey}
+                            </label>
+                            {paramConfig.enum ? (
+                              <select
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                onChange={(e) => {
+                                  const value = paramConfig.type === 'integer'
+                                    ? parseInt(e.target.value)
+                                    : e.target.value;
+                                  updateComponentParameter(index, paramKey, value);
+                                }}
+                              >
+                                {paramConfig.enum.map((val: string) => (
+                                  <option key={val} value={val}>{val}</option>
+                                ))}
+                              </select>
+                            ) : paramConfig.type === 'boolean' ? (
+                              <select
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? false}
+                                onChange={(e) => updateComponentParameter(index, paramKey, e.target.value === 'true')}
+                              >
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            ) : paramConfig.type === 'integer' || paramConfig.type === 'float' ? (
+                              <input
+                                type="number"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                min={paramConfig.min}
+                                max={paramConfig.max}
+                                step={paramConfig.type === 'float' ? 0.1 : 1}
+                                onChange={(e) => {
+                                  const value = paramConfig.type === 'float'
+                                    ? parseFloat(e.target.value)
+                                    : parseInt(e.target.value);
+                                  updateComponentParameter(index, paramKey, value);
+                                }}
+                              />
+                            ) : paramConfig.type === 'dict' ? (
+                              <textarea
+                                rows={3}
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm font-mono"
+                                value={JSON.stringify(config.parameters[paramKey] ?? paramConfig.default ?? {}, null, 2)}
+                                onChange={(e) => {
+                                  try {
+                                    const value = JSON.parse(e.target.value);
+                                    updateComponentParameter(index, paramKey, value);
+                                  } catch {
+                                    // Ignore invalid JSON
+                                  }
+                                }}
+                                placeholder="Enter JSON object..."
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                onChange={(e) => updateComponentParameter(index, paramKey, e.target.value)}
+                                placeholder={paramConfig.default?.toString() || ''}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-gray-500">
+              Components add psychological traits, biases, and behavioral patterns based on research.
+            </p>
+          </div>
+
+          {/* Nested Simulation - optional advanced feature */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Nested Simulation
+                  <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Advanced</span>
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const hasNestedSim = agent?.nested_simulation;
+                  if (hasNestedSim) {
+                    updateAgent(agentId, { nested_simulation: undefined });
+                  } else {
+                    updateAgent(agentId, {
+                      nested_simulation: {
+                        premise: '',
+                        max_steps: 5,
+                        agents: [],
+                        shared_memories: [],
+                        extraction_prompt: 'What were the key observations from this simulation?'
+                      }
+                    });
+                  }
+                }}
+                className={`text-sm font-medium px-3 py-1.5 rounded-md transition ${
+                  agent?.nested_simulation
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                }`}
+              >
+                {agent?.nested_simulation ? '− Remove Nested Sim' : '+ Add Nested Sim'}
+              </button>
+            </div>
+
+            {agent?.nested_simulation ? (
+              <div className="space-y-3 bg-purple-50 p-4 rounded-md border border-purple-200">
+                <p className="text-xs text-gray-600 mb-3">
+                  This agent can run a mini-simulation as part of their decision-making process (e.g., simulating a conversation to plan ahead).
+                </p>
+
+                {/* Premise */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Mini-Simulation Premise
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.premise}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, premise: e.target.value }
+                    })}
+                    placeholder="e.g., 'Alice calls Bob to ask what to bring to the party'"
+                  />
+                </div>
+
+                {/* Max Steps */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Max Steps (1-50)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.max_steps}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, max_steps: parseInt(e.target.value) || 5 }
+                    })}
+                  />
+                </div>
+
+                {/* Shared Memories */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Shared Memories (one per line)
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm font-mono text-xs"
+                    value={agent.nested_simulation.shared_memories.join('\n')}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: {
+                        ...agent.nested_simulation!,
+                        shared_memories: e.target.value.split('\n').filter(m => m.trim())
+                      }
+                    })}
+                    placeholder="Context known to all agents in the mini-simulation..."
+                  />
+                </div>
+
+                {/* Extraction Prompt */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Extraction Prompt (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={agent.nested_simulation.extraction_prompt || ''}
+                    onChange={(e) => updateAgent(agentId, {
+                      ...agent,
+                      nested_simulation: { ...agent.nested_simulation!, extraction_prompt: e.target.value }
+                    })}
+                    placeholder="What should the agent learn from this simulation?"
+                  />
+                </div>
+
+                <p className="text-xs text-gray-500 italic">
+                  💡 Tip: Configure the mini-simulation agents by copying this agent and modifying it, then reference in JSON import/export.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">
+                No nested simulation configured. Agents can run mini-simulations to inform their decisions.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3">

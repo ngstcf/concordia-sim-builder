@@ -21,6 +21,9 @@ import {
   getDisasterResponseTemplate,
   getInequalityMobilityTemplate,
   getContextAwareModeratorTemplate,
+  getVaccineHesitancyTemplate,
+  getNestedSimulationTemplate,
+  getGroundedVariablesTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -35,6 +38,9 @@ const TEMPLATES = [
   { id: 'planning', name: 'Planning Agent', description: 'Strategic product launch', category: 'Prefab Types' },
   { id: 'scripted-entity', name: 'Scripted Entity', description: 'Focus group moderator (exact responses)', category: 'Prefab Types' },
   { id: 'context-aware-moderator', name: 'Context-Aware Moderator', description: 'Support group with adaptive responses', category: 'Prefab Types' },
+  { id: 'vaccine-hesitancy', name: 'Vaccine Hesitancy Study', description: 'Psychological component research demo', category: 'Research' },
+  { id: 'nested-simulation', name: 'Nested Simulation Demo', description: 'PhoneGameMaster pattern (mini-sims)', category: 'Advanced' },
+  { id: 'grounded-variables', name: 'Grounded Variables Demo', description: 'Track metrics during simulation', category: 'Advanced' },
   { id: 'dialogic', name: 'Dialogic Conversation', description: 'Therapy session', category: 'Prefab Types' },
   { id: 'strategic', name: 'Strategic Game', description: 'Prisoner\'s Dilemma', category: 'Prefab Types' },
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
@@ -53,6 +59,9 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   planning: getPlanningAgentTemplate,
   'scripted-entity': getScriptedEntityTemplate,
   'context-aware-moderator': getContextAwareModeratorTemplate,
+  'vaccine-hesitancy': getVaccineHesitancyTemplate,
+  'nested-simulation': getNestedSimulationTemplate,
+  'grounded-variables': getGroundedVariablesTemplate,
   dialogic: getDialogicConversationTemplate,
   strategic: getStrategicGameTemplate,
   interviewer: getInterviewerTemplate,
@@ -117,6 +126,8 @@ export default function SimulationBuilder() {
   // Group templates by category
   const basicTemplates = TEMPLATES.filter(t => t.category === 'Basic');
   const prefabTemplates = TEMPLATES.filter(t => t.category === 'Prefab Types');
+  const researchTemplates = TEMPLATES.filter(t => t.category === 'Research');
+  const advancedTemplates = TEMPLATES.filter(t => t.category === 'Advanced');
   const sdgTemplates = TEMPLATES.filter(t => t.category === 'SDG Scenarios');
 
   return (
@@ -148,6 +159,20 @@ export default function SimulationBuilder() {
               </optgroup>
               <optgroup label="Prefab Type Examples">
                 {prefabTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.description}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Research Studies">
+                {researchTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.description}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Advanced Features">
+                {advancedTemplates.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name} - {t.description}
                   </option>

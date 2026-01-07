@@ -38,8 +38,8 @@ def load_available_prefabs() -> dict:
         **helper_functions.get_package_classes(game_master_prefabs),
     }
 
-    # Add custom context-aware scripted prefab
-    prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity
+    # Add custom context-aware scripted prefab - instantiate with default params
+    prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity()
 
     return prefabs
 

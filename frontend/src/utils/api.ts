@@ -42,6 +42,36 @@ export async function getProviders(): Promise<ProviderInfo[]> {
 }
 
 /**
+ * Get all available component templates
+ */
+export async function getComponentTemplates(): Promise<{
+  templates: Array<{
+    id: string;
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
+    category: string;
+  }>;
+}> {
+  const response = await api.get('/api/simulations/components/templates');
+  return response.data;
+}
+
+/**
+ * Validate component parameters
+ */
+export async function validateComponentParameters(
+  templateId: string,
+  parameters: Record<string, any>
+): Promise<{ valid: boolean; errors: string[] }> {
+  const response = await api.post('/api/simulations/components/validate', {
+    template_id: templateId,
+    parameters
+  });
+  return response.data;
+}
+
+/**
  * Validate a simulation configuration
  */
 export async function validateConfig(config: SimulationConfig): Promise<ValidationResult> {
@@ -343,6 +373,49 @@ export async function getInequalityMobilityTemplate(): Promise<SimulationTemplat
  */
 export async function getContextAwareModeratorTemplate(): Promise<SimulationTemplate> {
   const response = await api.get('/api/simulations/templates/context-aware-moderator');
+  return response.data;
+}
+
+/**
+ * Get the vaccine hesitancy study template (Psychological Component System demo)
+ */
+export async function getVaccineHesitancyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/vaccine-hesitancy');
+  return response.data;
+}
+
+/**
+ * Get the nested simulation demo template (PhoneGameMaster pattern demo)
+ */
+export async function getNestedSimulationTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/nested-simulation-demo');
+  return response.data;
+}
+
+/**
+ * Get the grounded variables demo template (Grounded Variables tracking demo)
+ */
+export async function getGroundedVariablesTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/grounded-variables-demo');
+  return response.data;
+}
+
+/**
+ * Get available models for a specific provider
+ * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
+ * @param api_key - Optional API key for authentication
+ * @param base_url - Optional custom base URL (for Ollama)
+ */
+export async function getProviderModels(
+  provider: string,
+  api_key?: string,
+  base_url?: string
+): Promise<{ provider: string; models: Array<{ id: string; name: string; [key: string]: any }>; error?: string }> {
+  const params: any = {};
+  if (api_key) params.api_key = api_key;
+  if (base_url) params.base_url = base_url;
+
+  const response = await api.get(`/api/simulations/models/${provider}`, { params });
   return response.data;
 }
 

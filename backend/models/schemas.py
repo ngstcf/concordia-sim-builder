@@ -2,7 +2,7 @@
 Pydantic schemas for simulation configuration and API requests/responses.
 """
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal, Union
 from enum import Enum
 
 
@@ -31,6 +31,25 @@ class LLMProvider(str, Enum):
     GLM = "glm"  # Zhipu AI (GLM models)
 
 
+class NestedSimulationConfig(BaseModel):
+    """Configuration for a nested simulation within the main simulation."""
+    premise: str = Field(..., description="Premise of the nested simulation")
+    max_steps: int = Field(5, ge=1, le=50, description="Max steps for nested simulation")
+    agents: List['AgentConfig'] = Field(
+        ...,
+        min_items=1,
+        description="Agents in the nested simulation"
+    )
+    shared_memories: List[str] = Field(
+        default_factory=list,
+        description="Shared memories for nested simulation"
+    )
+    extraction_prompt: Optional[str] = Field(
+        None,
+        description="Custom prompt for extracting observations from nested sim"
+    )
+
+
 class AgentConfig(BaseModel):
     """Configuration for a simulation agent."""
     id: str = Field(..., description="Unique identifier for the agent")
@@ -40,6 +59,10 @@ class AgentConfig(BaseModel):
     memories: List[str] = Field(default_factory=list, description="Pre-loaded memories")
     components: Optional[Dict[str, Any]] = Field(None, description="Additional components")
     randomize_choices: bool = Field(True, description="Whether to randomize action choices")
+    nested_simulation: Optional[NestedSimulationConfig] = Field(
+        None,
+        description="Optional nested simulation this agent can run"
+    )
 
     class Config:
         json_schema_extra = {
@@ -54,6 +77,21 @@ class AgentConfig(BaseModel):
         }
 
 
+class VariableConfig(BaseModel):
+    """Configuration for a grounded variable."""
+    name: str = Field(..., description="Variable name")
+    variable_type: Literal["numerical", "categorical", "boolean", "percentage"] = Field(
+        "numerical",
+        description="Type of variable"
+    )
+    description: str = Field("", description="Variable description")
+    default_value: Optional[Any] = Field(None, description="Default value")
+    min_value: Optional[float] = Field(None, description="Minimum value (for numerical/percentage)")
+    max_value: Optional[float] = Field(None, description="Maximum value (for numerical/percentage)")
+    allowed_values: Optional[List[str]] = Field(None, description="Allowed values (for categorical)")
+    update_rule: Optional[str] = Field(None, description="Description of how variable updates")
+
+
 class GameMasterConfig(BaseModel):
     """Configuration for the game master."""
     prefab: str = Field(..., description="Game master prefab type")
@@ -65,6 +103,10 @@ class GameMasterConfig(BaseModel):
     parameters: Dict[str, Any] = Field(
         default_factory=dict,
         description="Additional prefab-specific parameters"
+    )
+    grounded_variables: Optional[List[VariableConfig]] = Field(
+        None,
+        description="Optional grounded variables to track during simulation"
     )
 
     class Config:
@@ -181,21 +223,20 @@ class ExecutionRequest(BaseModel):
                             "prefab": "basic__Entity",
                             "goal": "Make new friends"
                         }
-                    ],
-                    "game_master": {
-                        "prefab": "generic__GameMaster",
-                        "name": "Narrator",
-                        "acting_order": "fixed"
-                    }
+                    ]
                 },
                 "llm_settings": {
-                    "provider": "deepseek",
-                    "model_name": "deepseek-chat",
-                    "embedder_model": "all-MiniLM-L6-v2",
-                    "temperature": 1.0
+                    "provider": "gemini",
+                    "model": "gemini-2.0-flash-exp"
                 }
             }
         }
+
+
+class ComponentValidationRequest(BaseModel):
+    """Request to validate component parameters."""
+    template_id: str = Field(..., description="Component template ID")
+    parameters: Dict[str, Any] = Field(..., description="Parameters to validate")
 
 
 # Simulation event types for streaming
@@ -243,3 +284,8 @@ class SimulationResult(BaseModel):
     events: List[SimulationEvent]
     final_summary: Optional[str] = None
     html_log: Optional[str] = None
+
+
+# Resolve forward references
+NestedSimulationConfig.model_rebuild()
+AgentConfig.model_rebuild()

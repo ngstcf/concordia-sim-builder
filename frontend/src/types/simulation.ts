@@ -48,6 +48,27 @@ export interface ScriptLine {
   line: string;
 }
 
+// Nested Simulation Configuration
+export interface NestedSimulationConfig {
+  premise: string;
+  max_steps: number;
+  agents: AgentConfig[];
+  shared_memories: string[];
+  extraction_prompt?: string;
+}
+
+// Variable Configuration for Grounded Variables
+export interface VariableConfig {
+  name: string;
+  variable_type: 'numerical' | 'categorical' | 'boolean' | 'percentage';
+  description: string;
+  default_value?: any;
+  min_value?: number;
+  max_value?: number;
+  allowed_values?: string[];
+  update_rule?: string;
+}
+
 // Agent Configuration
 export interface AgentConfig {
   id: string;
@@ -57,6 +78,7 @@ export interface AgentConfig {
   memories: string[];
   components?: Record<string, any>;
   randomize_choices: boolean;
+  nested_simulation?: NestedSimulationConfig;
 }
 
 // Game Master Configuration
@@ -65,6 +87,7 @@ export interface GameMasterConfig {
   name: string;
   acting_order: ActingOrder;
   parameters: Record<string, any>;
+  grounded_variables?: VariableConfig[];
 }
 
 // Main Simulation Configuration
