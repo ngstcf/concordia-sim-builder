@@ -452,7 +452,33 @@ export async function getSimulationLog(filename: string): Promise<{
 /**
  * Get analytics for a simulation log
  */
-export async function getSimulationAnalytics(filename: string): Promise<{
+
+// Nested simulation data structure
+export interface NestedSimulationData {
+  config: any;
+  result_summary: string;
+  found: boolean;
+}
+
+// Grounded variable data structure
+export interface GroundedVariableData {
+  name: string;
+  type: string;
+  description: string;
+  current_value: any;
+  history: Array<{
+    step: number;
+    value: any;
+  }>;
+}
+
+// Component analysis data structure
+export interface ComponentAnalysisData {
+  [agentName: string]: Record<string, any>;
+}
+
+// Extended analytics interface
+export interface SimulationAnalytics {
   filename: string;
   file_size: number;
   modified: number;
@@ -468,7 +494,28 @@ export async function getSimulationAnalytics(filename: string): Promise<{
   }>;
   word_count: number;
   character_count: number;
-}> {
+  premise?: string;
+  gm_prefab?: string;
+  agent_details?: Record<string, {
+    actions: Array<{
+      step: number;
+      action: string;
+      goal?: string;
+    }>;
+    goal: string;
+    memories: string[];
+  }>;
+  // NEW: Feature detection flags
+  has_nested_sims: boolean;
+  has_grounded_variables: boolean;
+  has_components: boolean;
+  // NEW: Feature-specific data
+  nested_simulations: Record<string, NestedSimulationData>;
+  grounded_variables: GroundedVariableData[];
+  components: ComponentAnalysisData;
+}
+
+export async function getSimulationAnalytics(filename: string): Promise<SimulationAnalytics> {
   const response = await api.get(`/api/simulations/logs/${filename}/analytics`);
   return response.data;
 }

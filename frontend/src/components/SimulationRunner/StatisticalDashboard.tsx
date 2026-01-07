@@ -1,34 +1,17 @@
 /**
  * StatisticalDashboard Component
  * Displays statistical analysis of simulation results
+ * Now supports nested simulations, grounded variables, and component analysis
  */
 import { useState, useEffect } from 'react';
-import { getSimulationAnalytics } from '../../utils/api';
-
-interface AnalyticsData {
-  filename: string;
-  file_size: number;
-  modified: number;
-  total_steps: number;
-  agents: string[];
-  agent_actions: Record<string, number>;
-  total_observations: number;
-  interactions: any[];
-  timeline: Array<{
-    step: number;
-    description: string;
-    type: string;
-  }>;
-  word_count: number;
-  character_count: number;
-}
+import { getSimulationAnalytics, SimulationAnalytics } from '../../utils/api';
 
 interface StatisticalDashboardProps {
   filename: string | null;
 }
 
 export default function StatisticalDashboard({ filename }: StatisticalDashboardProps) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analytics, setAnalytics] = useState<SimulationAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -241,6 +224,121 @@ export default function StatisticalDashboard({ filename }: StatisticalDashboardP
             </div>
           </div>
         </div>
+
+        {/* NEW: Nested Simulations Section */}
+        {analytics.has_nested_sims && Object.keys(analytics.nested_simulations).length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <svg className="h-4 w-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+              </svg>
+              Nested Simulations
+            </h4>
+            <div className="bg-purple-50 rounded-lg p-4 space-y-3">
+              {Object.entries(analytics.nested_simulations).map(([agentName, simData]) => (
+                <div key={agentName} className="bg-white rounded-lg p-3 border border-purple-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-purple-900">{agentName}</span>
+                    {simData.found && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Executed</span>
+                    )}
+                  </div>
+                  {simData.result_summary && (
+                    <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-50 rounded">
+                      <p className="font-medium text-gray-700 mb-1">Result:</p>
+                      <p className="italic">{simData.result_summary.substring(0, 200)}...</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Grounded Variables Section */}
+        {analytics.has_grounded_variables && analytics.grounded_variables.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <svg className="h-4 w-4 text-orange-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Grounded Variables
+            </h4>
+            <div className="bg-orange-50 rounded-lg p-4 space-y-3">
+              {analytics.grounded_variables.map((variable) => (
+                <div key={variable.name} className="bg-white rounded-lg p-3 border border-orange-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="text-sm font-semibold text-orange-900">{variable.name}</span>
+                      <span className="text-xs text-gray-500 ml-2">({variable.type})</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-orange-700">
+                        {typeof variable.current_value === 'number'
+                          ? variable.current_value.toFixed(1)
+                          : String(variable.current_value)}
+                      </span>
+                    </div>
+                  </div>
+                  {variable.description && (
+                    <p className="text-xs text-gray-600 mb-2">{variable.description}</p>
+                  )}
+                  {variable.history.length > 1 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 mb-1">History ({variable.history.length} updates):</p>
+                      <div className="flex gap-1 overflow-x-auto">
+                        {variable.history.slice(-5).map((entry, idx) => (
+                          <div
+                            key={idx}
+                            className="flex-shrink-0 bg-orange-100 rounded px-2 py-1 text-xs"
+                            title={`Step ${entry.step}`}
+                          >
+                            S{entry.step}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Component Analysis Section */}
+        {analytics.has_components && Object.keys(analytics.components).length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <svg className="h-4 w-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Component Analysis
+            </h4>
+            <div className="bg-blue-50 rounded-lg p-4 space-y-3">
+              {Object.entries(analytics.components).map(([agentName, components]) => (
+                <div key={agentName} className="bg-white rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-blue-900">{agentName}</span>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                      {Object.keys(components).length} components
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.keys(components).map((compName) => (
+                      <span
+                        key={compName}
+                        className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded"
+                        title={compName}
+                      >
+                        {compName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* File Info */}
         <div>

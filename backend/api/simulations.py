@@ -2555,12 +2555,40 @@ async def get_simulation_analytics(filename: str):
     gm_prefab = None
     game_theoretic_actions = {}  # Store game-theoretic action data for later use
 
+    # NEW: Feature detection flags
+    has_nested_sims = False
+    has_grounded_variables = False
+    has_components = False
+    nested_sim_data = {}
+    grounded_variables_data = {}
+    component_data = {}
+
     if metadata_path.exists():
         try:
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
                 premise_from_metadata = metadata.get("premise", "")
                 gm_prefab = metadata.get("game_master", {}).get("prefab")
+
+                # NEW: Detect nested simulations
+                for agent in metadata.get("agents", []):
+                    if agent.get("nested_simulation"):
+                        has_nested_sims = True
+                        nested_sim_data[agent["name"]] = agent["nested_simulation"]
+                        print(f"[DEBUG] Found nested simulation for agent {agent['name']}")
+
+                # NEW: Detect grounded variables
+                if metadata.get("game_master", {}).get("grounded_variables"):
+                    has_grounded_variables = True
+                    grounded_variables_data["variables"] = metadata["game_master"]["grounded_variables"]
+                    print(f"[DEBUG] Found {len(grounded_variables_data['variables'])} grounded variables")
+
+                # NEW: Detect components
+                for agent in metadata.get("agents", []):
+                    if agent.get("components"):
+                        has_components = True
+                        component_data[agent["name"]] = agent["components"]
+                        print(f"[DEBUG] Found components for agent {agent['name']}: {list(agent['components'].keys())}")
 
                 # Build a map of agent name -> metadata
                 for agent in metadata.get("agents", []):
@@ -2609,7 +2637,15 @@ async def get_simulation_analytics(filename: str):
             "word_count": len(soup_words),
             "character_count": len(soup_text),
             "premise": premise_from_metadata,  # Use premise from metadata
-            "gm_prefab": gm_prefab  # Include game master prefab type
+            "gm_prefab": gm_prefab,  # Include game master prefab type
+            # NEW: Feature detection flags
+            "has_nested_sims": has_nested_sims,
+            "has_grounded_variables": has_grounded_variables,
+            "has_components": has_components,
+            # NEW: Feature-specific data (to be populated from HTML extraction)
+            "nested_simulations": {},
+            "grounded_variables": [],
+            "components": component_data
         }
 
         # Find all step indicators (they typically contain "Step X")
@@ -3083,6 +3119,116 @@ async def get_simulation_analytics(filename: str):
                 actual_count = len(analytics["agent_details"][agent].get("actions", []))
                 analytics["agent_actions"][agent] = actual_count
                 print(f"[DEBUG] Updated agent_actions['{agent}'] = {actual_count}")
+
+        # NEW: Extract nested simulation data from HTML
+        if has_nested_sims:
+            print("[DEBUG] Extracting nested simulation data from HTML...")
+            for agent_name, nested_config in nested_sim_data.items():
+                # Look for nested simulation results in agent's component output
+                agent_tab = soup.find('div', id=re.compile(re.escape(agent_name), re.IGNORECASE))
+                if agent_tab:
+                    tab_text = agent_tab.get_text()
+                    # Look for nested simulation completion markers
+                    if "Nested simulation completed" in tab_text or "nested simulation result" in tab_text.lower():
+                        # Extract the result
+                        lines = tab_text.split('\n')
+                        for i, line in enumerate(lines):
+                            if "nested simulation" in line.lower() and "result" in line.lower():
+                                # Get the next few lines as the result
+                                result_lines = []
+                                for j in range(i, min(i + 5, len(lines))):
+                                    if lines[j].strip():
+                                        result_lines.append(lines[j].strip())
+                                analytics["nested_simulations"][agent_name] = {
+                                    "config": nested_config,
+                                    "result_summary": "\n".join(result_lines),
+                                    "found": True
+                                }
+                                print(f"[DEBUG] Found nested sim result for {agent_name}")
+                                break
+
+                # If not found in agent tab, check Game Master log
+                if agent_name not in analytics["nested_simulations"]:
+                    game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
+                    if game_master_log:
+                        log_text = game_master_log.get_text()
+                        if "nested simulation" in log_text.lower() and agent_name in log_text:
+                            # Extract context around mentions
+                            lines = log_text.split('\n')
+                            for i, line in enumerate(lines):
+                                if agent_name in line and "nested" in line.lower():
+                                    context = "\n".join(lines[max(0, i-2):min(i+3, len(lines))])
+                                    analytics["nested_simulations"][agent_name] = {
+                                        "config": nested_config,
+                                        "result_summary": context[:500],
+                                        "found": True
+                                    }
+                                    print(f"[DEBUG] Found nested sim mention for {agent_name} in GM log")
+                                    break
+
+        # NEW: Extract grounded variables state changes from HTML
+        if has_grounded_variables:
+            print("[DEBUG] Extracting grounded variables data from HTML...")
+            game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
+            if game_master_log:
+                log_text = game_master_log.get_text()
+                variable_history = {}
+
+                # Initialize with default values from config
+                for var_config in grounded_variables_data.get("variables", []):
+                    var_name = var_config["name"]
+                    variable_history[var_name] = {
+                        "name": var_name,
+                        "type": var_config["variable_type"],
+                        "description": var_config.get("description", ""),
+                        "current_value": var_config.get("default_value"),
+                        "history": []  # List of (step, value) tuples
+                    }
+
+                # Helper function to parse variable values
+                def parse_variable_value(value_str: str, var_type: str):
+                    """Parse variable value based on type."""
+                    value_str = value_str.strip()
+                    try:
+                        if var_type in ["numerical", "percentage"]:
+                            return float(value_str)
+                        elif var_type == "boolean":
+                            return value_str.lower() in ['true', '1', 'yes']
+                        else:  # categorical
+                            return value_str
+                    except:
+                        return value_str
+
+                # Look for variable state patterns like "team_morale: 70" or "Variable: name = value"
+                # The GroundedVariablesComponent outputs state in format: "name: value (type)"
+                var_pattern = re.compile(r'(\w+(?:\s+\w+)*):\s*([\d.]+|true|false|\w+)\s*(?:\((\w+)\))?', re.IGNORECASE)
+
+                lines = log_text.split('\n')
+                current_step = 0
+                step_pattern = re.compile(r'step\s+(\d+)', re.IGNORECASE)
+
+                for line in lines:
+                    # Track current step
+                    step_match = step_pattern.search(line)
+                    if step_match:
+                        current_step = int(step_match.group(1))
+
+                    # Look for variable updates
+                    matches = var_pattern.findall(line)
+                    for var_name, var_value, var_type in matches:
+                        var_name_clean = var_name.strip()
+                        if var_name_clean in variable_history:
+                            # Parse and store the value
+                            parsed_value = parse_variable_value(var_value, variable_history[var_name_clean]["type"])
+                            variable_history[var_name_clean]["current_value"] = parsed_value
+                            variable_history[var_name_clean]["history"].append({
+                                "step": current_step,
+                                "value": parsed_value
+                            })
+
+                # Convert to list format
+                analytics["grounded_variables"] = list(variable_history.values())
+                print(f"[DEBUG] Extracted {len(analytics['grounded_variables'])} grounded variables with history")
 
         return analytics
 
