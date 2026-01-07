@@ -11,9 +11,12 @@ A modern web application for visually creating and running agent-based social si
 
 - **🎨 Visual Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
 - **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
-- **⚡ Real-time Progress Streaming** ✨ - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
-- **📊 Analytics Dashboard** ✨ - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
-- **📂 Recent Simulations Browser** ✨ - Easily view and analyze previous simulation results
+- **🧩 Customizable Components** ✨ NEW - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
+- **🔄 Nested Simulations** ✨ NEW - PhoneGameMaster pattern for running mini-simulations within simulations
+- **📊 Grounded Variables** ✨ NEW - Track and update simulation state variables (morale, budget, health, etc.)
+- **⚡ Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
+- **📊 Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
+- **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
 - **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
 - **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
 - **🌐 Multiple LLM Support** - OpenAI, DeepSeek (recommended), Gemini, Anthropic, GLM, and Ollama
@@ -22,11 +25,13 @@ A modern web application for visually creating and running agent-based social si
 
 ## 🎯 Use Cases
 
-- **Social Science Research** - Model and study complex social interactions
+- **Social Science Research** - Model and study complex social interactions with psychological realism
+- **Psychological Experiments** - Test how cognitive biases, social identity, and emotions affect decision-making
 - **Game Design** - Test NPC behaviors and dialogue systems
 - **Education** - Teach negotiation, conflict resolution, and social dynamics
 - **Creative Writing** - Explore character interactions and story outcomes
 - **Business Scenarios** - Simulate meetings, negotiations, and team dynamics
+- **Resource Management** - Track budget, morale, and other metrics over time
 
 ## 🛠️ Tech Stack
 
@@ -305,12 +310,31 @@ Frontend runs at: `http://localhost:5173`
   - Demonstrates exact scripted responses (ignores context)
   - Best for: Facilitated discussions, controlled scenarios, demonstrations
 
-- **Context-Aware Moderator** (`/templates/context-aware-moderator`) - ✨ NEW: Support group with `context_aware_scripted__Entity`
+- **Context-Aware Moderator** (`/templates/context-aware-moderator`) - Support group with `context_aware_scripted__Entity`
   - Crisis counselor guides job loss support group with adaptive responses
   - Demonstrates natural context-aware scripted dialogue
   - Responds to what participants say while following script structure
   - Automatically delivers closing statement when script is exhausted
   - Best for: Support groups, therapy sessions, responsive facilitation
+
+**Research Templates:**
+- **Vaccine Hesitancy Study** (`/templates/vaccine-hesitancy`) - ✨ NEW: Psychological component system research demo
+  - 5 agents with different psychological profiles (personality, cognitive bias, social identity, TPB)
+  - Demonstrates how customizable components enable theory-driven agent design
+  - Based on cognitive bias theory and social identity theory
+  - Best for: Research on persuasion, attitude change, social influence
+
+**Advanced Features:**
+- **Nested Simulation Demo** (`/templates/nested-simulation-demo`) - ✨ NEW: PhoneGameMaster pattern demo
+  - Alice simulates a conversation with Bob to decide what to bring to a party
+  - Demonstrates nested simulations where agents run mini-simulations as part of decision-making
+  - Best for: Complex planning, social reasoning, "what-if" scenarios
+
+- **Grounded Variables Demo** (`/templates/grounded-variables-demo`) - ✨ NEW: Grounded variables tracking demo
+  - Project management scenario tracking team morale, budget, tasks, health, crisis mode, completion %
+  - Demonstrates GM tracking and updating state variables during simulation
+  - Supports numerical, categorical, boolean, and percentage variable types
+  - Best for: Resource management, state tracking, dynamic scenarios
 
 - **Dialogic Conversation** (`/templates/dialogic-conversation`) - Therapy session with `dialogic__GameMaster`
   - Counselor-patient dialogue with auto-termination
@@ -372,6 +396,11 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/templates/commons-dilemma` | GET | Fishery management simulation (SDG 12/13) |
 | `/api/simulations/templates/disaster-response` | GET | Flood evacuation simulation (SDG 11/13) |
 | `/api/simulations/templates/inequality-mobility` | GET | Educational opportunity simulation (SDG 10) |
+| `/api/simulations/templates/vaccine-hesitancy` | GET | ✨ NEW: Vaccine hesitancy research demo |
+| `/api/simulations/templates/nested-simulation-demo` | GET | ✨ NEW: Nested simulation (PhoneGameMaster) demo |
+| `/api/simulations/templates/grounded-variables-demo` | GET | ✨ NEW: Grounded variables tracking demo |
+| `/api/simulations/components/templates` | GET | ✨ NEW: List available psychological component templates |
+| `/api/simulations/components/validate` | POST | ✨ NEW: Validate component parameters |
 
 ✨ **New**: Real-time progress streaming and analytics endpoints now available!
 
@@ -632,6 +661,9 @@ The `game_theoretic_and_dramaturgic__GameMaster` prefab has a confirmed issue wh
 - [x] **Timeline Visualization** - Step-by-step event timeline ✅
 - [x] **Actions View** - Per-agent action breakdown with extracted goals ✅
 - [x] **Game-Theoretic Analytics** - Robust action extraction for strategic games (Prisoner's Dilemma, Marketplace) ✅
+- [x] **Customizable Components System** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents ✅ NEW
+- [x] **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations ✅ NEW
+- [x] **Grounded Variables Tracking** - Track and update simulation state variables (morale, budget, health, etc.) ✅ NEW
 - [ ] **Visual graph editor for agent relationships** - Drag-and-drop interface to create and visualize agent social networks, influence maps, and communication flows
 - [ ] **Simulation comparison tool** - Run multiple simulations with varied parameters and compare outcomes side-by-side with statistical analysis
 - [ ] **Export to PDF/Markdown** - Generate publication-ready reports from simulation results in multiple formats
