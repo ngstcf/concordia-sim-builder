@@ -2,6 +2,14 @@
 Service for building Concordia simulations from configuration.
 """
 import datetime
+import sys
+import os
+from pathlib import Path
+
+# Add backend directory to path for custom prefab imports
+backend_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(backend_dir))
+
 from concordia.utils import helper_functions
 from concordia.prefabs import entity as entity_prefabs
 from concordia.prefabs import game_master as game_master_prefabs
@@ -19,13 +27,20 @@ from backend.models.schemas import (
     ActingOrder
 )
 
+# Import custom context-aware scripted prefab
+from backend.prefabs import context_aware_scripted
+
 
 def load_available_prefabs() -> dict:
-    """Load all available prefabs from Concordia."""
+    """Load all available prefabs from Concordia and custom prefabs."""
     prefabs = {
         **helper_functions.get_package_classes(entity_prefabs),
         **helper_functions.get_package_classes(game_master_prefabs),
     }
+
+    # Add custom context-aware scripted prefab
+    prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity
+
     return prefabs
 
 
@@ -293,7 +308,8 @@ def get_available_prefabs_info() -> list[dict]:
         # Entity prefabs
         'basic__Entity': 'Standard agent with decision-making components',
         'basic_with_plan__Entity': 'Entity with planning capabilities',
-        'basic_scripted__Entity': 'Scripted behavior agent',
+        'basic_scripted__Entity': 'Scripted behavior agent (exact responses)',
+        'context_aware_scripted__Entity': 'Scripted agent that adapts to conversation context',
         'minimal__Entity': 'Simplest entity implementation',
         'fake_assistant_with_configurable_system_prompt__Entity': 'Customizable system prompt',
 

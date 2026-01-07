@@ -43,6 +43,128 @@ async def get_providers():
     return get_available_providers()
 
 
+@router.get("/models/{provider}")
+async def get_provider_models(
+    provider: str,
+    api_key: str = None,
+    base_url: str = None
+):
+    """
+    Fetch available models from a provider's API.
+
+    For Ollama and OpenAI-compatible APIs, queries the /models endpoint.
+    For other providers, returns static list of known models.
+
+    Args:
+        provider: LLM provider name (ollama, openai, deepseek, etc.)
+        api_key: Optional API key for authentication
+        base_url: Optional custom base URL for the provider
+
+    Returns:
+        List of available model names
+    """
+    import os
+    import httpx
+    from backend.models.schemas import LLMProvider
+
+    provider = provider.lower()
+
+    # Handle Ollama and OpenAI-compatible providers with dynamic model discovery
+    if provider == LLMProvider.OLLAMA.value:
+        # Determine the base URL to query
+        if base_url:
+            models_url = f"{base_url.rstrip('/')}/models"
+        else:
+            # Use environment variable or default to localhost
+            ollama_base = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+            models_url = f"{ollama_base.rstrip('/')}/models"
+
+        # Determine API key
+        headers = {}
+        if api_key:
+            headers['Authorization'] = f"Bearer {api_key}"
+        else:
+            # Try to get from environment
+            env_key = os.getenv('OLLAMA_API_KEY')
+            if env_key:
+                headers['Authorization'] = f"Bearer {env_key}"
+
+        try:
+            # Disable SSL verification for myai.unu.edu and self-hosted instances
+            verify_ssl = 'myai.unu.edu' not in models_url and 'localhost' not in models_url
+
+            async with httpx.AsyncClient(verify=verify_ssl, timeout=10.0) as client:
+                response = await client.get(models_url, headers=headers)
+
+                if response.status_code == 200:
+                    data = response.json()
+
+                    # Handle OpenAI-compatible format (Ollama, OpenWebUI, etc.)
+                    if 'data' in data:
+                        # Extract model names from the response
+                        models = []
+                        for model in data['data']:
+                            model_id = model.get('id', model.get('name', ''))
+                            # Skip aggregate entries
+                            if model_id and model_id not in ['ollama', 'arena']:
+                                models.append({
+                                    'id': model_id,
+                                    'name': model.get('name', model_id),
+                                    'size': model.get('ollama', {}).get('size'),
+                                    'owned_by': model.get('owned_by', 'ollama')
+                                })
+                        return {'provider': provider, 'models': models}
+
+                    # Handle simple list format
+                    elif isinstance(data, list):
+                        return {'provider': provider, 'models': [{'id': m, 'name': m} for m in data]}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
+    elif provider == LLMProvider.OPENAI.value:
+        # For OpenAI, use their models API
+        key = api_key or os.getenv('OPENAI_API_KEY')
+        if not key:
+            return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    'https://api.openai.com/v1/models',
+                    headers={'Authorization': f'Bearer {key}'}
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [
+                        {'id': m['id'], 'name': m['id']}
+                        for m in data.get('data', [])
+                        if m['id'].startswith(('gpt-', 'o1-'))
+                    ]
+                    return {'provider': provider, 'models': models}
+
+                return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
+
+        except Exception as e:
+            return {'provider': provider, 'models': [], 'error': str(e)}
+
+    else:
+        # For other providers, return static known models
+        provider_info = next(
+            (p for p in get_available_providers() if p['provider'].value == provider),
+            None
+        )
+
+        if provider_info:
+            models = [{'id': m, 'name': m} for m in provider_info.get('models', [])]
+            return {'provider': provider, 'models': models}
+        else:
+            return {'provider': provider, 'models': [], 'error': 'Unknown provider'}
+
+
 @router.post("/validate")
 async def validate_config(config: SimulationConfig):
     """Validate a simulation configuration."""
@@ -466,7 +588,10 @@ The company has brought together 4 people with very different perspectives:
 
 The moderator's job is to guide the discussion, not dominate it."""
             "",
-            "max_steps": 15,
+            # Note: Dr. Chen has 8 scripted prompts. With interviewer game master driving the moderator,
+            # max_steps should be ~8-10 to end when script is exhausted.
+            # Adjust if you add more scripted prompts.
+            "max_steps": 10,
             "agents": [
                 {
                     "id": "moderator",
@@ -1560,6 +1685,138 @@ be an equalizer or if class divisions persist and even widen.""",
                 "Grade data shows a correlation between family income and GPA.",
                 "The career center offers better internships to well-connected students.",
                 "Mental health services are overwhelmed but available to all students."
+            ]
+        },
+        "llm_settings": {
+            "provider": "deepseek",
+            "model_name": "deepseek-chat",
+            "temperature": 0.85
+        }
+    }
+
+
+@router.get("/templates/context-aware-moderator")
+async def get_context_aware_moderator_template():
+    """
+    Template: Context-Aware Scripted Moderator (context_aware_scripted__Entity)
+    Use for: Demonstrating context-aware scripted dialogue
+
+    This template showcases the NEW context_aware_scripted prefab, where the moderator
+    follows a scripted structure but can react naturally to what participants say.
+
+    DIFFERENCE FROM basic_scripted:
+    - basic_scripted: Forces exact responses, ignores what others say
+    - context_aware_scripted: Follows script intent BUT responds to conversation context
+
+    In this example, a crisis counselor leads a support group. The counselor has
+    scripted prompts to guide the discussion, but can:
+    - Acknowledge specific details participants share
+    - Respond emotionally to what's said
+    - Adjust follow-ups based on responses
+    - Maintain natural conversational flow
+    """
+    return {
+        "name": "Crisis Support Group - Context-Aware Moderator",
+        "description": "A support group meeting where the counselor (context-aware scripted) guides discussion while responding naturally to participants. Demonstrates the new context_aware_scripted prefab.",
+        "config": {
+            "premise": "A weekly support group meeting for people dealing with job loss and career transitions. The counselor Sarah facilitates the discussion, following a structured agenda but responding naturally to each participant's situation and emotions.",
+            "max_steps": 12,
+            "engine_type": "interview",
+            "agents": [
+                {
+                    "id": "counselor",
+                    "name": "Sarah",
+                    "prefab": "context_aware_scripted__Entity",
+                    "goal": "Facilitate a supportive group discussion where participants feel heard and validated",
+                    "memories": [
+                        "You are Sarah, a licensed counselor with 10 years of experience leading support groups.",
+                        "You believe in the power of shared experience and mutual support.",
+                        "You're skilled at reading emotional cues and knowing when to probe deeper.",
+                        "Your approach is warm but professional, with gentle humor when appropriate.",
+                        "You always end group by having participants share one thing they're grateful for.",
+                        "You've been running this particular group for 6 months and know the regulars well."
+                    ],
+                    "randomize_choices": False,
+                    "components": {
+                        "script": [
+                            {"name": "Sarah", "line": "Welcome everyone to this week's support group. I know job loss and career transitions can feel overwhelming, but you're not alone in this. Let's go around the table - I'd like each of you to share how you're doing this week. What's been on your mind?"},
+                            {"name": "Sarah", "line": "Thank you for sharing that. It sounds like you're carrying a heavy burden right now. What you're feeling - the uncertainty, the self-doubt - it's all completely normal. Has anything helped you cope, even a little bit, with these feelings?"},
+                            {"name": "Sarah", "line": "I really appreciate you opening up about that. It takes courage to admit when things are hard. I want to invite others to respond - has anyone else felt similarly? Sometimes knowing we're not the only ones going through something can be comforting."},
+                            {"name": "Sarah", "line": "That's such an important insight. Sometimes the hardest part isn't the practical challenges but the loss of identity and routine. I'm curious - when you think about where you want to be in six months, what does that look like? Not necessarily 'employed again' but something more personal."},
+                            {"name": "Sarah", "line": "I hear you. The uncertainty is exhausting. Can we pause for a moment? I'd like everyone to think about one small thing - it doesn't have to be work-related - that brought you a moment of peace or even just a smile this week. Sometimes in the midst of difficulty, we need to intentionally notice the small good things."},
+                            {"name": "Sarah", "line": "What beautiful shares. I want to reflect something I'm noticing - the incredible resilience in this room. People are finding ways to connect, to create, to hope even in difficult circumstances. That's worth acknowledging."},
+                            {"name": "Sarah", "line": "As we start to wrap up, I want to remind everyone that what you shared here stays here. This is a confidential space, and that trust is sacred. Also, if anyone needs one-on-one support between sessions, my contact information is on the handout."},
+                            {"name": "Sarah", "line": "Before we close, I'd like us each to share one thing - no matter how small - that we're grateful for or that went okay this week. It could be 'the coffee was good' or 'I had a nice conversation with my neighbor.' Let's go around once more."},
+                            {"name": "Sarah", "line": "Thank you all for being here today and for holding space for each other. What you're going through is hard, but you don't have to go through it alone. See you next week, and please reach out if you need support before then."}
+                        ],
+                        "end_statement": "I want to thank each of you for your courage and vulnerability today. Remember, healing isn't linear, and it's okay to have difficult days. You're not alone in this journey. Our time is up for today, but I'm looking forward to seeing you all next week. Take care of yourselves."
+                    }
+                },
+                {
+                    "id": "participant_1",
+                    "name": "Marcus",
+                    "prefab": "basic__Entity",
+                    "goal": "Share your struggles and receive support from the group",
+                    "memories": [
+                        "You are Marcus, 45, who was laid off from a middle management position three months ago.",
+                        "You're struggling with the loss of identity - your job was a huge part of who you are.",
+                        "You haven't told your extended family about the layoff and feel ashamed.",
+                        "You've been applying for jobs but getting few responses, which is damaging your confidence.",
+                        "You're worried about finances - your mortgage and kids' college tuition don't pause just because you're unemployed.",
+                        "You find it hard to get out of bed some days, the routine and purpose are gone.",
+                        "You want to appear strong but feel like you're falling apart inside."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "participant_2",
+                    "name": "Elena",
+                    "prefab": "basic__Entity",
+                    "goal": "Share your experience and support others in the group",
+                    "memories": [
+                        "You are Elena, 32, who quit a toxic work environment six weeks ago with no job lined up.",
+                        "You feel relief about leaving but are now anxious about finances and the job market.",
+                        "You're experiencing imposter syndrome - wondering if you were just lucky to have your old job.",
+                        "You've been doing some freelance work but it's inconsistent and doesn't pay the bills.",
+                        "You're actually considering a career pivot but are scared to make the leap.",
+                        "You sometimes feel like you don't belong in this group because you chose to leave your job.",
+                        "You find comfort in hearing others' stories and try to offer supportive feedback."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "participant_3",
+                    "name": "David",
+                    "prefab": "basic__Entity",
+                    "goal": "Share your journey and hope with the group",
+                    "memories": [
+                        "You are David, 55, who was laid off 8 months ago and has been struggling to find re-employment.",
+                        "You're facing ageism in the job market and it's profoundly discouraging.",
+                        "However, you've recently started volunteering and it's given you a sense of purpose.",
+                        "You've been mentoring younger job seekers and find it rewarding.",
+                        "You're considering starting a consulting business but worried about the financial risk.",
+                        "You try to be a positive presence in the group, sharing coping strategies that have worked.",
+                        "You're sometimes frustrated by others who seem to have more options than you do."
+                    ],
+                    "randomize_choices": True
+                }
+            ],
+            "game_master": {
+                "prefab": "interviewer__GameMaster",
+                "name": "Group Session Manager",
+                "acting_order": "game_master_choice",
+                "parameters": {
+                    "drive_role": "interviewer",
+                    "drive_role_name": "Sarah"
+                }
+            },
+            "shared_memories": [
+                "This is an anonymous support group - what's shared here stays here.",
+                "The group meets weekly and has several regular attendees.",
+                "Some participants are newly unemployed, others have been searching for months.",
+                "The job market is currently tough, with many qualified people competing for fewer positions.",
+                "Everyone here is dealing with grief - not just of a job, but of identity, routine, and future plans.",
+                "The group culture is non-judgmental and supportive."
             ]
         },
         "llm_settings": {

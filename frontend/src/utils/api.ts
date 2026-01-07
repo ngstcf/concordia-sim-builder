@@ -339,6 +339,14 @@ export async function getInequalityMobilityTemplate(): Promise<SimulationTemplat
 }
 
 /**
+ * Get the context-aware moderator template (NEW context_aware_scripted prefab demo)
+ */
+export async function getContextAwareModeratorTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/context-aware-moderator');
+  return response.data;
+}
+
+/**
  * Health check
  */
 export async function healthCheck(): Promise<{ status: string }> {

@@ -1,7 +1,7 @@
 """
 Pydantic schemas for simulation configuration and API requests/responses.
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
@@ -140,6 +140,15 @@ class LLMSettings(BaseModel):
     embedder_model: str = Field("all-MiniLM-L6-v2", description="Sentence transformer model")
     temperature: float = Field(0.5, ge=0, le=2, description="Sampling temperature")  # Match Concordia's DEFAULT_TEMPERATURE
     max_tokens: int = Field(3500, ge=1, le=32000, description="Maximum tokens to generate")  # Increased for better response quality
+
+    # Validators to strip whitespace from string fields
+    @field_validator('model_name', 'base_url', 'api_key', mode='before')
+    @classmethod
+    def strip_whitespace(cls, v: Optional[str]) -> Optional[str]:
+        """Strip leading/trailing whitespace from string fields."""
+        if v is None:
+            return None
+        return v.strip()
 
     class Config:
         json_schema_extra = {

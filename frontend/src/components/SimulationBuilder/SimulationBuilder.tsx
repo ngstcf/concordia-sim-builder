@@ -20,6 +20,7 @@ import {
   getCommonsDilemmaTemplate,
   getDisasterResponseTemplate,
   getInequalityMobilityTemplate,
+  getContextAwareModeratorTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -32,7 +33,8 @@ const TEMPLATES = [
   { id: 'coffee', name: 'Coffee Shop Demo', description: 'Quick 5-step demo', category: 'Basic' },
   { id: 'peace', name: 'Peace Negotiation', description: 'Russia-Ukraine talks (20 steps)', category: 'Basic' },
   { id: 'planning', name: 'Planning Agent', description: 'Strategic product launch', category: 'Prefab Types' },
-  { id: 'scripted-entity', name: 'Scripted Entity', description: 'Focus group moderator', category: 'Prefab Types' },
+  { id: 'scripted-entity', name: 'Scripted Entity', description: 'Focus group moderator (exact responses)', category: 'Prefab Types' },
+  { id: 'context-aware-moderator', name: 'Context-Aware Moderator', description: 'Support group with adaptive responses', category: 'Prefab Types' },
   { id: 'dialogic', name: 'Dialogic Conversation', description: 'Therapy session', category: 'Prefab Types' },
   { id: 'strategic', name: 'Strategic Game', description: 'Prisoner\'s Dilemma', category: 'Prefab Types' },
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
@@ -50,6 +52,7 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   peace: getPeaceNegotiationTemplate,
   planning: getPlanningAgentTemplate,
   'scripted-entity': getScriptedEntityTemplate,
+  'context-aware-moderator': getContextAwareModeratorTemplate,
   dialogic: getDialogicConversationTemplate,
   strategic: getStrategicGameTemplate,
   interviewer: getInterviewerTemplate,

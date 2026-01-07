@@ -42,6 +42,12 @@ export const EventType = {
   ERROR: 'error' as EventType
 };
 
+// Script line for scripted entities
+export interface ScriptLine {
+  name: string;
+  line: string;
+}
+
 // Agent Configuration
 export interface AgentConfig {
   id: string;

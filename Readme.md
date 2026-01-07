@@ -302,8 +302,15 @@ Frontend runs at: `http://localhost:5173`
 
 - **Scripted Entity** (`/templates/scripted-entity`) - Focus group discussion with `basic_scripted__Entity`
   - Scripted moderator guides 4 diverse participants through a debate
-  - Demonstrates how scripted agents can orchestrate authentic interactions
-  - Best for: Facilitated discussions, controlled scenarios, group dynamics
+  - Demonstrates exact scripted responses (ignores context)
+  - Best for: Facilitated discussions, controlled scenarios, demonstrations
+
+- **Context-Aware Moderator** (`/templates/context-aware-moderator`) - ✨ NEW: Support group with `context_aware_scripted__Entity`
+  - Crisis counselor guides job loss support group with adaptive responses
+  - Demonstrates natural context-aware scripted dialogue
+  - Responds to what participants say while following script structure
+  - Automatically delivers closing statement when script is exhausted
+  - Best for: Support groups, therapy sessions, responsive facilitation
 
 - **Dialogic Conversation** (`/templates/dialogic-conversation`) - Therapy session with `dialogic__GameMaster`
   - Counselor-patient dialogue with auto-termination
@@ -354,6 +361,7 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/templates/coffee-shop` | GET | Coffee shop demo template |
 | `/api/simulations/templates/planning-agent` | GET | Planning agent template |
 | `/api/simulations/templates/scripted-entity` | GET | Scripted entity (focus group moderator) template |
+| `/api/simulations/templates/context-aware-moderator` | GET | ✨ NEW: Context-aware moderator (support group) template |
 | `/api/simulations/templates/dialogic-conversation` | GET | Dialogic conversation template |
 | `/api/simulations/templates/strategic-game` | GET | Strategic game theory template |
 | `/api/simulations/templates/interviewer` | GET | Interview/survey template |
@@ -375,7 +383,8 @@ Frontend runs at: `http://localhost:5173`
 |--------|-------------|----------|
 | `basic__Entity` | Standard agent with "three key questions" decision framework | Most scenarios |
 | `basic_with_plan__Entity` | Adds strategic planning with time horizons | Complex coordination |
-| `basic_scripted__Entity` | Follows predefined scripts | Testing, controlled scenarios |
+| `basic_scripted__Entity` | Follows predefined scripts exactly (goes silent when exhausted) | Testing, demonstrations, exact output |
+| `context_aware_scripted__Entity` | ✨ NEW: Adapts script to context, auto-closes when exhausted | Natural moderators, responsive facilitators |
 | `minimal__Entity` | Simplified decision-making | Lightweight simulations |
 | `fake_assistant_with_configurable_system_prompt__Entity` | AI assistant with custom system prompt | Simulating AI personas |
 
