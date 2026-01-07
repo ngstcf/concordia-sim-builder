@@ -2039,6 +2039,16 @@ async def get_vaccine_hesitancy_template():
         "config": {
             "premise": "A community health clinic is hosting an open discussion about COVID-19 vaccination. Dr. Sarah Chen, a public health advocate, is facilitating the conversation. Community members with different backgrounds, beliefs, and psychological profiles are participating to share their perspectives and make decisions about vaccination.",
             "max_steps": 20,
+            "shared_memories": [
+                "This is a community health clinic hosting an open discussion about vaccination.",
+                "The discussion is voluntary and participants come with different perspectives.",
+                "The goal is to share information and experiences, not to debate or convince.",
+                "All viewpoints are welcome, but misinformation should be gently corrected.",
+                "The facilitator Dr. Chen has medical expertise but cannot give personal medical advice.",
+                "COVID-19 vaccines have been approved by regulatory authorities and are widely available.",
+                "Some participants have strong opinions based on personal experiences and online research.",
+                "The community has experienced both COVID-19 cases and vaccine side effects."
+            ],
             "agents": [
                 {
                     "id": "health_worker",
