@@ -120,6 +120,7 @@ export default function SimulationBuilder() {
   // Group templates by category
   const basicTemplates = TEMPLATES.filter(t => t.category === 'Basic');
   const prefabTemplates = TEMPLATES.filter(t => t.category === 'Prefab Types');
+  const researchTemplates = TEMPLATES.filter(t => t.category === 'Research');
   const sdgTemplates = TEMPLATES.filter(t => t.category === 'SDG Scenarios');
 
   return (
@@ -151,6 +152,13 @@ export default function SimulationBuilder() {
               </optgroup>
               <optgroup label="Prefab Type Examples">
                 {prefabTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.description}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Research Studies">
+                {researchTemplates.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name} - {t.description}
                   </option>
