@@ -1795,7 +1795,6 @@ async def get_context_aware_moderator_template():
         "config": {
             "premise": "A weekly support group meeting for people dealing with job loss and career transitions. The counselor Sarah facilitates the discussion, following a structured agenda but responding naturally to each participant's situation and emotions.",
             "max_steps": 12,
-            "engine_type": "interview",
             "agents": [
                 {
                     "id": "counselor",
@@ -1876,14 +1875,10 @@ async def get_context_aware_moderator_template():
                 }
             ],
             "game_master": {
-                "prefab": "interviewer__GameMaster",
+                "prefab": "generic__GameMaster",
                 "name": "Group Session Manager",
                 "acting_order": "game_master_choice",
-                "parameters": {
-                    "player_names": ["Sarah", "Marcus", "Elena", "David"],
-                    "drive_role": "interviewer",
-                    "drive_role_name": "Sarah"
-                }
+                "parameters": {}
             },
             "shared_memories": [
                 "This is an anonymous support group - what's shared here stays here.",
