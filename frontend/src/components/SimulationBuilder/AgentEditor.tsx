@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { getComponentTemplates } from '../../utils/api';
 import type { ScriptLine } from '../../types/simulation';
 
 interface AgentEditorProps {
@@ -17,6 +18,12 @@ interface ScriptPrompt {
   line: string;
 }
 
+interface ComponentConfig {
+  templateId: string;
+  name: string;
+  parameters: Record<string, any>;
+}
+
 export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const { config, updateAgent } = useSimulation();
   const agent = config.agents.find(a => a.id === agentId);
@@ -27,6 +34,23 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const [memories, setMemories] = useState(agent?.memories?.join('\n') || '');
   const [randomize, setRandomize] = useState(agent?.randomize_choices ?? true);
   const [scriptPrompts, setScriptPrompts] = useState<ScriptPrompt[]>([]);
+  const [componentConfigs, setComponentConfigs] = useState<ComponentConfig[]>([]);
+  const [availableComponents, setAvailableComponents] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
+    category: string;
+  }>>([]);
+
+  useEffect(() => {
+    // Load component templates
+    getComponentTemplates().then(data => {
+      setAvailableComponents(data.templates);
+    }).catch(err => {
+      console.error('Failed to load component templates:', err);
+    });
+  }, []);
 
   useEffect(() => {
     if (agent) {
@@ -47,6 +71,17 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       } else {
         setScriptPrompts([]);
       }
+
+      // Load existing component configurations (excluding script)
+      const existingComponents = agent.components || {};
+      const componentEntries = Object.entries(existingComponents)
+        .filter(([key]) => key !== 'script')
+        .map(([key, value]) => ({
+          templateId: key,
+          name: key,
+          parameters: value as Record<string, any>
+        }));
+      setComponentConfigs(componentEntries);
     }
   }, [agent]);
 
@@ -54,9 +89,19 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
 
   const handleSave = () => {
     const isScriptedPrefab = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
-    const components = isScriptedPrefab && scriptPrompts.length > 0
-      ? { script: scriptPrompts.map(p => ({ name: p.name, line: p.line })) }
-      : agent?.components;
+
+    // Build components object
+    const components: Record<string, any> = {};
+
+    // Add script component if scripted prefab
+    if (isScriptedPrefab && scriptPrompts.length > 0) {
+      components.script = scriptPrompts.map(p => ({ name: p.name, line: p.line }));
+    }
+
+    // Add psychological component configurations
+    componentConfigs.forEach(comp => {
+      components[comp.templateId] = comp.parameters;
+    });
 
     updateAgent(agentId, {
       name,
@@ -64,7 +109,7 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       goal: goal || undefined,
       memories: memories.split('\n').filter(m => m.trim()),
       randomize_choices: randomize,
-      components
+      components: Object.keys(components).length > 0 ? components : undefined
     });
     onClose();
   };
@@ -94,6 +139,35 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       [newPrompts[index], newPrompts[targetIndex]] = [newPrompts[targetIndex], newPrompts[index]];
       setScriptPrompts(newPrompts);
     }
+  };
+
+  const addComponent = (templateId: string) => {
+    const template = availableComponents.find(c => c.id === templateId);
+    if (!template) return;
+
+    // Get default values for parameters
+    const defaultParams: Record<string, any> = {};
+    Object.entries(template.parameters).forEach(([key, config]: [string, any]) => {
+      if (config.default !== undefined) {
+        defaultParams[key] = config.default;
+      }
+    });
+
+    setComponentConfigs([...componentConfigs, {
+      templateId,
+      name: template.name,
+      parameters: defaultParams
+    }]);
+  };
+
+  const updateComponentParameter = (index: number, paramKey: string, value: any) => {
+    const newConfigs = [...componentConfigs];
+    newConfigs[index].parameters[paramKey] = value;
+    setComponentConfigs(newConfigs);
+  };
+
+  const removeComponent = (index: number) => {
+    setComponentConfigs(componentConfigs.filter((_, i) => i !== index));
   };
 
   const isScripted = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
@@ -276,6 +350,149 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               </p>
             </div>
           )}
+
+          {/* Psychological Components - available for all agent types */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Psychological Components
+              </label>
+              <select
+                className="text-sm border border-gray-300 rounded-md shadow-sm py-1.5 px-2"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addComponent(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="">+ Add Component...</option>
+                {availableComponents
+                  .filter(template => !componentConfigs.some(c => c.templateId === template.id))
+                  .map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {componentConfigs.length === 0 ? (
+              <p className="text-sm text-gray-500 italic">
+                No components added. Components modify agent behavior based on psychological theories.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {componentConfigs.map((config, index) => {
+                  const template = availableComponents.find(c => c.id === config.templateId);
+                  if (!template) return null;
+
+                  return (
+                    <div
+                      key={config.templateId}
+                      className="border border-gray-300 rounded-md p-3 bg-blue-50"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">
+                            {template.name}
+                          </span>
+                          <p className="text-xs text-gray-600">{template.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeComponent(index)}
+                          className="p-1 text-red-400 hover:text-red-600"
+                          title="Remove component"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Parameter inputs */}
+                      <div className="space-y-2 mt-3">
+                        {Object.entries(template.parameters).map(([paramKey, paramConfig]: [string, any]) => (
+                          <div key={paramKey}>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              {paramConfig.description || paramKey}
+                            </label>
+                            {paramConfig.enum ? (
+                              <select
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                onChange={(e) => {
+                                  const value = paramConfig.type === 'integer'
+                                    ? parseInt(e.target.value)
+                                    : e.target.value;
+                                  updateComponentParameter(index, paramKey, value);
+                                }}
+                              >
+                                {paramConfig.enum.map((val: string) => (
+                                  <option key={val} value={val}>{val}</option>
+                                ))}
+                              </select>
+                            ) : paramConfig.type === 'boolean' ? (
+                              <select
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? false}
+                                onChange={(e) => updateComponentParameter(index, paramKey, e.target.value === 'true')}
+                              >
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            ) : paramConfig.type === 'integer' || paramConfig.type === 'float' ? (
+                              <input
+                                type="number"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                min={paramConfig.min}
+                                max={paramConfig.max}
+                                step={paramConfig.type === 'float' ? 0.1 : 1}
+                                onChange={(e) => {
+                                  const value = paramConfig.type === 'float'
+                                    ? parseFloat(e.target.value)
+                                    : parseInt(e.target.value);
+                                  updateComponentParameter(index, paramKey, value);
+                                }}
+                              />
+                            ) : paramConfig.type === 'dict' ? (
+                              <textarea
+                                rows={3}
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm font-mono"
+                                value={JSON.stringify(config.parameters[paramKey] ?? paramConfig.default ?? {}, null, 2)}
+                                onChange={(e) => {
+                                  try {
+                                    const value = JSON.parse(e.target.value);
+                                    updateComponentParameter(index, paramKey, value);
+                                  } catch {
+                                    // Ignore invalid JSON
+                                  }
+                                }}
+                                placeholder="Enter JSON object..."
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                                value={config.parameters[paramKey] ?? paramConfig.default ?? ''}
+                                onChange={(e) => updateComponentParameter(index, paramKey, e.target.value)}
+                                placeholder={paramConfig.default?.toString() || ''}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-gray-500">
+              Components add psychological traits, biases, and behavioral patterns based on research.
+            </p>
+          </div>
         </div>
 
         <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3">

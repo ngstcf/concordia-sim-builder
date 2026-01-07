@@ -42,6 +42,36 @@ export async function getProviders(): Promise<ProviderInfo[]> {
 }
 
 /**
+ * Get all available component templates
+ */
+export async function getComponentTemplates(): Promise<{
+  templates: Array<{
+    id: string;
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
+    category: string;
+  }>;
+}> {
+  const response = await api.get('/api/simulations/components/templates');
+  return response.data;
+}
+
+/**
+ * Validate component parameters
+ */
+export async function validateComponentParameters(
+  templateId: string,
+  parameters: Record<string, any>
+): Promise<{ valid: boolean; errors: string[] }> {
+  const response = await api.post('/api/simulations/components/validate', null, {
+    params: { template_id: templateId },
+    data: parameters
+  });
+  return response.data;
+}
+
+/**
  * Validate a simulation configuration
  */
 export async function validateConfig(config: SimulationConfig): Promise<ValidationResult> {

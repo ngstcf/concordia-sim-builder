@@ -43,6 +43,107 @@ async def get_providers():
     return get_available_providers()
 
 
+@router.get("/components/templates")
+async def get_component_templates():
+    """Get all available component templates for agent customization."""
+    try:
+        from backend.prefabs.components import COMPONENT_TEMPLATES
+        return {
+            "templates": [
+                {
+                    "id": template_id,
+                    "name": template["name"],
+                    "description": template["description"],
+                    "parameters": template["parameters"],
+                    "category": template.get("category", "general")
+                }
+                for template_id, template in COMPONENT_TEMPLATES.items()
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get component templates: {str(e)}")
+
+
+@router.post("/components/validate")
+async def validate_component_parameters(
+    template_id: str,
+    parameters: dict
+):
+    """
+    Validate component parameters against a template's schema.
+
+    Args:
+        template_id: The component template ID to validate against
+        parameters: The parameters to validate
+
+    Returns:
+        Validation result with any errors found
+    """
+    try:
+        from backend.prefabs.components import COMPONENT_TEMPLATES
+
+        if template_id not in COMPONENT_TEMPLATES:
+            return {
+                "valid": False,
+                "errors": [f"Unknown component template: {template_id}"]
+            }
+
+        template = COMPONENT_TEMPLATES[template_id]
+        param_schema = template["parameters"]
+        errors = []
+
+        # Validate each parameter
+        for param_name, param_config in param_schema.items():
+            if param_name not in parameters:
+                if "default" not in param_config:
+                    errors.append(f"Missing required parameter: {param_name}")
+                continue
+
+            value = parameters[param_name]
+
+            # Type validation
+            expected_type = param_config.get("type")
+            if expected_type == "string":
+                if not isinstance(value, str):
+                    errors.append(f"Parameter '{param_name}' must be a string")
+            elif expected_type == "integer":
+                if not isinstance(value, int):
+                    errors.append(f"Parameter '{param_name}' must be an integer")
+            elif expected_type == "float":
+                if not isinstance(value, (int, float)):
+                    errors.append(f"Parameter '{param_name}' must be a number")
+            elif expected_type == "boolean":
+                if not isinstance(value, bool):
+                    errors.append(f"Parameter '{param_name}' must be a boolean")
+            elif expected_type == "dict":
+                if not isinstance(value, dict):
+                    errors.append(f"Parameter '{param_name}' must be a dictionary")
+            elif expected_type == "array":
+                if not isinstance(value, list):
+                    errors.append(f"Parameter '{param_name}' must be an array")
+
+            # Enum validation
+            if "enum" in param_config:
+                valid_values = param_config["enum"]
+                if value not in valid_values:
+                    errors.append(
+                        f"Parameter '{param_name}' must be one of: {', '.join(valid_values)}"
+                    )
+
+            # Range validation
+            if "min" in param_config and value < param_config["min"]:
+                errors.append(f"Parameter '{param_name}' must be at least {param_config['min']}")
+            if "max" in param_config and value > param_config["max"]:
+                errors.append(f"Parameter '{param_name}' must be at most {param_config['max']}")
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+
 @router.get("/models/{provider}")
 async def get_provider_models(
     provider: str,
