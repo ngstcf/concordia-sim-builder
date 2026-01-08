@@ -235,43 +235,67 @@ async def run_simulation_stream(
 
                 # Debug: print the type and attributes of the game master
                 print(f"[DEBUG] Game master type: {type(gm).__name__}")
-                print(f"[DEBUG] Game master attributes: {[attr for attr in dir(gm) if not attr.startswith('_')][:20]}")  # First 20 non-private attrs
 
-                # First, try to get component via get_component_names() if it exists
-                if hasattr(gm, 'get_component_names'):
+                # Try get_all_context_components first (EntityAgentWithLogging method)
+                if hasattr(gm, 'get_all_context_components'):
+                    print("[DEBUG] Game master has get_all_context_components() method")
+                    try:
+                        all_components = gm.get_all_context_components()
+                        print(f"[DEBUG] All context components: {list(all_components.keys())}")
+
+                        for comp_name, comp in all_components.items():
+                            class_name = comp.__class__.__name__
+                            print(f"[DEBUG] Component '{comp_name}' is of type '{class_name}'")
+                            if class_name == 'GroundedVariablesComponent':
+                                grounded_vars_component = comp
+                                print(f"[DEBUG] Found grounded variables component: {comp_name}")
+                                break
+                    except Exception as e:
+                        print(f"[DEBUG] Error calling get_all_context_components: {e}")
+
+                # Fallback 1: Try get_component_names() if it exists
+                if not grounded_vars_component and hasattr(gm, 'get_component_names'):
                     component_names = gm.get_component_names()
                     print(f"[DEBUG] Game master has get_component_names(), found: {component_names}")
 
-                    # Look for grounded_variables_component
                     for component_name in component_names:
                         try:
                             component = gm.get_component(component_name)
                             class_name = component.__class__.__name__
                             print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
-                            # Check if it's our GroundedVariablesComponent
                             if class_name == 'GroundedVariablesComponent':
                                 grounded_vars_component = component
                                 print(f"[DEBUG] Found grounded variables component: {component_name}")
                                 break
                         except Exception as e:
                             print(f"[DEBUG] Error accessing component '{component_name}': {e}")
-                else:
-                    print("[DEBUG] Game master doesn't have get_component_names() method")
 
-                    # Fallback: try to access context_components directly
-                    if hasattr(gm, 'context_components'):
-                        print(f"[DEBUG] Game master has context_components: {list(gm.context_components.keys())}")
-                        for comp_name, comp in gm.context_components.items():
-                            class_name = comp.__class__.__name__
-                            print(f"[DEBUG] Context component '{comp_name}' is of type '{class_name}'")
+                # Fallback 2: Try context_components attribute directly
+                if not grounded_vars_component and hasattr(gm, 'context_components'):
+                    print(f"[DEBUG] Game master has context_components: {list(gm.context_components.keys())}")
+                    for comp_name, comp in gm.context_components.items():
+                        class_name = comp.__class__.__name__
+                        print(f"[DEBUG] Context component '{comp_name}' is of type '{class_name}'")
+                        if class_name == 'GroundedVariablesComponent':
+                            grounded_vars_component = comp
+                            print(f"[DEBUG] Found grounded variables component in context_components: {comp_name}")
+                            break
+
+                # Fallback 3: Try to get the component directly by name
+                if not grounded_vars_component:
+                    print("[DEBUG] Trying to get component directly by name 'grounded_variables_component'")
+                    try:
+                        component = gm.get_component('grounded_variables_component')
+                        if component:
+                            class_name = component.__class__.__name__
+                            print(f"[DEBUG] Direct component is of type '{class_name}'")
                             if class_name == 'GroundedVariablesComponent':
-                                grounded_vars_component = comp
-                                print(f"[DEBUG] Found grounded variables component in context_components: {comp_name}")
-                                break
-                    else:
-                        print("[DEBUG] Game master doesn't have context_components attribute")
+                                grounded_vars_component = component
+                                print(f"[DEBUG] Found grounded variables component via direct get_component call")
+                    except Exception as e:
+                        print(f"[DEBUG] Error getting component directly: {e}")
 
-                # Try one more fallback: check act_component
+                # Fallback 4: Check act_component if it exists
                 if not grounded_vars_component and hasattr(gm, 'act_component'):
                     print("[DEBUG] Checking act_component for grounded variables...")
                     act_comp = gm.act_component
