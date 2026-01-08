@@ -11,9 +11,9 @@ A modern web application for visually creating and running agent-based social si
 
 - **🎨 Visual Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
 - **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
-- **🧩 Customizable Components** ✨ NEW - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
-- **🔄 Nested Simulations** ✨ NEW - PhoneGameMaster pattern for running mini-simulations within simulations
-- **📊 Grounded Variables** ✨ NEW - Track and update simulation state variables (morale, budget, health, etc.)
+- **🧩 Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
+- **🔄 Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
+- **📊 Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.)
 - **⚡ Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
 - **📊 Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
 - **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
@@ -318,19 +318,33 @@ Frontend runs at: `http://localhost:5173`
   - Best for: Support groups, therapy sessions, responsive facilitation
 
 **Research Templates:**
-- **Vaccine Hesitancy Study** (`/templates/vaccine-hesitancy`) - ✨ NEW: Psychological component system research demo
+- **Vaccine Hesitancy Study** (`/templates/vaccine-hesitancy`) - Psychological component system research demo
   - 5 agents with different psychological profiles (personality, cognitive bias, social identity, TPB)
   - Demonstrates how customizable components enable theory-driven agent design
   - Based on cognitive bias theory and social identity theory
   - Best for: Research on persuasion, attitude change, social influence
 
+- **Phishing Attack Simulation** (`/templates/phishing-attack-simulation`) - Cybersecurity tabletop exercise
+  - 4 security analysts simulate phishing attack scenarios to assess risk and plan response
+  - Each analyst runs a nested simulation (hacker → user → IT security) to model attack chains
+  - Demonstrates meta-cognitive reasoning - agents simulate adversarial scenarios without actual risk
+  - Based on red team/blue team exercises and tabletop simulation methodologies
+  - Best for: Cybersecurity training, threat modeling, incident response planning
+
+- **Urban Gentrification** (`/templates/urban-gentrification`) - Housing policy and neighborhood change simulation
+  - 6 stakeholders debate housing policies while GM tracks 11 neighborhood indicators
+  - Grounded variables track rent, displacement, business survival, community cohesion, affordability
+  - Longitudinal urban economics research with policy intervention testing
+  - Based on gentrification dynamics, rent gap theory, displacement mechanisms
+  - Best for: Urban planning research, housing policy evaluation, neighborhood change studies
+
 **Advanced Features:**
-- **Nested Simulation Demo** (`/templates/nested-simulation-demo`) - ✨ NEW: PhoneGameMaster pattern demo
+- **Nested Simulation Demo** (`/templates/nested-simulation-demo`) - PhoneGameMaster pattern demo
   - Alice simulates a conversation with Bob to decide what to bring to a party
   - Demonstrates nested simulations where agents run mini-simulations as part of decision-making
   - Best for: Complex planning, social reasoning, "what-if" scenarios
 
-- **Grounded Variables Demo** (`/templates/grounded-variables-demo`) - ✨ NEW: Grounded variables tracking demo
+- **Grounded Variables Demo** (`/templates/grounded-variables-demo`) - Grounded variables tracking demo
   - Project management scenario tracking team morale, budget, tasks, health, crisis mode, completion %
   - Demonstrates GM tracking and updating state variables during simulation
   - Supports numerical, categorical, boolean, and percentage variable types
@@ -377,7 +391,7 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/import` | POST | Import configuration from JSON |
 | `/api/simulations/recent` | GET | List recent simulation logs |
 | `/api/simulations/logs/{filename}` | GET | Get specific simulation log HTML |
-| `/api/simulations/logs/{filename}/analytics` | GET | Get analytics for simulation log ✨ |
+| `/api/simulations/logs/{filename}/analytics` | GET | Get analytics for simulation log |
 | `/api/simulations/status` | GET | Get status of all running simulations |
 | `/api/simulations/status/{task_id}` | GET | Get status of specific simulation |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation |
@@ -385,7 +399,7 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/templates/coffee-shop` | GET | Coffee shop demo template |
 | `/api/simulations/templates/planning-agent` | GET | Planning agent template |
 | `/api/simulations/templates/scripted-entity` | GET | Scripted entity (focus group moderator) template |
-| `/api/simulations/templates/context-aware-moderator` | GET | ✨ NEW: Context-aware moderator (support group) template |
+| `/api/simulations/templates/context-aware-moderator` | GET | Context-aware moderator (support group) template |
 | `/api/simulations/templates/dialogic-conversation` | GET | Dialogic conversation template |
 | `/api/simulations/templates/strategic-game` | GET | Strategic game theory template |
 | `/api/simulations/templates/interviewer` | GET | Interview/survey template |
@@ -396,13 +410,13 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/templates/commons-dilemma` | GET | Fishery management simulation (SDG 12/13) |
 | `/api/simulations/templates/disaster-response` | GET | Flood evacuation simulation (SDG 11/13) |
 | `/api/simulations/templates/inequality-mobility` | GET | Educational opportunity simulation (SDG 10) |
-| `/api/simulations/templates/vaccine-hesitancy` | GET | ✨ NEW: Vaccine hesitancy research demo |
-| `/api/simulations/templates/nested-simulation-demo` | GET | ✨ NEW: Nested simulation (PhoneGameMaster) demo |
-| `/api/simulations/templates/grounded-variables-demo` | GET | ✨ NEW: Grounded variables tracking demo |
-| `/api/simulations/components/templates` | GET | ✨ NEW: List available psychological component templates |
-| `/api/simulations/components/validate` | POST | ✨ NEW: Validate component parameters |
-
-✨ **New**: Real-time progress streaming and analytics endpoints now available!
+| `/api/simulations/templates/vaccine-hesitancy` | GET | Vaccine hesitancy research demo |
+| `/api/simulations/templates/nested-simulation-demo` | GET | Nested simulation (PhoneGameMaster) demo |
+| `/api/simulations/templates/grounded-variables-demo` | GET | Grounded variables tracking demo |
+| `/api/simulations/templates/phishing-attack-simulation` | GET | Phishing attack simulation (cybersecurity) |
+| `/api/simulations/templates/urban-gentrification` | GET | Urban gentrification simulation (housing policy) |
+| `/api/simulations/components/templates` | GET | List available psychological component templates |
+| `/api/simulations/components/validate` | POST | Validate component parameters |
 
 ## 🎨 Supported Prefabs
 
@@ -413,7 +427,7 @@ Frontend runs at: `http://localhost:5173`
 | `basic__Entity` | Standard agent with "three key questions" decision framework | Most scenarios |
 | `basic_with_plan__Entity` | Adds strategic planning with time horizons | Complex coordination |
 | `basic_scripted__Entity` | Follows predefined scripts exactly (goes silent when exhausted) | Testing, demonstrations, exact output |
-| `context_aware_scripted__Entity` | ✨ NEW: Adapts script to context, auto-closes when exhausted | Natural moderators, responsive facilitators |
+| `context_aware_scripted__Entity` | Adapts script to context, auto-closes when exhausted | Natural moderators, responsive facilitators |
 | `minimal__Entity` | Simplified decision-making | Lightweight simulations |
 | `fake_assistant_with_configurable_system_prompt__Entity` | AI assistant with custom system prompt | Simulating AI personas |
 
@@ -636,6 +650,10 @@ If you use this software in your research, please cite:
 ## 📞 Resources
 
 - **Online Documentation**: [c3.unu.edu/projects/ai/simulator/](https://c3.unu.edu/projects/ai/simulator/)
+- **Research Use Cases**: See [docs/research-use-cases/](docs/research-use-cases/) for detailed research documentation:
+  - [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md) - Psychological component system research
+  - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md) - Cybersecurity tabletop exercises
+  - [Urban Gentrification](docs/research-use-cases/urban-gentrification-simulation.md) - Housing policy & neighborhood change
 - **GitHub Issues**: Report bugs or request features
 - **Simulation Logs**: Review existing logs in the `logs/` directory
 - **Known Issues**: See [CONCORDIA_ISSUES.md](CONCORDIA_ISSUES.md) for documented framework limitations
@@ -661,9 +679,9 @@ The `game_theoretic_and_dramaturgic__GameMaster` prefab has a confirmed issue wh
 - [x] **Timeline Visualization** - Step-by-step event timeline ✅
 - [x] **Actions View** - Per-agent action breakdown with extracted goals ✅
 - [x] **Game-Theoretic Analytics** - Robust action extraction for strategic games (Prisoner's Dilemma, Marketplace) ✅
-- [x] **Customizable Components System** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents ✅ NEW
-- [x] **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations ✅ NEW
-- [x] **Grounded Variables Tracking** - Track and update simulation state variables (morale, budget, health, etc.) ✅ NEW
+- [x] **Customizable Components System** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents ✅ 
+- [x] **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations ✅ 
+- [x] **Grounded Variables Tracking** - Track and update simulation state variables (morale, budget, health, etc.) ✅ 
 - [ ] **Visual graph editor for agent relationships** - Drag-and-drop interface to create and visualize agent social networks, influence maps, and communication flows
 - [ ] **Simulation comparison tool** - Run multiple simulations with varied parameters and compare outcomes side-by-side with statistical analysis
 - [ ] **Export to PDF/Markdown** - Generate publication-ready reports from simulation results in multiple formats
