@@ -7,8 +7,7 @@ import { getSimulationAnalytics } from '../../utils/api';
 
 interface AgentAction {
   step: number | null;
-  action: string;
-  goal?: string;
+  text: string;
 }
 
 interface AgentDetails {
@@ -217,7 +216,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
                         {/* Action Content */}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-900 leading-relaxed">
-                            {action.action}
+                            {action.text}
                           </p>
                         </div>
                       </div>

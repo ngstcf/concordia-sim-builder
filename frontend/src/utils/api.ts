@@ -499,8 +499,7 @@ export interface SimulationAnalytics {
   agent_details?: Record<string, {
     actions: Array<{
       step: number;
-      action: string;
-      goal?: string;
+      text: string;
     }>;
     goal: string;
     memories: string[];

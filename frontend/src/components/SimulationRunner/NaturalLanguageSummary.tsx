@@ -24,7 +24,7 @@ interface AnalyticsData {
   character_count: number;
   premise?: string;
   agent_details?: Record<string, {
-    actions: Array<{ step: number; action: string; goal?: string }>;
+    actions: Array<{ step: number; text: string }>;
     goal: string;
     memories: string[];
   }>;
@@ -122,7 +122,7 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
           summaryText += `**Key Actions**:\n`;
           details.actions.slice(0, 3).forEach((action) => {
             const stepPrefix = action.step !== null ? `[Step ${action.step}] ` : '';
-            summaryText += `- ${stepPrefix}${action.action.substring(0, 80)}...\n`;
+            summaryText += `- ${stepPrefix}${action.text.substring(0, 80)}...\n`;
           });
           if (details.actions.length > 3) {
             summaryText += `- *...and ${details.actions.length - 3} more action${details.actions.length - 3 > 1 ? 's' : ''}*\n`;
