@@ -1480,13 +1480,56 @@ if hasattr(gm, 'act_component'):
 
 #### Issue: "Variables never change"
 
-**Cause:** LLM can't detect changes from event text
+**Cause:** Variables stay constant for THREE possible reasons:
 
-**Fix:** Enhance template with explicit keywords:
+1. **LLM can't detect changes from event text** (see fix below)
+2. **Events don't contain policy decisions** (see "Expected Behavior" below)
+3. **Simulation hasn't reached decision points yet**
+
+**Fix 1: Enhance template with explicit keywords**
 - Use CAPITAL LETTERS for action keywords: "INCREASE RENTS", "PREVENT DISPLACEMENT"
 - Include current values in premise: "Current median monthly rent is $1800"
 - Add variable names to agent goals and memories
 - See Urban Gentrification template (simulations.py:2772-2899) for example
+
+**Fix 2: Add explicit policy decision events**
+The issue is often that simulations run indefinitely with agents just TALKING about issues without ever ENACTING policies.
+
+Add periodic "Council Vote" events to force decisions:
+```python
+# In game_master configuration, add at specific steps:
+"step_15": "City Council votes on rent control proposal. The vote passes 5-4, enacting rent stabilization.",
+"step_30": "City Council approves 50 new housing units, with 20% affordable requirement.",
+```
+
+**Expected Behavior - When Variables SHOULD Change:**
+
+Variables track **outcomes of policy decisions**, not discussions:
+- ✅ **Variables change:** "City Council ENACTS rent control policy" → `rent_control_active: true`
+- ✅ **Variables change:** "Developers BREAK GROUND on 100-unit building" → `new_housing_units_permitted: 145`
+- ✅ **Variables change:** "3 small businesses CLOSE due to rent hike" → `small_business_survival_rate: 75`
+- ❌ **Variables don't change:** "Maria ADVOCATES for rent control" (just talk)
+- ❌ **Variables don't change:** "James PROPOSES new development" (just a proposal)
+- ❌ **Variables don't change:** "David ORGANIZES community meeting" (preparatory action)
+
+**Real Example from Test:**
+```
+Step 1 Event: "David Kim approached residents... listened to concerns...
+              suggested attending meeting together"
+→ No variable change (preparatory action)
+
+Step 50 Event: "City Council votes 5-4 to enact rent control policy"
+→ Variable change: rent_control_active: false → true
+```
+
+**Diagnosis: Check if variables SHOULD change:**
+```bash
+# View game master events
+grep "City Council Moderator --- Event:" logs/simulation.html | head -10
+
+# If events are about "discussing", "proposing", "advocating" → Variables won't change
+# If events are about "enacting", "approving", "voting on" → Variables should change
+```
 
 #### Issue: "Frontend can't load simulation"
 
@@ -1495,6 +1538,14 @@ if hasattr(gm, 'act_component'):
 **Fix:** Check console, verify backend is running on correct port
 
 ### Grounded Variables Component Integration
+
+**Status: ✅ FULLY FUNCTIONAL (as of 2025-01-08)**
+
+**Test Results:**
+- Component attached successfully
+- History extraction working (161 entries per variable in 16-step test)
+- LLM detection system operational
+- Metadata保存正确
 
 **Key Findings from Implementation:**
 
@@ -1522,6 +1573,46 @@ if hasattr(gm, 'act_component'):
    - Component not in `extra_components` means it's never attached
    - Empty history means `post_act()` wasn't called or no changes detected
    - Variables don't change if event text lacks explicit variable references
+
+5. **Variable Update Detection (LLM-based):**
+
+   The component uses an LLM prompt to detect when variables should change:
+   ```python
+   # From grounded_variables.py:190-213
+   def _extract_variable_updates(self, event: str) -> Dict[str, Any]:
+       """Use LLM to extract variable updates from the event."""
+
+       prompt = f"""Given the following event and the current state of grounded variables,
+identify which variables should be updated and what their new values should be.
+
+Event: {event}
+
+Variables:
+{variable_descriptions}
+
+Respond with a comma-separated list of updates in the format: "variable_name=new_value".
+Only include variables that actually changed based on the event.
+If no variables changed, respond with "None".
+   ```
+
+   **Important:** The LLM is conservative - it only updates variables when events contain EXPLICIT language about changes. Ambiguous or preparatory actions won't trigger updates.
+
+6. **Test Case - Variables Remaining Constant:**
+
+   In a 160+ step Urban Gentrification simulation, all variables remained at default values. This is CORRECT because:
+   - Events were about agents discussing, organizing, and advocating
+   - No explicit policy decisions were made (no votes, no enactments)
+   - The LLM correctly determined no variables should change
+
+   **Example events that DON'T change variables:**
+   - "David Kim organized a community meeting"
+   - "Maria Rodriguez advocated for rent control"
+   - "James Chen spoke at the City Council meeting"
+
+   **Example events that WOULD change variables:**
+   - "City Council voted 5-4 to ENACT rent control" → `rent_control_active: true`
+   - "Developers broke ground on 50 new units" → `new_housing_units_permitted: 95`
+   - "3 local businesses closed this month" → `small_business_survival_rate: 75%`
 
 ### Debug Mode
 
