@@ -563,6 +563,10 @@ async def run_simulation_stream(
             "agents": []
         }
 
+        # Add grounded_variables if present
+        if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
+            agent_metadata["game_master"]["grounded_variables"] = config.game_master.grounded_variables
+
         for agent in config.agents:
             agent_info = {
                 "id": agent.id,
@@ -571,6 +575,12 @@ async def run_simulation_stream(
                 "goal": agent.goal or "",
                 "memories_count": len(agent.memories) if agent.memories else 0
             }
+            # Add nested_simulation if present
+            if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
+                agent_info["nested_simulation"] = agent.nested_simulation
+            # Add components if present
+            if hasattr(agent, 'components') and agent.components:
+                agent_info["components"] = agent.components
             agent_metadata["agents"].append(agent_info)
 
         # Add game-theoretic action data if available
@@ -1121,6 +1131,10 @@ async def run_simulation_simple(
             "agents": []
         }
 
+        # Add grounded_variables if present
+        if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
+            agent_metadata["game_master"]["grounded_variables"] = config.game_master.grounded_variables
+
         for agent in config.agents:
             agent_info = {
                 "id": agent.id,
@@ -1129,6 +1143,12 @@ async def run_simulation_simple(
                 "goal": agent.goal or "",
                 "memories_count": len(agent.memories) if agent.memories else 0
             }
+            # Add nested_simulation if present
+            if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
+                agent_info["nested_simulation"] = agent.nested_simulation
+            # Add components if present
+            if hasattr(agent, 'components') and agent.components:
+                agent_info["components"] = agent.components
             agent_metadata["agents"].append(agent_info)
 
         # Add game-theoretic action data if available
