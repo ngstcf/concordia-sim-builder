@@ -225,6 +225,54 @@ async def run_simulation_stream(
         # Declare variable at function scope for game-theoretic data
         game_theoretic_data = None
 
+        # Extract grounded variables history if present (for all game master types)
+        grounded_variables_history = None
+        if sim.game_masters and hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
+            print(f"[DEBUG] Grounded variables configured: {len(config.game_master.grounded_variables)} variables")
+            try:
+                gm = sim.game_masters[0]
+                component_names = gm.get_component_names() if hasattr(gm, 'get_component_names') else []
+                print(f"[DEBUG] Game master components: {component_names}")
+
+                # Look for grounded_variables_component
+                grounded_vars_component = None
+                for component_name in component_names:
+                    component = gm.get_component(component_name)
+                    class_name = component.__class__.__name__
+                    print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
+                    # Check if it's our GroundedVariablesComponent
+                    if class_name == 'GroundedVariablesComponent':
+                        grounded_vars_component = component
+                        print(f"[DEBUG] Found grounded variables component: {component_name}")
+                        break
+
+                if grounded_vars_component:
+                    print(f"[DEBUG] Extracting history from grounded variables component")
+                    grounded_variables_history = {}
+
+                    # Get history for each variable
+                    for var_config in config.game_master.grounded_variables:
+                        var_name = var_config.name if hasattr(var_config, 'name') else var_config.get('name')
+                        history = grounded_vars_component.get_history(var_name)
+
+                        # Convert history tuples to dict format for JSON serialization
+                        # History format: List of (step, value) tuples
+                        formatted_history = [
+                            {"step": step, "value": value}
+                            for step, value in history
+                        ]
+
+                        grounded_variables_history[var_name] = formatted_history
+                        print(f"[DEBUG] Variable '{var_name}' has {len(history)} history entries")
+
+                    print(f"[DEBUG] Extracted history for {len(grounded_variables_history)} variables")
+                else:
+                    print("[WARNING] Grounded variables component not found in game master")
+            except Exception as e:
+                print(f"[ERROR] Failed to extract grounded variables history: {e}")
+                import traceback
+                traceback.print_exc()
+
         # Special handling for interviewer prefab to extract questionnaire results
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
             print(f"[DEBUG] Interviewer prefab detected, extracting questionnaire results")
@@ -565,10 +613,23 @@ async def run_simulation_stream(
 
         # Add grounded_variables if present - convert to dict for JSON serialization
         if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
-            agent_metadata["game_master"]["grounded_variables"] = [
+            # Get the variable configs
+            grounded_vars_data = [
                 var.model_dump() if hasattr(var, 'model_dump') else var
                 for var in config.game_master.grounded_variables
             ]
+
+            # Add history data if available
+            if grounded_variables_history:
+                # Merge history into the variable configs
+                for var_data in grounded_vars_data:
+                    var_name = var_data.get('name') if isinstance(var_data, dict) else var_data
+                    if var_name in grounded_variables_history:
+                        var_data['history'] = grounded_variables_history[var_name]
+                        print(f"[DEBUG] Added history for variable '{var_name}': {len(grounded_variables_history[var_name])} entries")
+
+            agent_metadata["game_master"]["grounded_variables"] = grounded_vars_data
+            print(f"[DEBUG] Added {len(grounded_vars_data)} grounded variables to metadata")
 
         for agent in config.agents:
             agent_info = {

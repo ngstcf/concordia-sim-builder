@@ -259,6 +259,31 @@ def build_simulation(
         gm_params['questionnaires'] = questionnaire_objects
         print(f"[DEBUG] Final questionnaires list: {len(questionnaire_objects)} objects")
 
+    # Add grounded_variables component if provided
+    if config.game_master.grounded_variables:
+        from backend.prefabs.grounded_variables import create_grounded_variables_component
+
+        print(f"[DEBUG] Grounded variables found: {len(config.game_master.grounded_variables)}")
+
+        # Convert VariableConfig objects to dicts for the component factory
+        variable_configs = [
+            var.model_dump() if hasattr(var, 'model_dump') else var
+            for var in config.game_master.grounded_variables
+        ]
+
+        # Create the grounded variables component
+        grounded_vars_component = create_grounded_variables_component(
+            model=model,
+            variable_configs=variable_configs
+        )
+
+        # Add component to game master extra_components
+        if 'extra_components' not in gm_params:
+            gm_params['extra_components'] = {}
+
+        gm_params['extra_components']['grounded_variables_component'] = grounded_vars_component
+        print(f"[DEBUG] Grounded variables component added to game master extra_components")
+
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
         role=prefab_lib.Role.GAME_MASTER,

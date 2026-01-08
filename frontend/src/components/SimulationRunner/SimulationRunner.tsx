@@ -689,14 +689,14 @@ export default function SimulationRunner() {
               {/* Analytics Tabs */}
               <div className="px-5 pt-5">
                 <div className="border-b border-gray-200">
-                  <nav className="flex space-x-8" aria-label="Tabs">
+                  <nav className="flex space-x-6 overflow-x-auto" aria-label="Tabs">
                     <button
                       onClick={() => setActiveTab('log')}
                       className={`${
                         activeTab === 'log'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Simulation Log
                     </button>
@@ -706,7 +706,7 @@ export default function SimulationRunner() {
                         activeTab === 'statistics'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Statistical Dashboard
                     </button>
@@ -716,7 +716,7 @@ export default function SimulationRunner() {
                         activeTab === 'timeline'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Timeline
                     </button>
@@ -726,7 +726,7 @@ export default function SimulationRunner() {
                         activeTab === 'grounded-variables'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Grounded Variables
                     </button>
@@ -736,7 +736,7 @@ export default function SimulationRunner() {
                         activeTab === 'cooperation'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Cooperation
                     </button>
@@ -746,7 +746,7 @@ export default function SimulationRunner() {
                         activeTab === 'actions'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       Actions
                     </button>
@@ -756,7 +756,7 @@ export default function SimulationRunner() {
                         activeTab === 'summary'
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
                     >
                       AI Summary
                     </button>
