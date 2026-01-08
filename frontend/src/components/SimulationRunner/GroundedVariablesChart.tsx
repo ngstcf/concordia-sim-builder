@@ -200,13 +200,36 @@ export default function GroundedVariablesChart({ filename }: GroundedVariablesCh
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Grounded Variables</h3>
         <div className="text-center py-8">
-          <p className="text-sm text-gray-500">No grounded variables found in this simulation</p>
+          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <p className="mt-4 text-sm text-gray-500">No grounded variables found in this simulation</p>
+          <p className="text-xs text-gray-400 mt-2">Grounded variables track state changes over time. Try a simulation with grounded variables enabled.</p>
         </div>
       </div>
     );
   }
 
   const chartableVars = getChartableVariables();
+
+  // Check if there's any actual history data
+  const hasChartData = chartableVars.some(v => v.history.length > 0);
+
+  if (!hasChartData) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Grounded Variables</h3>
+        <div className="text-center py-8">
+          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <p className="mt-4 text-sm text-gray-500">No data available for grounded variables</p>
+          <p className="text-xs text-gray-400 mt-2">The simulation may not have run long enough to generate variable history. Try running the simulation for more steps.</p>
+        </div>
+      </div>
+    );
+  }
+
   const { min: yMin, max: yMax } = getChartRange();
   const yRange = yMax - yMin;
 

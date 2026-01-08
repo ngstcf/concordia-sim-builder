@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { getSimulationAnalytics } from '../../utils/api';
+import type { SimulationAnalytics } from '../../utils/api';
 
 interface AgentCooperation {
   agent: string;
@@ -13,20 +14,12 @@ interface AgentCooperation {
   cooperation_rate: number;
 }
 
-interface AnalyticsData {
-  filename: string;
-  agents: string[];
-  agent_actions: Record<string, number>;
-  gm_prefab?: string;
-  total_steps: number;
-}
-
 interface CooperationRateChartProps {
   filename: string | null;
 }
 
 export default function CooperationRateChart({ filename }: CooperationRateChartProps) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analytics, setAnalytics] = useState<SimulationAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,26 +50,48 @@ export default function CooperationRateChart({ filename }: CooperationRateChartP
   // Check if this is a game-theoretic simulation
   const isGameTheoretic = analytics?.gm_prefab?.includes('game_theoretic');
 
-  // Generate mock cooperation data (in real implementation, this would come from backend)
+  // Extract cooperation data from agent actions
   const generateCooperationData = (): AgentCooperation[] => {
-    if (!analytics) return [];
+    if (!analytics || !analytics.agent_details) return [];
 
     return analytics.agents.map(agent => {
-      // Generate realistic-looking cooperation rates
-      const cooperationRate = 0.3 + Math.random() * 0.5; // 30-80% cooperation
-      const totalActions = analytics.agent_actions[agent] || Math.floor(5 + Math.random() * 10);
+      const actions = analytics.agent_details?.[agent]?.actions || [];
+      const totalActions = actions.length;
 
-      const cooperationCount = Math.round(totalActions * cooperationRate);
-      const defectionCount = totalActions - cooperationCount;
+      // Analyze actions for cooperation indicators
+      let cooperationCount = 0;
+      let defectionCount = 0;
+
+      actions.forEach(action => {
+        const text = action.text.toLowerCase();
+
+        // Cooperation indicators
+        if (text.includes('cooperate') || text.includes('cooperates') ||
+            text.includes('share') || text.includes('help') ||
+            text.includes('trust') || text.includes('honest')) {
+          cooperationCount++;
+        }
+        // Defection indicators
+        else if (text.includes('defect') || text.includes('defects') ||
+                 text.includes('betray') || text.includes('cheat') ||
+                 text.includes('selfish') || text.includes('exploit')) {
+          defectionCount++;
+        }
+        // If no clear indicator, count as unknown (neither)
+      });
+
+      const cooperationRate = totalActions > 0
+        ? Math.round((cooperationCount / (cooperationCount + defectionCount)) * 100)
+        : 0;
 
       return {
         agent,
         cooperation_count: cooperationCount,
         defection_count: defectionCount,
         total_actions: totalActions,
-        cooperation_rate: Math.round(cooperationRate * 100)
+        cooperation_rate: cooperationRate
       };
-    });
+    }).filter(d => d.total_actions > 0); // Only include agents with actions
   };
 
   const cooperationData = generateCooperationData();
@@ -148,6 +163,25 @@ export default function CooperationRateChart({ filename }: CooperationRateChartP
           <p className="mt-4 text-sm text-gray-500">
             This visualization is for game-theoretic simulations (Prisoner's Dilemma, Marketplace, etc.)
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if there's any cooperation/defection data
+  const hasCooperationData = cooperationData.length > 0 &&
+    (totalCooperations > 0 || totalDefections > 0);
+
+  if (!hasCooperationData) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cooperation Analysis</h3>
+        <div className="text-center py-8">
+          <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <p className="mt-4 text-sm text-gray-500">No cooperation data available</p>
+          <p className="text-xs text-gray-400 mt-2">The simulation may not have run long enough or doesn't contain clear cooperation/defection actions. Try running the simulation for more steps.</p>
         </div>
       </div>
     );

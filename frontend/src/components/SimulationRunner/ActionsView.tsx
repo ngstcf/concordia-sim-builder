@@ -146,7 +146,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
           <select
             value={selectedAgent || ''}
             onChange={(e) => setSelectedAgent(e.target.value)}
-            className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[300px]"
           >
             {analytics.agents.map((agent) => (
               <option key={agent} value={agent}>
