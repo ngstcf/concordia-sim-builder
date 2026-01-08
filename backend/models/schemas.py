@@ -108,6 +108,10 @@ class GameMasterConfig(BaseModel):
         None,
         description="Optional grounded variables to track during simulation"
     )
+    critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Optional critical decision points that trigger variable changes at specific steps"
+    )
 
     class Config:
         json_schema_extra = {

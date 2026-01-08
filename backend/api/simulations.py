@@ -2769,7 +2769,7 @@ async def get_urban_gentrification_template():
         "name": "Urban Gentrification - Housing Policy & Neighborhood Change",
         "description": "Longitudinal urban economics simulation tracking neighborhood metrics. Stakeholders debate development proposals while GM tracks rent, displacement, business survival, and affordability over time.",
         "config": {
-            "premise": "The historically working-class neighborhood of Elmwood is facing rapid change. A tech company's nearby expansion has brought new investment and interest, but also concerns about displacement and loss of community character. The City Council is holding a series of meetings to decide on housing policies and development proposals. Stakeholders include long-term residents, housing advocates, real estate developers, small business owners, and city planners. CURRENT STATE: Median monthly rent is $1800 for a 2-bedroom. 15% of low-income households have been displaced in the past 2 years. 78% of small businesses remain open. Community cohesion index is 65/100. Property tax base is $450 million. 45 new housing units were permitted last year. 120 units are affordable to area median income earners. 35% of rental units are affordable. Rent control is NOT active. Inclusionary zoning is NOT active. Neighborhood character is currently 'transitional'. The Council will debate policies that may RENT PRICES, DISPLACE RESIDENTS, CLOSE BUSINESSES, AFFECT COMMUNITY COHESION, INCREASE PROPERTY VALUES, APPROVE NEW CONSTRUCTION, CHANGE AFFORDABILITY, and potentially ENACT RENT CONTROL or INCLUSIONARY ZONING.",
+            "premise": "The historically working-class neighborhood of Elmwood is facing rapid change. A tech company's nearby expansion has brought new investment and interest, but also concerns about displacement and loss of community character. The City Council is holding a SERIES OF VOTES over the next several meetings to DECIDE on specific housing policies and development proposals. Stakeholders include long-term residents, housing advocates, real estate developers, small business owners, and city planners. CURRENT STATE: Median monthly rent is $1800 for a 2-bedroom. 15% of low-income households have been displaced in the past 2 years. 78% of small businesses remain open. Community cohesion index is 65/100. Property tax base is $450 million. 45 new housing units were permitted last year. 120 units are affordable to area median income earners. 35% of rental units are affordable. Rent control is NOT active. Inclusionary zoning is NOT active. Neighborhood character is currently 'transitional'. The Council will VOTE on policies that may INCREASE RENT PRICES, DISPLACE RESIDENTS, CLOSE BUSINESSES, AFFECT COMMUNITY COHESION, INCREASE PROPERTY VALUES, APPROVE NEW CONSTRUCTION, CHANGE AFFORDABILITY, and potentially ENACT RENT CONTROL or INCLUSIONARY ZONING. IMPORTANT: The Council will take ACTION and VOTE on proposals - not just discuss them.",
             "max_steps": 30,
             "shared_memories": [
                 "Elmwood has been a working-class neighborhood for 80 years.",
@@ -2792,7 +2792,7 @@ async def get_urban_gentrification_template():
                     "id": "housing_advocate",
                     "name": "Maria Rodriguez",
                     "prefab": "basic__Entity",
-                    "goal": "Prevent displacement of long-term residents and preserve affordable housing. Keep median monthly rent affordable. Reduce the 15% low-income displacement rate. Protect the 78% of small businesses still open. Preserve community cohesion. Advocate for rent control and inclusionary zoning policies.",
+                    "goal": "FORCE the City Council to VOTE on and ENACT rent control and inclusionary zoning policies. CALL FOR IMMEDIATE ACTION to prevent displacement. PREVENT any further rent increases. ORGANIZE residents to demand policy votes. BLOCK development proposals that don't include affordable housing. ENSURE the Council actually VOTES - not just talks.",
                     "memories": [
                         "Maria is a community organizer who has lived in Elmwood for 35 years.",
                         "She runs a local non-profit focused on housing rights.",
@@ -2803,6 +2803,7 @@ async def get_urban_gentrification_template():
                         "She has data showing rent increases are outpacing wage growth.",
                         "She wants policies that protect vulnerable residents - RENT CONTROL and INCLUSIONARY ZONING.",
                         "She wants to PREVENT FURTHER DISPLACEMENT, KEEP RENTS STABLE, and CLOSE the affordability gap.",
+                        "She will CALL FOR VOTES and DEMAND the Council TAKE ACTION, not just discuss.",
                     ],
                     "randomize_choices": True,
                 },
@@ -2810,18 +2811,19 @@ async def get_urban_gentrification_template():
                     "id": "developer",
                     "name": "James Chen",
                     "prefab": "basic__Entity",
-                    "goal": "Develop profitable housing projects while meeting some community needs. INCREASE median monthly rent through new development. APPROVE more housing units. INCREASE property tax base. Balance profit with some affordable units. Avoid rent control policies.",
+                    "goal": "SECURE City Council APPROVAL for new housing developments. GET 100 new housing units PERMITTED. INCREASE median monthly rent to $2200 through market-rate development. BLOCK rent control policies. MAXIMIZE property values and profit. SUBMIT proposals for IMMEDIATE Council votes. START CONSTRUCTION as soon as approved.",
                     "memories": [
                         "James is a real estate developer with 15 years of experience.",
                         "He sees Elmwood as undervalued with great potential.",
                         "He believes new development brings jobs and economic vitality.",
-                        "Current median rent of $1800 is below market potential - he wants to INCREASE RENTS.",
+                        "Current median rent of $1800 is below market potential - he wants to INCREASE RENTS to $2200.",
                         "He wants to BUILD MORE HOUSING UNITS and INCREASE PROPERTY VALUES.",
                         "He is willing to include some affordable units to get approval, but wants to MAXIMIZE PROFIT.",
                         "He thinks the neighborhood's character will evolve naturally to 'gentrified_upscale'.",
                         "He has investors expecting returns on their capital.",
                         "He wants to work with the community rather than fight them.",
                         "He opposes RENT CONTROL as it would limit his profits.",
+                        "He will SUBMIT formal proposals and DEMAND Council votes on his projects.",
                     ],
                     "randomize_choices": True,
                 },
@@ -2829,7 +2831,7 @@ async def get_urban_gentrification_template():
                     "id": "small_business_owner",
                     "name": "Fatima Al-Hassan",
                     "prefab": "basic__Entity",
-                    "goal": "Keep her small business thriving and preserve neighborhood's small business character. PREVENT further business closures. MAINTAIN the 78% small business survival rate. Keep RENTS STABLE for commercial spaces. Preserve community cohesion.",
+                    "goal": "PREVENT her business from CLOSING due to rent increases. DEMAND commercial rent stabilization. ORGANIZE other small business owners to CALL FOR A VOTE on rent control. BLOCK policies that would INCREASE rents. PROTEST any attempts to displace local businesses. FIGHT for her survival.",
                     "memories": [
                         "Fatima has owned a corner grocery store in Elmwood for 22 years.",
                         "Her lease is coming up for renewal and she fears a rent increase - current median rent is $1800.",
@@ -2840,6 +2842,7 @@ async def get_urban_gentrification_template():
                         "She is worried about losing her livelihood if property values rise too fast.",
                         "She wants the neighborhood to prosper without losing its soul.",
                         "She wants policies that PREVENT BUSINESS CLOSURES and KEEP RENTS AFFORDABLE.",
+                        "She will PETITION the Council and DEMAND action on commercial rent control.",
                     ],
                     "randomize_choices": True,
                 },
@@ -2847,7 +2850,7 @@ async def get_urban_gentrification_template():
                     "id": "city_planner",
                     "name": "David Kim",
                     "prefab": "basic__Entity",
-                    "goal": "Balance economic development with housing affordability and community preservation. Manage RENT INCREASES. CONTROL DISPLACEMENT. SUPPORT BUSINESSES. BUILD MORE HOUSING. Consider RENT CONTROL and INCLUSIONARY ZONING policies. Balance property tax growth with affordability.",
+                    "goal": "RECOMMEND and IMPLEMENT policies based on Council votes. If Council VOTES for rent control - IMPLEMENT it immediately. If Council VOTES for development - APPROVE it and START the permitting process. CALL FOR VOTES on specific proposals. MAKE RECOMMENDATIONS and EXECUTE Council decisions. TRACK metrics and REPORT outcomes.",
                     "memories": [
                         "David is a senior city planner with expertise in housing policy.",
                         "He reports to the City Council which is divided on development issues.",
@@ -2858,7 +2861,7 @@ async def get_urban_gentrification_template():
                         "He must balance INCREASING PROPERTY TAX BASE with MAINTAINING AFFORDABILITY.",
                         "He wants evidence-based solutions that can actually be implemented.",
                         "He has limited budget for affordable housing subsidies.",
-                        "He may need to APPROVE DEVELOPMENT or ENACT CONTROLS depending on Council decisions.",
+                        "He will BRING proposals to Council for VOTES and IMPLEMENT their decisions.",
                     ],
                     "randomize_choices": True,
                 },
@@ -2882,7 +2885,7 @@ async def get_urban_gentrification_template():
                     "id": "landlord",
                     "name": "Robert Schwartz",
                     "prefab": "basic__Entity",
-                    "goal": "Maximize rental income while maintaining good tenant relationships. INCREASE RENTS toward market rates. Balance profit with tenant retention. Navigate potential RENT CONTROL policies. Avoid DISPLACING long-term tenants if possible.",
+                    "goal": "INCREASE rents on his apartments to $2200 (market rate). RAISE rents gradually to avoid losing tenants. OPPOSE any rent control votes. INFORM other landlords about potential rent control. RAISE median rent for the neighborhood. MAXIMIZE rental income while keeping some tenants.",
                     "memories": [
                         "Robert owns a small apartment building (6 units) in Elmwood.",
                         "He inherited the building from his parents 20 years ago.",
@@ -2894,6 +2897,7 @@ async def get_urban_gentrification_template():
                         "He is conflicted between profit and treating tenants fairly.",
                         "He is aware of RENT CONTROL proposals that would LIMIT RENT INCREASES.",
                         "He worries about DISPLACING tenants but needs to cover rising costs.",
+                        "He will RAISE RENTS and ORGANIZE landlords to OPPOSE rent control measures.",
                     ],
                     "randomize_choices": True,
                 }
@@ -3003,6 +3007,20 @@ async def get_urban_gentrification_template():
                             "disinvested_declining"
                         ],
                         "update_rule": "Changes based on combination of rent, displacement, and business variables"
+                    }
+                ],
+                "critical_decision_points": [
+                    {
+                        "step": 10,
+                        "event": "CRITICAL DECISION POINT: After extensive debate, the City Council must VOTE on James Chen's proposal for 100 new housing units. The Council VOTES 5-4 to APPROVE the development. This action INCREASES new_housing_units_permitted from 45 to 145. The development will be market-rate with no affordable units. This decision may AFFECT future rent prices and neighborhood character."
+                    },
+                    {
+                        "step": 20,
+                        "event": "CRITICAL DECISION POINT: Facing community pressure over rising rents, the City Council must VOTE on Maria Rodriguez's rent control proposal. After heated debate, the Council VOTES 4-5 to REJECT rent control. rent_control_active remains FALSE. The rejection means landlords are free to INCREASE rents, which may lead to more DISPLACEMENT."
+                    },
+                    {
+                        "step": 30,
+                        "event": "CRITICAL DECISION POINT: In response to the rejected rent control, the Council considers a compromise - inclusionary zoning. The Council VOTES 6-3 to ENACT inclusionary zoning, requiring 20% of new developments to be affordable. inclusionary_zoning_active becomes TRUE. This policy may INCREASE affordable_housing_units over time as new developments are approved."
                     }
                 ]
             }

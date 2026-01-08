@@ -294,9 +294,23 @@ def build_simulation(
     )
     instances.append(gm_instance)
 
+    # Process critical decision points and append to premise
+    premise_text = config.premise
+    if (hasattr(config.game_master, 'critical_decision_points') and
+        config.game_master.critical_decision_points):
+        decision_points = config.game_master.critical_decision_points
+        print(f"[DEBUG] Found {len(decision_points)} critical decision points")
+        # Sort by step and append to premise
+        decision_points_sorted = sorted(decision_points, key=lambda x: x['step'])
+        decision_text = "\n\nCRITICAL DECISION POINTS:\n"
+        for dp in decision_points_sorted:
+            decision_text += f"- Step {dp['step']}: {dp['event']}\n"
+        premise_text = premise_text + decision_text
+        print(f"[DEBUG] Appended critical decision points to premise")
+
     # Create simulation configuration
     sim_config = prefab_lib.Config(
-        default_premise=config.premise,
+        default_premise=premise_text,
         default_max_steps=config.max_steps,
         prefabs=prefabs,
         instances=instances
