@@ -1644,6 +1644,187 @@ grep "Grounded variables component added" logs/*.log
 grep "Component type:" logs/*.log
 ```
 
+### Critical Decision Points
+
+#### Problem Statement
+
+During testing, the grounded variables system was working correctly but **variables never changed** throughout simulations. The issue was that simulation events were about **discussions** rather than **policy decisions**:
+
+**Example events that did NOT change variables:**
+- "Maria advocated for rent control"
+- "James proposed a new development"
+- "David organized a community meeting"
+- "The Council discussed housing policies"
+
+The LLM-based variable detection system requires **explicit action verbs** (VOTE, ENACT, APPROVE, REJECT) to trigger variable changes. Discussion verbs (ADVOCATE, PROPOSE, DISCUSS) are intentionally ignored to prevent premature variable changes before actual policy decisions occur.
+
+#### Solution: Critical Decision Points
+
+**Critical decision points** are explicit policy decision events injected at specific simulation steps to force variable changes. They guarantee that the simulation reaches decisive moments where the City Council actually **votes** on policies rather than just discussing them.
+
+**Key features:**
+- **Forced Action**: Decision points use explicit VOTE/ENACT/APPROVE verbs that trigger variable changes
+- **Timing Control**: Decisions occur at specific steps (e.g., step 10, 20, 30)
+- **Premise Injection**: Decision points are appended to the simulation premise, making them visible to the LLM
+- **Multi-Variable Impact**: Each decision can affect multiple variables simultaneously
+
+#### Implementation
+
+**Schema Addition** ([`backend/models/schemas.py:111-114`](backend/models/schemas.py#L111-L114)):
+
+```python
+critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
+    None,
+    description="Optional critical decision points that trigger variable changes at specific steps"
+)
+```
+
+**Builder Logic** ([`backend/services/simulation_builder.py:297-309`](backend/services/simulation_builder.py#L297-L309)):
+
+```python
+# Process critical decision points and append to premise
+premise_text = config.premise
+if (hasattr(config.game_master, 'critical_decision_points') and
+    config.game_master.critical_decision_points):
+    decision_points = config.game_master.critical_decision_points
+    print(f"[DEBUG] Found {len(decision_points)} critical decision points")
+    # Sort by step and append to premise
+    decision_points_sorted = sorted(decision_points, key=lambda x: x['step'])
+    decision_text = "\n\nCRITICAL DECISION POINTS:\n"
+    for dp in decision_points_sorted:
+        decision_text += f"- Step {dp['step']}: {dp['event']}\n"
+    premise_text = premise_text + decision_text
+    print(f"[DEBUG] Appended critical decision points to premise")
+```
+
+**Template Definition** ([`backend/api/simulations.py:3012-3025`](backend/api/simulations.py#L3012-L3025)):
+
+```python
+"critical_decision_points": [
+    {
+        "step": 10,
+        "event": "CRITICAL DECISION POINT: After extensive debate, the City Council must VOTE on James Chen's proposal for 100 new housing units. The Council VOTES 5-4 to APPROVE the development. This action INCREASES new_housing_units_permitted from 45 to 145. The development will be market-rate with no affordable units. This decision may AFFECT future rent prices and neighborhood character."
+    },
+    {
+        "step": 20,
+        "event": "CRITICAL DECISION POINT: Facing community pressure over rising rents, the City Council must VOTE on Maria Rodriguez's rent control proposal. After heated debate, the Council VOTES 4-5 to REJECT rent control. rent_control_active remains FALSE. The rejection means landlords are free to INCREASE rents, which may lead to more DISPLACEMENT."
+    },
+    {
+        "step": 30,
+        "event": "CRITICAL DECISION POINT: In response to the rejected rent control, the Council considers a compromise - inclusionary zoning. The Council VOTES 6-3 to ENACT inclusionary zoning, requiring 20% of new developments to be affordable. inclusionary_zoning_active becomes TRUE. This policy may INCREASE affordable_housing_units over time as new developments are approved."
+    }
+]
+```
+
+#### Urban Gentrification Decision Points
+
+The Urban Gentrification template includes three critical decision points:
+
+**Step 10: Housing Development Vote**
+- **Event**: City Council VOTES 5-4 to APPROVE 100 new housing units
+- **Expected Variable Changes**:
+  - `new_housing_units_permitted`: 45 → 145
+  - `property_tax_base`: May increase due to new development
+  - `neighborhood_character`: May shift from "transitional" toward "gentrified_upscale"
+- **Narrative Impact**: Market-rate development without affordable units sets the stage for rising rents
+
+**Step 20: Rent Control Vote**
+- **Event**: City Council VOTES 4-5 to REJECT rent control
+- **Expected Variable Changes**:
+  - `rent_control_active`: remains FALSE
+  - `median_monthly_rent`: May increase in subsequent steps
+  - `low_income_displacement_rate`: May increase due to rent increases
+- **Narrative Impact**: Rejection creates pressure for alternative policies (inclusionary zoning)
+
+**Step 30: Inclusionary Zoning Vote**
+- **Event**: City Council VOTES 6-3 to ENACT inclusionary zoning (20% affordable requirement)
+- **Expected Variable Changes**:
+  - `inclusionary_zoning_active`: FALSE → TRUE
+  - `affordable_housing_units`: May increase as new developments are approved
+  - `housing_affordability_index`: May improve over time
+- **Narrative Impact**: Compromise policy balances development with affordability
+
+#### Enhanced Agent Goals
+
+To support critical decision points, agent goals were enhanced with **actionable language** that demands policy decisions rather than just discussions:
+
+**Example - Maria Rodriguez** ([`backend/api/simulations.py:2795`](backend/api/simulations.py#L2795)):
+```python
+"goal": "FORCE the City Council to VOTE on and ENACT rent control and inclusionary zoning policies. CALL FOR IMMEDIATE ACTION to prevent displacement. PREVENT any further rent increases. ORGANIZE residents to demand policy votes. BLOCK development proposals that don't include affordable housing. ENSURE the Council actually VOTES - not just talks."
+```
+
+**Example - James Chen** ([`backend/api/simulations.py:2814`](backend/api/simulations.py#L2814)):
+```python
+"goal": "SECURE City Council APPROVAL for new housing developments. GET 100 new housing units PERMITTED. INCREASE median monthly rent to $2200 through market-rate development. BLOCK rent control policies. MAXIMIZE property values and profit. SUBMIT proposals for IMMEDIATE Council votes. START CONSTRUCTION as soon as approved."
+```
+
+**Action verbs used**: FORCE, VOTE, ENACT, CALL, PREVENT, ORGANIZE, BLOCK, ENSURE, SECURE, GET, INCREASE, MAXIMIZE, SUBMIT, START
+
+These verbs push agents from **discussion** ("advocate for", "support", "propose") to **action** ("FORCE the Council to VOTE", "SECURE APPROVAL", "ENACT policies").
+
+#### Scope and Extensibility
+
+**Infrastructure is generic**: The critical decision points feature is available to all simulation templates through the `GameMasterConfig` schema. Any template can add decision points by including the `critical_decision_points` field.
+
+**Implementation is template-specific**: Currently, only the Urban Gentrification template defines critical decision points. Other templates (Social Network Evolution, Prisoner's Dilemma, etc.) do not yet include this feature.
+
+**Adding decision points to other templates**:
+
+```python
+# In any simulation template definition
+"game_master": {
+    "prefab": "generic__GameMaster",
+    "name": "Moderator",
+    # ... other fields ...
+    "critical_decision_points": [
+        {
+            "step": 15,
+            "event": "CRITICAL DECISION POINT: The group must VOTE on whether to TRUST or BETRAY. After discussion, the group VOTES to TRUST. This action INCREASES trust_score from 50 to 75."
+        }
+    ]
+}
+```
+
+**Best practices for decision points**:
+1. **Use explicit action verbs**: VOTE, ENACT, APPROVE, REJECT, IMPLEMENT
+2. **Specify expected variable changes**: "INCREASES X from Y to Z"
+3. **Tie to narrative context**: Explain why the decision is happening now
+4. **Space them appropriately**: Allow time for development between decisions
+5. **Create cascading effects**: Each decision should set up the next conflict
+
+#### Testing Critical Decision Points
+
+**Verify decision points are loaded**:
+```bash
+# Check backend logs for decision point processing
+grep "Found.*critical decision points" logs/*.log
+grep "Appended critical decision points to premise" logs/*.log
+```
+
+**Check premise includes decision points**:
+```python
+# In simulation_runner.py, after simulation creation
+print(gm.get_premise())
+# Should include "CRITICAL DECISION POINTS:" section
+```
+
+**Monitor variable changes at decision steps**:
+```python
+# After simulation run
+import json
+with open('logs/simulation.metadata.json', 'r') as f:
+    metadata = json.load(f)
+    for frame in metadata['frames']:
+        if frame['step'] in [10, 20, 30]:
+            print(f"Step {frame['step']}:")
+            print(json.dumps(frame['grounded_variables'], indent=2))
+```
+
+**Expected behavior**:
+- At step 10: `new_housing_units_permitted` should increase to 145
+- At step 20: `rent_control_active` should remain FALSE (rejection)
+- At step 30: `inclusionary_zoning_active` should become TRUE (enactment)
+
 ---
 
 ## Future Improvements
