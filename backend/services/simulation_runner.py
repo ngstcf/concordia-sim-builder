@@ -231,6 +231,11 @@ async def run_simulation_stream(
             print(f"[DEBUG] Grounded variables configured: {len(config.game_master.grounded_variables)} variables")
             try:
                 gm = sim.game_masters[0]
+                grounded_vars_component = None  # Initialize at the top level
+
+                # Debug: print the type and attributes of the game master
+                print(f"[DEBUG] Game master type: {type(gm).__name__}")
+                print(f"[DEBUG] Game master attributes: {[attr for attr in dir(gm) if not attr.startswith('_')][:20]}")  # First 20 non-private attrs
 
                 # First, try to get component via get_component_names() if it exists
                 if hasattr(gm, 'get_component_names'):
@@ -238,7 +243,6 @@ async def run_simulation_stream(
                     print(f"[DEBUG] Game master has get_component_names(), found: {component_names}")
 
                     # Look for grounded_variables_component
-                    grounded_vars_component = None
                     for component_name in component_names:
                         try:
                             component = gm.get_component(component_name)
@@ -271,6 +275,7 @@ async def run_simulation_stream(
                 if not grounded_vars_component and hasattr(gm, 'act_component'):
                     print("[DEBUG] Checking act_component for grounded variables...")
                     act_comp = gm.act_component
+                    print(f"[DEBUG] Act component type: {type(act_comp).__name__}")
                     if hasattr(act_comp, '_components'):
                         print(f"[DEBUG] Act component has _components: {list(act_comp._components.keys())}")
                         for comp_name, comp in act_comp._components.items():
