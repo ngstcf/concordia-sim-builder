@@ -324,3 +324,24 @@ This use case demonstrates how customizable psychological components enable:
 - **Clear documentation** of psychological assumptions
 
 The component system transforms agent-based modeling from "black box" behavior to transparent, theory-grounded simulations that can advance both computational methods and psychological theory.
+
+---
+
+## Citation
+
+If you use this simulation template in research, please cite:
+
+```bibtex
+@misc{concordia-vaccine-hesitancy-2025,
+  title={Vaccine Hesitancy Study: Psychological Component System Research Demo},
+  author={Concordia Simulation Builder},
+  year={2025},
+  url={https://github.com/ngstcf/concordia-sim-builder}
+}
+```
+
+---
+
+**Last Updated:** January 2026
+**Concordia Version:** Based on Google DeepMind's Concordia framework
+**Template Author:** Concordia Simulation Builder contributors
