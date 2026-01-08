@@ -11,6 +11,8 @@ import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
 import ActionsView from './ActionsView';
 import NaturalLanguageSummary from './NaturalLanguageSummary';
+import GroundedVariablesChart from './GroundedVariablesChart';
+import CooperationRateChart from './CooperationRateChart';
 
 // Inject CSS styles into Concordia HTML logs to improve readability
 function injectStyles(html: string): string {
@@ -186,7 +188,7 @@ export default function SimulationRunner() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<{
@@ -719,6 +721,26 @@ export default function SimulationRunner() {
                       Timeline
                     </button>
                     <button
+                      onClick={() => setActiveTab('grounded-variables')}
+                      className={`${
+                        activeTab === 'grounded-variables'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                    >
+                      Grounded Variables
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('cooperation')}
+                      className={`${
+                        activeTab === 'cooperation'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                    >
+                      Cooperation
+                    </button>
+                    <button
                       onClick={() => setActiveTab('actions')}
                       className={`${
                         activeTab === 'actions'
@@ -778,6 +800,14 @@ export default function SimulationRunner() {
                     filename={results.log_filename || null}
                     htmlContent={results.results || null}
                   />
+                )}
+
+                {activeTab === 'grounded-variables' && (
+                  <GroundedVariablesChart filename={results.log_filename || null} />
+                )}
+
+                {activeTab === 'cooperation' && (
+                  <CooperationRateChart filename={results.log_filename || null} />
                 )}
               </div>
 
