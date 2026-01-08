@@ -1438,27 +1438,90 @@ def get_simulation_analytics(filename):
 
 #### Issue: "Component not found in game master"
 
-**Cause:** Grounded variables component not attached
+**Cause:** Grounded variables component not attached OR using wrong access method
 
-**Fix:** Check `simulation_builder.py` lines 262-286, ensure `extra_components` is set correctly
+**Fix:**
+- Ensure `extra_components` is set in `gm_params` (simulation_builder.py:262-286)
+- Use correct access method for game master type:
+  - `EntityAgentWithLogging`: Use `get_all_context_components()` method
+  - Other types: Try `get_component_names()` or direct `get_component(name)`
+- See "Component Access Methods" below for detailed strategies
+
+**Component Access Methods by Game Master Type:**
+
+```python
+# EntityAgentWithLogging (most common)
+if hasattr(gm, 'get_all_context_components'):
+    all_components = gm.get_all_context_components()
+    component = all_components.get('grounded_variables_component')
+
+# Fallback: Direct component name lookup
+component = gm.get_component('grounded_variables_component')
+
+# Fallback: Check act_component._components
+if hasattr(gm, 'act_component'):
+    act_comp = gm.act_component
+    if hasattr(act_comp, '_components'):
+        component = act_comp._components.get('grounded_variables_component')
+```
 
 #### Issue: "History is empty in metadata"
 
-**Cause:** Extraction failed or component wasn't found
+**Cause:**
+1. Component wasn't found during extraction (wrong access method)
+2. Component's `post_act()` wasn't called during simulation
+3. LLM didn't detect any variable changes from events
 
-**Fix:** Check debug output, verify component class name matches
+**Fix:**
+1. Check debug output for "[DEBUG] Found grounded variables component"
+2. If not found, verify component access method (see above)
+3. If found but history empty, check if simulation had events that could trigger changes
+4. Use `analyze_simulation.py` to check if events contain variable-relevant keywords
 
 #### Issue: "Variables never change"
 
 **Cause:** LLM can't detect changes from event text
 
-**Fix:** Enhance template with explicit keywords (see Urban Gentrification)
+**Fix:** Enhance template with explicit keywords:
+- Use CAPITAL LETTERS for action keywords: "INCREASE RENTS", "PREVENT DISPLACEMENT"
+- Include current values in premise: "Current median monthly rent is $1800"
+- Add variable names to agent goals and memories
+- See Urban Gentrification template (simulations.py:2772-2899) for example
 
 #### Issue: "Frontend can't load simulation"
 
 **Cause:** File path issues or backend not running
 
 **Fix:** Check console, verify backend is running on correct port
+
+### Grounded Variables Component Integration
+
+**Key Findings from Implementation:**
+
+1. **Component Attachment** (`simulation_builder.py:262-286`):
+   ```python
+   # Components MUST be added to gm_params['extra_components']
+   gm_params['extra_components']['grounded_variables_component'] = component
+   ```
+
+2. **Component Extraction** (`simulation_runner.py:228-338`):
+   - Game master is `EntityAgentWithLogging` type
+   - Has `get_all_context_components()` method to access components
+   - Has `get_component(name)` method for direct access
+   - Does NOT have `context_components` attribute directly
+   - Does NOT have `act_component` attribute (has `act` method instead)
+
+3. **Component Lifecycle**:
+   - `pre_act()`: Called before game master acts, returns current state
+   - `post_act()`: Called after game master acts, records history and updates variables
+   - History format: List of `(step, value)` tuples per variable
+   - LLM-based updates use event text to detect changes
+
+4. **Common Pitfalls**:
+   - Wrong component access method causes "component not found"
+   - Component not in `extra_components` means it's never attached
+   - Empty history means `post_act()` wasn't called or no changes detected
+   - Variables don't change if event text lacks explicit variable references
 
 ### Debug Mode
 
@@ -1472,6 +1535,22 @@ logging.basicConfig(level=logging.DEBUG)
 **Check simulation logs:**
 ```bash
 tail -f logs/*.log
+```
+
+**Debug component extraction:**
+```python
+# Add to simulation_runner.py to see all components
+all_components = gm.get_all_context_components()
+print(f"[DEBUG] All components: {list(all_components.keys())}")
+for name, comp in all_components.items():
+    print(f"[DEBUG] {name}: {type(comp).__name__}")
+```
+
+**Verify component creation:**
+```bash
+# Check backend logs for component creation
+grep "Grounded variables component added" logs/*.log
+grep "Component type:" logs/*.log
 ```
 
 ---
