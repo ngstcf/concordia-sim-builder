@@ -163,6 +163,14 @@ export default function CooperationRateChart({ filename }: CooperationRateChartP
           <p className="mt-4 text-sm text-gray-500">
             This visualization is for game-theoretic simulations (Prisoner's Dilemma, Marketplace, etc.)
           </p>
+          {analytics && analytics.gm_prefab && (
+            <p className="text-xs text-gray-400 mt-2">
+              Current simulation uses: <code className="bg-gray-100 px-1 py-0.5 rounded">{analytics.gm_prefab}</code>
+            </p>
+          )}
+          <p className="text-xs text-gray-400 mt-2">
+            Try loading a simulation with the <code className="bg-gray-100 px-1 py-0.5 rounded">game_theoretic__GameMaster</code> prefab.
+          </p>
         </div>
       </div>
     );

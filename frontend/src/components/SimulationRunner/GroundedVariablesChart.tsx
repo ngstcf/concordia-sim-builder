@@ -224,7 +224,16 @@ export default function GroundedVariablesChart({ filename }: GroundedVariablesCh
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           <p className="mt-4 text-sm text-gray-500">No data available for grounded variables</p>
-          <p className="text-xs text-gray-400 mt-2">The simulation may not have run long enough to generate variable history. Try running the simulation for more steps.</p>
+          <p className="text-xs text-gray-400 mt-2">The simulation may not have run long enough to generate variable history.</p>
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-xs text-yellow-800">
+              <strong>Backend Issue Detected:</strong> Grounded variables exist but have no history data.
+              The simulation backend needs to track variable changes over time.
+            </p>
+            <p className="text-xs text-yellow-700 mt-1">
+              Variables found: {chartableVars.length} chartable, {getNonChartableVariables().length} other
+            </p>
+          </div>
         </div>
       </div>
     );
