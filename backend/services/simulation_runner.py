@@ -231,20 +231,54 @@ async def run_simulation_stream(
             print(f"[DEBUG] Grounded variables configured: {len(config.game_master.grounded_variables)} variables")
             try:
                 gm = sim.game_masters[0]
-                component_names = gm.get_component_names() if hasattr(gm, 'get_component_names') else []
-                print(f"[DEBUG] Game master components: {component_names}")
 
-                # Look for grounded_variables_component
-                grounded_vars_component = None
-                for component_name in component_names:
-                    component = gm.get_component(component_name)
-                    class_name = component.__class__.__name__
-                    print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
-                    # Check if it's our GroundedVariablesComponent
-                    if class_name == 'GroundedVariablesComponent':
-                        grounded_vars_component = component
-                        print(f"[DEBUG] Found grounded variables component: {component_name}")
-                        break
+                # First, try to get component via get_component_names() if it exists
+                if hasattr(gm, 'get_component_names'):
+                    component_names = gm.get_component_names()
+                    print(f"[DEBUG] Game master has get_component_names(), found: {component_names}")
+
+                    # Look for grounded_variables_component
+                    grounded_vars_component = None
+                    for component_name in component_names:
+                        try:
+                            component = gm.get_component(component_name)
+                            class_name = component.__class__.__name__
+                            print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
+                            # Check if it's our GroundedVariablesComponent
+                            if class_name == 'GroundedVariablesComponent':
+                                grounded_vars_component = component
+                                print(f"[DEBUG] Found grounded variables component: {component_name}")
+                                break
+                        except Exception as e:
+                            print(f"[DEBUG] Error accessing component '{component_name}': {e}")
+                else:
+                    print("[DEBUG] Game master doesn't have get_component_names() method")
+
+                    # Fallback: try to access context_components directly
+                    if hasattr(gm, 'context_components'):
+                        print(f"[DEBUG] Game master has context_components: {list(gm.context_components.keys())}")
+                        for comp_name, comp in gm.context_components.items():
+                            class_name = comp.__class__.__name__
+                            print(f"[DEBUG] Context component '{comp_name}' is of type '{class_name}'")
+                            if class_name == 'GroundedVariablesComponent':
+                                grounded_vars_component = comp
+                                print(f"[DEBUG] Found grounded variables component in context_components: {comp_name}")
+                                break
+                    else:
+                        print("[DEBUG] Game master doesn't have context_components attribute")
+
+                # Try one more fallback: check act_component
+                if not grounded_vars_component and hasattr(gm, 'act_component'):
+                    print("[DEBUG] Checking act_component for grounded variables...")
+                    act_comp = gm.act_component
+                    if hasattr(act_comp, '_components'):
+                        print(f"[DEBUG] Act component has _components: {list(act_comp._components.keys())}")
+                        for comp_name, comp in act_comp._components.items():
+                            class_name = comp.__class__.__name__
+                            if class_name == 'GroundedVariablesComponent':
+                                grounded_vars_component = comp
+                                print(f"[DEBUG] Found grounded variables component in act_component: {comp_name}")
+                                break
 
                 if grounded_vars_component:
                     print(f"[DEBUG] Extracting history from grounded variables component")
@@ -267,7 +301,8 @@ async def run_simulation_stream(
 
                     print(f"[DEBUG] Extracted history for {len(grounded_variables_history)} variables")
                 else:
-                    print("[WARNING] Grounded variables component not found in game master")
+                    print("[WARNING] Grounded variables component not found in game master after checking all locations")
+                    print("[INFO] This means the component was not properly attached to the game master")
             except Exception as e:
                 print(f"[ERROR] Failed to extract grounded variables history: {e}")
                 import traceback

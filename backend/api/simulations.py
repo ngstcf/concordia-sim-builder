@@ -3806,69 +3806,99 @@ async def get_simulation_analytics(filename: str):
                                     print(f"[DEBUG] Found nested sim mention for {agent_name} in GM log")
                                     break
 
-        # NEW: Extract grounded variables state changes from HTML
+        # NEW: Extract grounded variables state changes from metadata or HTML
         if has_grounded_variables:
-            print("[DEBUG] Extracting grounded variables data from HTML...")
-            game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
-            if game_master_log:
-                log_text = game_master_log.get_text()
-                variable_history = {}
+            print("[DEBUG] Extracting grounded variables data...")
 
-                # Initialize with default values from config
+            # Check if metadata has history data (preferred method)
+            has_history_in_metadata = any(
+                var.get("history") for var in grounded_variables_data.get("variables", [])
+            )
+
+            if has_history_in_metadata:
+                # Use history from metadata file (most reliable)
+                print("[DEBUG] Using grounded variables history from metadata")
+                analytics["grounded_variables"] = []
                 for var_config in grounded_variables_data.get("variables", []):
-                    var_name = var_config["name"]
-                    variable_history[var_name] = {
-                        "name": var_name,
+                    var_data = {
+                        "name": var_config["name"],
                         "type": var_config["variable_type"],
                         "description": var_config.get("description", ""),
                         "current_value": var_config.get("default_value"),
-                        "history": []  # List of (step, value) tuples
+                        "history": var_config.get("history", [])
                     }
 
-                # Helper function to parse variable values
-                def parse_variable_value(value_str: str, var_type: str):
-                    """Parse variable value based on type."""
-                    value_str = value_str.strip()
-                    try:
-                        if var_type in ["numerical", "percentage"]:
-                            return float(value_str)
-                        elif var_type == "boolean":
-                            return value_str.lower() in ['true', '1', 'yes']
-                        else:  # categorical
+                    # Get current value from history if available
+                    if var_data["history"]:
+                        var_data["current_value"] = var_data["history"][-1]["value"]
+
+                    analytics["grounded_variables"].append(var_data)
+
+                print(f"[DEBUG] Loaded {len(analytics['grounded_variables'])} grounded variables from metadata with history")
+
+            else:
+                # Fallback: Parse HTML for variable state changes
+                print("[DEBUG] No history in metadata, parsing HTML for grounded variables")
+                game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
+                if game_master_log:
+                    log_text = game_master_log.get_text()
+                    variable_history = {}
+
+                    # Initialize with default values from config
+                    for var_config in grounded_variables_data.get("variables", []):
+                        var_name = var_config["name"]
+                        variable_history[var_name] = {
+                            "name": var_name,
+                            "type": var_config["variable_type"],
+                            "description": var_config.get("description", ""),
+                            "current_value": var_config.get("default_value"),
+                            "history": []  # List of (step, value) tuples
+                        }
+
+                    # Helper function to parse variable values
+                    def parse_variable_value(value_str: str, var_type: str):
+                        """Parse variable value based on type."""
+                        value_str = value_str.strip()
+                        try:
+                            if var_type in ["numerical", "percentage"]:
+                                return float(value_str)
+                            elif var_type == "boolean":
+                                return value_str.lower() in ['true', '1', 'yes']
+                            else:  # categorical
+                                return value_str
+                        except:
                             return value_str
-                    except:
-                        return value_str
 
-                # Look for variable state patterns like "team_morale: 70" or "Variable: name = value"
-                # The GroundedVariablesComponent outputs state in format: "name: value (type)"
-                var_pattern = re.compile(r'(\w+(?:\s+\w+)*):\s*([\d.]+|true|false|\w+)\s*(?:\((\w+)\))?', re.IGNORECASE)
+                    # Look for variable state patterns like "team_morale: 70" or "Variable: name = value"
+                    # The GroundedVariablesComponent outputs state in format: "name: value (type)"
+                    var_pattern = re.compile(r'(\w+(?:\s+\w+)*):\s*([\d.]+|true|false|\w+)\s*(?:\((\w+)\))?', re.IGNORECASE)
 
-                lines = log_text.split('\n')
-                current_step = 0
-                step_pattern = re.compile(r'step\s+(\d+)', re.IGNORECASE)
+                    lines = log_text.split('\n')
+                    current_step = 0
+                    step_pattern = re.compile(r'step\s+(\d+)', re.IGNORECASE)
 
-                for line in lines:
-                    # Track current step
-                    step_match = step_pattern.search(line)
-                    if step_match:
-                        current_step = int(step_match.group(1))
+                    for line in lines:
+                        # Track current step
+                        step_match = step_pattern.search(line)
+                        if step_match:
+                            current_step = int(step_match.group(1))
 
-                    # Look for variable updates
-                    matches = var_pattern.findall(line)
-                    for var_name, var_value, var_type in matches:
-                        var_name_clean = var_name.strip()
-                        if var_name_clean in variable_history:
-                            # Parse and store the value
-                            parsed_value = parse_variable_value(var_value, variable_history[var_name_clean]["type"])
-                            variable_history[var_name_clean]["current_value"] = parsed_value
-                            variable_history[var_name_clean]["history"].append({
-                                "step": current_step,
-                                "value": parsed_value
-                            })
+                        # Look for variable updates
+                        matches = var_pattern.findall(line)
+                        for var_name, var_value, var_type in matches:
+                            var_name_clean = var_name.strip()
+                            if var_name_clean in variable_history:
+                                # Parse and store the value
+                                parsed_value = parse_variable_value(var_value, variable_history[var_name_clean]["type"])
+                                variable_history[var_name_clean]["current_value"] = parsed_value
+                                variable_history[var_name_clean]["history"].append({
+                                    "step": current_step,
+                                    "value": parsed_value
+                                })
 
-                # Convert to list format
-                analytics["grounded_variables"] = list(variable_history.values())
-                print(f"[DEBUG] Extracted {len(analytics['grounded_variables'])} grounded variables with history")
+                    # Convert to list format
+                    analytics["grounded_variables"] = list(variable_history.values())
+                    print(f"[DEBUG] Parsed {len(analytics['grounded_variables'])} grounded variables from HTML")
 
         return analytics
 

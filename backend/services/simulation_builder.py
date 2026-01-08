@@ -283,6 +283,9 @@ def build_simulation(
 
         gm_params['extra_components']['grounded_variables_component'] = grounded_vars_component
         print(f"[DEBUG] Grounded variables component added to game master extra_components")
+        print(f"[DEBUG] Component type: {type(grounded_vars_component).__name__}")
+        print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
+        print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
 
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
