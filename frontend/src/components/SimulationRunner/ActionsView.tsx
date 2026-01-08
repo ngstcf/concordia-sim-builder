@@ -43,16 +43,19 @@ export default function ActionsView({ filename }: ActionsViewProps) {
   }, [filename]);
 
   useEffect(() => {
-    if (analytics && analytics.agents.length > 0 && !selectedAgent) {
+    // Auto-select first agent when analytics load
+    if (analytics && analytics.agents.length > 0) {
       setSelectedAgent(analytics.agents[0]);
     }
-  }, [analytics, selectedAgent]);
+  }, [analytics]);
 
   const loadAnalytics = async () => {
     if (!filename) return;
 
     setLoading(true);
     setError(null);
+    // Reset selected agent when loading new data
+    setSelectedAgent(null);
     try {
       const data = await getSimulationAnalytics(filename);
       setAnalytics(data);

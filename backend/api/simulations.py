@@ -2336,6 +2336,276 @@ async def get_nested_simulation_demo_template():
     }
 
 
+@router.get("/templates/phishing-attack-simulation")
+async def get_phishing_attack_simulation_template():
+    """
+    Template: Phishing Attack Simulation (Meta-Cognitive Security Analysis)
+
+    This template demonstrates a cybersecurity tabletop exercise where security
+    analysts simulate potential threat scenarios to assess phishing risk.
+
+    Use case: A security team receives a suspicious phishing email and uses nested
+    simulations to model what would happen if someone clicked the malicious link.
+    Each analyst simulates the attack chain (hacker → user → IT response) to
+    estimate the impact and recommend appropriate security measures.
+
+    Educational value: Demonstrates meta-cognitive reasoning where agents simulate
+    adversarial scenarios without actual risk - like a digital fire drill.
+    """
+    return {
+        "name": "Phishing Attack Simulation - Security Team Tabletop Exercise",
+        "description": "A cybersecurity tabletop exercise where analysts simulate phishing attack scenarios to assess risk and plan response. Each analyst runs a nested simulation to model the attack chain.",
+        "config": {
+            "premise": "A security team at a financial services company has received a suspicious email appearing to be from their CEO, requesting urgent wire transfer instructions. The team must assess whether this is a phishing attack and determine the appropriate response.",
+            "max_steps": 25,
+            "shared_memories": [
+                "The company is a mid-sized financial services firm handling sensitive client data.",
+                "A suspicious email was received from the CEO's personal email address at 2:30 AM.",
+                "The email requests urgent wire transfer instructions for a 'confidential acquisition'.",
+                "The CEO is currently traveling internationally and unreachable.",
+                "This matches the pattern of recent CEO fraud attacks in the industry.",
+                "The team needs to assess risk quickly and decide on a response strategy.",
+            ],
+            "agents": [
+                {
+                    "id": "analyst_1",
+                    "name": "Sarah",
+                    "prefab": "basic__Entity",
+                    "goal": "Assess the phishing risk by simulating what would happen if someone clicks the link, then recommend mitigation",
+                    "memories": [
+                        "Sarah is a senior security analyst with 5 years of experience.",
+                        "She specializes in email security and phishing analysis.",
+                        "She is concerned about the financial and reputational impact of a breach.",
+                        "She believes in being cautious and prefers to verify before trusting.",
+                        "She wants to understand the technical details of the attack chain.",
+                    ],
+                    "randomize_choices": True,
+                    "nested_simulation": {
+                        "premise": "Sarah simulates what would happen if an employee clicks the phishing link. The simulation models the attacker's actions, the user's experience, and the IT security response.",
+                        "max_steps": 8,
+                        "shared_memories": [
+                            "A user receives and clicks a malicious link in a phishing email.",
+                            "The link appears to lead to a legitimate-looking login page.",
+                            "The attacker is attempting to steal credentials and deploy malware.",
+                            "The company has security monitoring but no MFA enforcement.",
+                        ],
+                        "agents": [
+                            {
+                                "id": "hacker_1",
+                                "name": "Hacker",
+                                "prefab": "basic__Entity",
+                                "goal": "Successfully harvest credentials and establish persistence on the victim's machine",
+                                "memories": [
+                                    "The hacker is using a cloned login page hosted on a compromised legitimate site.",
+                                    "The phishing kit includes a keylogger and credential harvester.",
+                                    "If credentials are entered, the hacker will attempt to deploy ransomware within 2 hours.",
+                                    "The hacker wants to move laterally to access financial systems.",
+                                    "Time is critical - the attack must complete before detection.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "user_1",
+                                "name": "Employee",
+                                "prefab": "basic__Entity",
+                                "goal": "Complete what appears to be an urgent request from the CEO",
+                                "memories": [
+                                    "The employee is tired and working late to meet deadlines.",
+                                    "They respect the CEO and want to respond quickly.",
+                                    "They are not particularly tech-savvy.",
+                                    "They don't notice the subtle misspelling in the URL.",
+                                    "They feel pressure to act on urgent requests from leadership.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "it_security_1",
+                                "name": "IT Security",
+                                "prefab": "basic__Entity",
+                                "goal": "Detect and respond to the security incident as quickly as possible",
+                                "memories": [
+                                    "IT security monitors SIEM alerts and network traffic.",
+                                    "They have a 24/7 security operations center.",
+                                    "Response time averages 2-4 hours for initial triage.",
+                                    "They can isolate infected machines and reset credentials.",
+                                    "They need to determine the scope and impact of the breach.",
+                                ],
+                                "randomize_choices": True,
+                            }
+                        ],
+                        "extraction_prompt": "What happened after the employee clicked the link? Did the hacker successfully steal credentials or deploy malware? How quickly did IT security detect and respond? What was the impact and cost of the incident?"
+                    }
+                },
+                {
+                    "id": "analyst_2",
+                    "name": "Marcus",
+                    "prefab": "basic__Entity",
+                    "goal": "Assess the phishing risk by simulating the attack scenario, then recommend technical controls",
+                    "memories": [
+                        "Marcus is a technical security engineer with infrastructure expertise.",
+                        "He focuses on implementing technical security controls.",
+                        "He is concerned about gaps in the current security posture.",
+                        "He believes the company needs stronger authentication mechanisms.",
+                        "He wants to understand how the attack would bypass existing defenses.",
+                    ],
+                    "randomize_choices": True,
+                    "nested_simulation": {
+                        "premise": "Marcus simulates the attack chain with a focus on technical controls and defense mechanisms. The simulation shows where current security measures fail and how they could be improved.",
+                        "max_steps": 8,
+                        "shared_memories": [
+                            "A phishing attack targets employees with access to financial systems.",
+                            "The company has basic email filtering but no advanced threat protection.",
+                            "Multi-factor authentication is available but not enforced.",
+                            "Security monitoring exists but has alert fatigue and slow response times.",
+                        ],
+                        "agents": [
+                            {
+                                "id": "hacker_2",
+                                "name": "Hacker",
+                                "prefab": "basic__Entity",
+                                "goal": "Bypass security controls and gain unauthorized access to financial systems",
+                                "memories": [
+                                    "The hacker has researched the company's security posture.",
+                                    "They know that MFA is not enforced for legacy applications.",
+                                    "They can bypass email filtering using techniques like HTML smuggling.",
+                                    "The attack focuses on employees with elevated privileges.",
+                                    "The hacker wants to establish persistent access for future exploitation.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "user_2",
+                                "name": "Finance Manager",
+                                "prefab": "basic__Entity",
+                                "goal": "Process what appears to be a legitimate request from executive leadership",
+                                "memories": [
+                                    "The finance manager has authority to initiate wire transfers.",
+                                    "They are under pressure to process time-sensitive transactions.",
+                                    "They have a good working relationship with the CEO.",
+                                    "They are experienced but may be fooled by sophisticated impersonation.",
+                                    "They want to demonstrate responsiveness to leadership.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "it_security_2",
+                                "name": "IT Security",
+                                "prefab": "basic__Entity",
+                                "goal": "Identify the attack and contain the threat before significant damage occurs",
+                                "memories": [
+                                    "IT security uses behavior analytics to detect anomalies.",
+                                    "They have playbooks for incident response but they need updating.",
+                                    "Communication with business stakeholders is sometimes delayed.",
+                                    "They can block malicious URLs and reset compromised credentials.",
+                                    "They need executive support to enforce security policies.",
+                                ],
+                                "randomize_choices": True,
+                            }
+                        ],
+                        "extraction_prompt": "What technical controls failed to stop the attack? How did the hacker bypass security measures? What could have prevented or detected the attack earlier? What was the financial and operational impact?"
+                    }
+                },
+                {
+                    "id": "analyst_3",
+                    "name": "Elena",
+                    "prefab": "basic__Entity",
+                    "goal": "Assess the phishing risk through simulation, then recommend user training and awareness measures",
+                    "memories": [
+                        "Elena is a security awareness and training manager.",
+                        "She focuses on the human element of cybersecurity.",
+                        "She believes that user behavior is the primary defense against phishing.",
+                        "She is concerned about variability in security awareness across departments.",
+                        "She wants to understand which users are most vulnerable and why.",
+                    ],
+                    "randomize_choices": True,
+                    "nested_simulation": {
+                        "premise": "Elena simulates different employee personas interacting with the phishing email to understand vulnerability patterns and effectiveness of training.",
+                        "max_steps": 8,
+                        "shared_memories": [
+                            "Different employees have varying levels of security awareness.",
+                            "Some departments receive more security training than others.",
+                            "The company has conducted phishing simulations but participation is low.",
+                            "Users who report suspicious emails receive positive recognition.",
+                        ],
+                        "agents": [
+                            {
+                                "id": "hacker_3",
+                                "name": "Hacker",
+                                "prefab": "basic__Entity",
+                                "goal": "Exploit psychological manipulation to trick users into taking action",
+                                "memories": [
+                                    "The hacker uses urgency, authority, and fear tactics.",
+                                    "The email creates time pressure to prevent critical thinking.",
+                                    "The hacker knows which employees are likely to respond without verifying.",
+                                    "They target users who recently completed training to test effectiveness.",
+                                    "The attack is designed to bypass rational decision-making.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "user_3a",
+                                "name": "New Employee",
+                                "prefab": "basic__Entity",
+                                "goal": "Follow what appears to be a legitimate request from leadership",
+                                "memories": [
+                                    "The employee started 2 months ago and completed basic security training.",
+                                    "They want to prove themselves and be helpful.",
+                                    "They are not familiar with the CEO's communication patterns.",
+                                    "They are afraid of making mistakes or asking questions.",
+                                    "They trust emails from leadership without questioning.",
+                                ],
+                                "randomize_choices": True,
+                            },
+                            {
+                                "id": "user_3b",
+                                "name": "Experienced Employee",
+                                "prefab": "basic__Entity",
+                                "goal": "Handle the email appropriately based on training and experience",
+                                "memories": [
+                                    "The employee has been with the company for 5 years.",
+                                    "They have completed multiple security awareness trainings.",
+                                    "They know to verify unusual requests through separate channels.",
+                                    "They are familiar with the CEO's actual communication style.",
+                                    "They feel comfortable reporting suspicious activity.",
+                                ],
+                                "randomize_choices": True,
+                            }
+                        ],
+                        "extraction_prompt": "Which employee was more likely to fall for the phishing attack and why? What psychological factors made them vulnerable? How effective was the security training? What additional awareness measures could have prevented the attack?"
+                    }
+                },
+                {
+                    "id": "ciso",
+                    "name": "David",
+                    "prefab": "basic__Entity",
+                    "goal": "Synthesize the team's analysis and make a decision on how to respond to the potential phishing attack",
+                    "memories": [
+                        "David is the Chief Information Security Officer.",
+                        "He has 15 years of cybersecurity experience.",
+                        "He must balance security risk with business operations.",
+                        "He reports directly to the CEO and board.",
+                        "He needs to make a defensible decision with the available information.",
+                        "He values the diverse perspectives of his team members.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Security Team Lead",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
+        }
+    }
+
+
 @router.get("/templates/grounded-variables-demo")
 async def get_grounded_variables_demo_template():
     """
@@ -2471,6 +2741,264 @@ async def get_grounded_variables_demo_template():
     }
 
 
+@router.get("/templates/urban-gentrification")
+async def get_urban_gentrification_template():
+    """
+    Template: Urban Gentrification & Housing Policy (Grounded Variables in Urban Economics)
+
+    This template demonstrates grounded variables for longitudinal urban economics research.
+    It tracks key neighborhood metrics over time as different stakeholders make decisions
+    about housing, development, and community preservation.
+
+    Research applications:
+    - Study the dynamics of gentrification and displacement
+    - Test housing policy interventions (rent control, inclusionary zoning, community land trusts)
+    - Model the trade-offs between economic development and affordability
+    - Analyze how stakeholder decisions affect neighborhood evolution
+
+    Grounded variables track:
+    - Median rent ($)
+    - Percentage of low-income households displaced
+    - Small business closure rate
+    - Community cohesion index
+    - Property tax base
+    - New construction units
+    - Housing affordability index
+    """
+    return {
+        "name": "Urban Gentrification - Housing Policy & Neighborhood Change",
+        "description": "Longitudinal urban economics simulation tracking neighborhood metrics. Stakeholders debate development proposals while GM tracks rent, displacement, business survival, and affordability over time.",
+        "config": {
+            "premise": "The historically working-class neighborhood of Elmwood is facing rapid change. A tech company's nearby expansion has brought new investment and interest, but also concerns about displacement and loss of community character. The City Council is holding a series of meetings to decide on housing policies and development proposals. Stakeholders include long-term residents, housing advocates, real estate developers, small business owners, and city planners.",
+            "max_steps": 30,
+            "shared_memories": [
+                "Elmwood has been a working-class neighborhood for 80 years.",
+                "Recent tech company expansion 2 miles away has increased housing demand.",
+                "Median rent has increased 40% over the past 3 years.",
+                "Three local businesses have closed in the last year.",
+                "The city has limited affordable housing funds.",
+                "Community organizations are mobilizing to preserve neighborhood character.",
+                "Developers see profit potential in the area's transit access.",
+                "There are competing visions for the neighborhood's future.",
+            ],
+            "agents": [
+                {
+                    "id": "housing_advocate",
+                    "name": "Maria Rodriguez",
+                    "prefab": "basic__Entity",
+                    "goal": "Prevent displacement of long-term residents and preserve affordable housing",
+                    "memories": [
+                        "Maria is a community organizer who has lived in Elmwood for 35 years.",
+                        "She runs a local non-profit focused on housing rights.",
+                        "She has seen many families forced to move due to rising rents.",
+                        "She believes the community has a right to remain without displacement.",
+                        "She is skeptical of developer promises about benefits.",
+                        "She has data showing rent increases are outpacing wage growth.",
+                        "She wants policies that protect vulnerable residents.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "developer",
+                    "name": "James Chen",
+                    "prefab": "basic__Entity",
+                    "goal": "Develop profitable housing projects while meeting some community needs",
+                    "memories": [
+                        "James is a real estate developer with 15 years of experience.",
+                        "He sees Elmwood as undervalued with great potential.",
+                        "He believes new development brings jobs and economic vitality.",
+                        "He is willing to include some affordable units to get approval.",
+                        "He thinks the neighborhood's character will evolve naturally.",
+                        "He has investors expecting returns on their capital.",
+                        "He wants to work with the community rather than fight them.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "small_business_owner",
+                    "name": "Fatima Al-Hassan",
+                    "prefab": "basic__Entity",
+                    "goal": "Keep her small business thriving and preserve neighborhood's small business character",
+                    "memories": [
+                        "Fatima has owned a corner grocery store in Elmwood for 22 years.",
+                        "Her lease is coming up for renewal and she fears a rent increase.",
+                        "She has seen two neighboring businesses close recently.",
+                        "Newer residents shop at different types of stores than long-term residents.",
+                        "She serves both traditional and new customers.",
+                        "She is worried about losing her livelihood if property values rise too fast.",
+                        "She wants the neighborhood to prosper without losing its soul.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "city_planner",
+                    "name": "David Kim",
+                    "prefab": "basic__Entity",
+                    "goal": "Balance economic development with housing affordability and community preservation",
+                    "memories": [
+                        "David is a senior city planner with expertise in housing policy.",
+                        "He reports to the City Council which is divided on development issues.",
+                        "He has data on housing shortages and displacement trends citywide.",
+                        "He knows the city needs more housing units but also more affordable units.",
+                        "He is considering policy options: rent control, inclusionary zoning, density bonuses.",
+                        "He must balance competing interests and legal constraints.",
+                        "He wants evidence-based solutions that can actually be implemented.",
+                        "He has limited budget for affordable housing subsidies.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "new_resident",
+                    "name": "Alex Thompson",
+                    "prefab": "basic__Entity",
+                    "goal": "Find affordable housing while being a good neighbor to the existing community",
+                    "memories": [
+                        "Alex recently moved to Elmwood for lower rent and neighborhood character.",
+                        "They work remotely for a tech company and have a flexible income.",
+                        "They like the local businesses and community feel of the neighborhood.",
+                        "They are aware of concerns about gentrification.",
+                        "They want to integrate respectfully with long-term residents.",
+                        "They support affordable housing but also want their investment to grow.",
+                        "They represent the wave of new residents changing the neighborhood.",
+                    ],
+                    "randomize_choices": True,
+                },
+                {
+                    "id": "landlord",
+                    "name": "Robert Schwartz",
+                    "prefab": "basic__Entity",
+                    "goal": "Maximize rental income while maintaining good tenant relationships",
+                    "memories": [
+                        "Robert owns a small apartment building (6 units) in Elmwood.",
+                        "He inherited the building from his parents 20 years ago.",
+                        "His current rents are below market rate for long-term tenants.",
+                        "His expenses (taxes, maintenance, insurance) have been increasing.",
+                        "He feels pressure to raise rents to market levels.",
+                        "He has relationships with many of his long-term tenants.",
+                        "He is conflicted between profit and treating tenants fairly.",
+                        "He is aware of eviction moratoriums and rent control proposals.",
+                    ],
+                    "randomize_choices": True,
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "City Council Moderator",
+                "acting_order": "game_master_choice",
+                "parameters": {},
+                "grounded_variables": [
+                    {
+                        "name": "median_monthly_rent",
+                        "variable_type": "numerical",
+                        "description": "Median monthly rent for a 2-bedroom apartment in Elmwood",
+                        "default_value": 1800,
+                        "min_value": 800,
+                        "max_value": 5000,
+                        "update_rule": "Increases with development approvals, decreases with rent control/affordable housing policies"
+                    },
+                    {
+                        "name": "low_income_displacement_rate",
+                        "variable_type": "percentage",
+                        "description": "Percentage of households earning <50% area median income that have been displaced from Elmwood in the past 2 years",
+                        "default_value": 15,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Increases with rising rents, decreases with tenant protection policies"
+                    },
+                    {
+                        "name": "small_business_survival_rate",
+                        "variable_type": "percentage",
+                        "description": "Percentage of small businesses (locally-owned, <10 employees) that have remained open",
+                        "default_value": 78,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Decreases with rising rents and demographic shifts, increases with business support programs"
+                    },
+                    {
+                        "name": "community_cohesion_index",
+                        "variable_type": "numerical",
+                        "description": "Measured sense of community belonging and neighborly interaction (0-100 scale)",
+                        "default_value": 65,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Decreases with rapid demographic change, increases with community-building initiatives"
+                    },
+                    {
+                        "name": "property_tax_base",
+                        "variable_type": "numerical",
+                        "description": "Total assessed property value in millions (determines city revenue for services)",
+                        "default_value": 450,
+                        "min_value": 300,
+                        "max_value": 1500,
+                        "update_rule": "Increases with new development and rising property values"
+                    },
+                    {
+                        "name": "new_housing_units_permitted",
+                        "variable_type": "numerical",
+                        "description": "Number of new housing units approved for construction in the past year",
+                        "default_value": 45,
+                        "min_value": 0,
+                        "max_value": 500,
+                        "update_rule": "Increases when development proposals are approved"
+                    },
+                    {
+                        "name": "affordable_housing_units",
+                        "variable_type": "numerical",
+                        "description": "Number of units affordable to households earning <80% area median income",
+                        "default_value": 120,
+                        "min_value": 0,
+                        "max_value": 1000,
+                        "update_rule": "Increases with inclusionary zoning or subsidies, decreases with market-rate conversions"
+                    },
+                    {
+                        "name": "housing_affordability_index",
+                        "variable_type": "percentage",
+                        "description": "Percentage of rental units affordable to households earning area median income",
+                        "default_value": 35,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Decreases with rent increases, increases with affordable housing policies"
+                    },
+                    {
+                        "name": "rent_control_active",
+                        "variable_type": "boolean",
+                        "description": "Whether rent control/stabilization policies are in effect",
+                        "default_value": False,
+                        "update_rule": "Becomes true if City Council enacts rent control policy"
+                    },
+                    {
+                        "name": "inclusionary_zoning_active",
+                        "variable_type": "boolean",
+                        "description": "Whether developers must include affordable units (e.g., 20% of new units)",
+                        "default_value": False,
+                        "update_rule": "Becomes true if City Council enacts inclusionary zoning requirement"
+                    },
+                    {
+                        "name": "neighborhood_character",
+                        "variable_type": "categorical",
+                        "description": "Overall character and identity of the neighborhood",
+                        "default_value": "transitional",
+                        "allowed_values": [
+                            "traditional_working_class",
+                            "transitional",
+                            "mixed_income_stable",
+                            "gentrified_upscale",
+                            "disinvested_declining"
+                        ],
+                        "update_rule": "Changes based on combination of rent, displacement, and business variables"
+                    }
+                ]
+            }
+        },
+        "llm_settings": {
+            "provider": "gemini",
+            "model": "gemini-2.0-flash-exp",
+            "embedder_model": "all-MiniLM-L6-v2",
+            "temperature": 0.8
+        }
+    }
+
+
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
     """Get list of recent simulation logs."""
@@ -2574,7 +3102,12 @@ async def get_simulation_analytics(filename: str):
                 for agent in metadata.get("agents", []):
                     if agent.get("nested_simulation"):
                         has_nested_sims = True
-                        nested_sim_data[agent["name"]] = agent["nested_simulation"]
+                        # Structure the data as expected by frontend
+                        nested_sim_data[agent["name"]] = {
+                            "config": agent["nested_simulation"],
+                            "result_summary": "",  # TODO: Extract from HTML if available
+                            "found": True
+                        }
                         print(f"[DEBUG] Found nested simulation for agent {agent['name']}")
 
                 # NEW: Detect grounded variables
@@ -2642,9 +3175,9 @@ async def get_simulation_analytics(filename: str):
             "has_nested_sims": has_nested_sims,
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
-            # NEW: Feature-specific data (to be populated from HTML extraction)
-            "nested_simulations": {},
-            "grounded_variables": [],
+            # NEW: Feature-specific data (populated from metadata)
+            "nested_simulations": nested_sim_data,
+            "grounded_variables": grounded_variables_data.get("variables", []),
             "components": component_data
         }
 
@@ -2686,25 +3219,38 @@ async def get_simulation_analytics(filename: str):
                 entity_pattern = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
                 entity_tags = game_master_log.find_all('b', string=entity_pattern)
 
-                # For each entity tag, find the associated __act__ section with "Action:" label
-                act_count = 0
-                for entity_tag in entity_tags:
-                    # Look for __act__ in the same section (within the parent details/ul structure)
-                    parent = entity_tag.find_parent(['details', 'ul', 'li'])
-                    if parent:
-                        # Find all __act__ tags in this section
-                        act_b_tags = parent.find_all('b', string=re.compile(r'__act__', re.IGNORECASE))
-                        for act_tag in act_b_tags:
-                            # Check if there's a corresponding "Action:" label in the same section
-                            # The Action: label should be in a summary within the same details/ul structure
-                            act_section = act_tag.find_parent(['li', 'ul', 'details'])
-                            if act_section:
-                                # Look for "Action:" text in this section
-                                action_label = act_section.find(string=re.compile(r'Action:', re.IGNORECASE))
-                                if action_label:
-                                    act_count += 1
+                # Use a set to track unique action texts and avoid counting duplicates
+                seen_actions = set()
 
-                analytics["agent_actions"][agent] = act_count
+                # For each entity tag, find the associated action
+                # Structure: <details><b>Entity [name]</b><li>...<b>__act__</b><li><details><summary>Action: ...</summary>
+                for entity_tag in entity_tags:
+                    # The entity <b> tag and the agent <li> are siblings in a <details>
+                    # Find the parent <details>
+                    parent_details = entity_tag.find_parent('details')
+                    if parent_details:
+                        # Find all <li> children of this <details>
+                        all_li = parent_details.find_all('li', recursive=False)
+
+                        # The first <li> after Entity should contain the agent info
+                        # Look for <li> that contains <summary>Action:
+                        for li in all_li:
+                            summaries = li.find_all('summary')
+                            for summary in summaries:
+                                summary_text = summary.get_text(strip=True)
+                                if summary_text.startswith('Action:'):
+                                    # Skip workflow examples
+                                    if any(keyword in summary_text.lower() for keyword in ['workflow examples', 'exercise 1', 'exercise 2']):
+                                        continue
+                                    # Skip game master termination actions
+                                    if 'terminate' in summary_text.lower() or 'game.*finished' in summary_text.lower():
+                                        continue
+                                    # Use first 100 chars as unique identifier
+                                    action_id = summary_text[:100]
+                                    if action_id not in seen_actions:
+                                        seen_actions.add(action_id)
+
+                analytics["agent_actions"][agent] = len(seen_actions)
         else:
             # Fallback: Search in entire document for actions with "Action:" label
             for agent in analytics["agents"]:
@@ -2721,8 +3267,14 @@ async def get_simulation_analytics(filename: str):
         analytics["total_observations"] = len(observations)
 
         # Build timeline from step events
+        # Use a set to track seen steps and avoid duplicates from nested <details> elements
+        seen_steps = set()
         details_elements = soup.find_all('details')
         for detail in details_elements:
+            # Skip nested <details> elements (those that are descendants of another <details>)
+            if detail.find_parent('details'):
+                continue
+
             summary = detail.find('summary')
             if summary:
                 summary_text = summary.get_text(strip=True)
@@ -2730,11 +3282,21 @@ async def get_simulation_analytics(filename: str):
                 step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
                 if step_match:
                     step_num = int(step_match.group(1))
-                    analytics["timeline"].append({
-                        "step": step_num,
-                        "description": summary_text[:200],  # First 200 chars
-                        "type": "step"
-                    })
+                    # Only add if we haven't seen this step number yet
+                    if step_num not in seen_steps:
+                        seen_steps.add(step_num)
+
+                        # Remove redundant prefix like "Step 1 City Council Moderator --- Event: "
+                        # to save space and avoid repetition
+                        description = summary_text
+                        prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
+                        description = prefix_pattern.sub('', description).strip()
+
+                        analytics["timeline"].append({
+                            "step": step_num,
+                            "description": description,  # Full description without redundant prefix
+                            "type": "step"
+                        })
 
         # Sort timeline by step number
         analytics["timeline"].sort(key=lambda x: x["step"])
@@ -2824,6 +3386,9 @@ async def get_simulation_analytics(filename: str):
                     entity_tags = game_master_log.find_all('b', string=entity_pattern_bs)
                     print(f"[DEBUG] Agent '{agent}': found {len(entity_tags)} entity tags for action extraction")
 
+                    # Track seen __act__ tags to avoid counting duplicates from nested <details>
+                    seen_act_tags = set()
+
                     for entity_tag in entity_tags:
                         # Get the container for Entity [Agent Name]
                         # The structure varies across templates:
@@ -2837,8 +3402,23 @@ async def get_simulation_analytics(filename: str):
 
                         if parent_li:
                             # Look for __act__ tags within this same <li>
-                            act_b_tags = parent_li.find_all('b', string=re.compile(r'__act__', re.IGNORECASE))
-                            print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in parent li")
+                            # Filter to only top-level __act__ tags (not nested in another <details>)
+                            # Need to search HTML string because __act__ is in <ul> within <b>: <b><ul>__act__</ul></b>
+                            all_b_tags = parent_li.find_all('b')
+                            act_pattern = re.compile(r'__act__', re.IGNORECASE)
+                            all_act_tags = [b for b in all_b_tags if act_pattern.search(str(b))]
+                            for act_tag in all_act_tags:
+                                # Skip if this __act__ is nested within a <details> that has another __act__
+                                parent_details = act_tag.find_parent('details')
+                                if parent_details:
+                                    # Count how many __act__ tags are in this details element
+                                    all_b_in_details = parent_details.find_all('b')
+                                    acts_in_details = [b for b in all_b_in_details if act_pattern.search(str(b))]
+                                    if len(acts_in_details) > 1:
+                                        # This __act__ is in a nested details, skip it
+                                        continue
+                                act_b_tags.append(act_tag)
+                            print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in parent li (filtered)")
 
                         # Fallback to original logic if no tags found in <li>
                         if not act_b_tags:
@@ -2850,8 +3430,29 @@ async def get_simulation_analytics(filename: str):
                                 # Note: can't use string= with regex because __act__ tags have <ul> children
                                 all_b_tags = parent_container.find_all('b')
                                 act_pattern = re.compile(r'__act__', re.IGNORECASE)
-                                act_b_tags = [b for b in all_b_tags if act_pattern.search(b.get_text())]
-                                print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in details container")
+                                all_act_b_tags = [b for b in all_b_tags if act_pattern.search(str(b))]
+
+                                # Filter to only top-level __act__ tags
+                                for act_tag in all_act_b_tags:
+                                    # Use id as a unique identifier for the tag
+                                    tag_id = id(act_tag)
+                                    if tag_id not in seen_act_tags:
+                                        # Check if this is in a nested <details>
+                                        parent_details = act_tag.find_parent('details')
+                                        # Only skip if the nested details is NOT within parent_container
+                                        # (i.e., it's from a different step or section)
+                                        if parent_details and parent_details != parent_container:
+                                            # Check if parent_details is a descendant of parent_container
+                                            # If it is, it's still part of the same step, so include it
+                                            is_descendant = parent_container in parent_details.find_parents('details')
+                                            if not is_descendant:
+                                                # This is in a different step/section, skip
+                                                seen_act_tags.add(tag_id)
+                                                continue
+                                        act_b_tags.append(act_tag)
+                                        seen_act_tags.add(tag_id)
+
+                                print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in details container (filtered)")
 
                         for act_tag in act_b_tags:
                             action_text = None  # Initialize for this iteration
@@ -2928,7 +3529,7 @@ async def get_simulation_analytics(filename: str):
                                     if is_meaningful_action:
                                         agent_details["actions"].append({
                                             "step": step_num,
-                                            "text": action_text[:300]  # Limit to 300 chars
+                                            "text": action_text  # Full action text
                                         })
                                         print(f"[DEBUG] Agent '{agent}': added action (step={step_num}), total actions={len(agent_details['actions'])}")
                                     else:
@@ -2976,22 +3577,38 @@ async def get_simulation_analytics(filename: str):
                 if len(entity_tags) == 0 and len(agent_details["actions"]) == 0:
                     print(f"[DEBUG] Agent '{agent}': no entity tags found, trying fallback extraction from events")
 
-                    # Find all event summaries in Game Master log
-                    event_summaries = game_master_log.find_all('summary')
-                    for summary in event_summaries:
+                    # Track seen actions to avoid duplicates
+                    seen_actions = set()
+                    seen_steps = set()
+
+                    # Find all summaries, but filter to only top-level step events
+                    all_summaries = game_master_log.find_all('summary')
+                    for summary in all_summaries:
+                        # Skip summaries that are inside another <details> (nested)
+                        parent_details = summary.find_parent('details')
+                        if parent_details and parent_details.find_parent('details'):
+                            continue
+
                         summary_text = summary.get_text()
+
+                        # Only process summaries that start with "Step X" (top-level events)
+                        if not re.search(r'^Step\s+\d+', summary_text, re.IGNORECASE):
+                            continue
 
                         # Check if this event mentions the agent
                         if agent.lower() in summary_text.lower():
-                            # Extract step number if available
-                            step_match = re.search(r'Step\s+(\d+)', str(summary.find_parent('details')), re.IGNORECASE)
+                            # Extract step number
+                            step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
                             step_num = int(step_match.group(1)) if step_match else None
+
+                            # Skip if we've already processed this step
+                            if step_num is not None and step_num in seen_steps:
+                                continue
+                            if step_num is not None:
+                                seen_steps.add(step_num)
 
                             # Extract the action description more intelligently
                             # Look for the narrative description that mentions the agent
-                            # The format is typically: "Event: ... **Agent Name** did something..."
-
-                            # First, try to find the specific sentence about the agent
                             lines = summary_text.split('\n')
                             for line in lines:
                                 if agent.lower() in line.lower():
@@ -3007,10 +3624,14 @@ async def get_simulation_analytics(filename: str):
                                     action_text = re.sub(rf'^{re.escape(agent)}(?:,\s+[^,]+)?\s+', '', action_text, flags=re.IGNORECASE)
                                     action_text = action_text.strip()
 
-                                    if len(action_text) > 50:  # Minimum length check
+                                    # Create action ID for deduplication
+                                    action_id = f"{step_num}:{action_text[:100]}"
+
+                                    if len(action_text) > 50 and action_id not in seen_actions:  # Minimum length check
+                                        seen_actions.add(action_id)
                                         agent_details["actions"].append({
                                             "step": step_num,
-                                            "text": action_text[:300]
+                                            "text": action_text  # Full action text
                                         })
                                         print(f"[DEBUG] Agent '{agent}': added fallback action (step={step_num}), total actions={len(agent_details['actions'])}")
                                         break  # Only take one action per event
@@ -3112,13 +3733,15 @@ async def get_simulation_analytics(filename: str):
                 print(f"[DEBUG] Agent '{agent}': goal_found={bool(agent_details['goal'])}, goal_length={len(agent_details['goal'])}, actions_count={len(agent_details['actions'])}")
                 analytics["agent_details"][agent] = agent_details
 
-        # Update agent_actions count to match actual extracted actions
-        # This ensures fallback-extracted actions are counted
-        for agent in analytics["agents"]:
-            if agent in analytics["agent_details"]:
-                actual_count = len(analytics["agent_details"][agent].get("actions", []))
-                analytics["agent_actions"][agent] = actual_count
-                print(f"[DEBUG] Updated agent_actions['{agent}'] = {actual_count}")
+        # DISABLED: This was overwriting correct action counts with duplicates from agent_details
+        # The correct counting is now done above at lines 3212-3257
+        # # Update agent_actions count to match actual extracted actions
+        # # This ensures fallback-extracted actions are counted
+        # for agent in analytics["agents"]:
+        #     if agent in analytics["agent_details"]:
+        #         actual_count = len(analytics["agent_details"][agent].get("actions", []))
+        #         analytics["agent_actions"][agent] = actual_count
+        #         print(f"[DEBUG] Updated agent_actions['{agent}'] = {actual_count}")
 
         # NEW: Extract nested simulation data from HTML
         if has_nested_sims:

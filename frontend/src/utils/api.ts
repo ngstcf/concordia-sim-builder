@@ -401,6 +401,22 @@ export async function getGroundedVariablesTemplate(): Promise<SimulationTemplate
 }
 
 /**
+ * Get the phishing attack simulation template (Cybersecurity tabletop exercise)
+ */
+export async function getPhishingAttackSimulationTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/phishing-attack-simulation');
+  return response.data;
+}
+
+/**
+ * Get the urban gentrification simulation template (Urban economics & housing policy)
+ */
+export async function getUrbanGentrificationTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/urban-gentrification');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication

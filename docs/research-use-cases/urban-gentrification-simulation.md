@@ -432,6 +432,6 @@ This template was inspired by:
 - Research by the Urban Displacement Project (UC Berkeley)
 - Policy experiments in inclusionary zoning and rent control
 
-**Last Updated:** January 2025
+**Last Updated:** January 2026
 **Concordia Version:** Based on Google DeepMind's Concordia framework
 **Template Author:** Concordia Simulation Builder contributors

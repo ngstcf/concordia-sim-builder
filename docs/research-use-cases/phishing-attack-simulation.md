@@ -303,6 +303,6 @@ If you use this simulation template in research, please cite:
 
 ---
 
-**Last Updated:** January 2025
+**Last Updated:** January 2026
 **Concordia Version:** Based on Google DeepMind's Concordia framework
 **Template Author:** Concordia Simulation Builder contributors

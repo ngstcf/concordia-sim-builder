@@ -563,9 +563,12 @@ async def run_simulation_stream(
             "agents": []
         }
 
-        # Add grounded_variables if present
+        # Add grounded_variables if present - convert to dict for JSON serialization
         if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
-            agent_metadata["game_master"]["grounded_variables"] = config.game_master.grounded_variables
+            agent_metadata["game_master"]["grounded_variables"] = [
+                var.model_dump() if hasattr(var, 'model_dump') else var
+                for var in config.game_master.grounded_variables
+            ]
 
         for agent in config.agents:
             agent_info = {
@@ -578,9 +581,18 @@ async def run_simulation_stream(
             # Add nested_simulation if present
             if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
                 agent_info["nested_simulation"] = agent.nested_simulation
-            # Add components if present
+            # Add components if present - convert to dict for JSON serialization
             if hasattr(agent, 'components') and agent.components:
-                agent_info["components"] = agent.components
+                # Handle both dict components and model components
+                if hasattr(agent.components, 'model_dump'):
+                    agent_info["components"] = agent.components.model_dump()
+                elif isinstance(agent.components, dict):
+                    agent_info["components"] = {
+                        k: v.model_dump() if hasattr(v, 'model_dump') else v
+                        for k, v in agent.components.items()
+                    }
+                else:
+                    agent_info["components"] = agent.components
             agent_metadata["agents"].append(agent_info)
 
         # Add game-theoretic action data if available
@@ -1131,9 +1143,12 @@ async def run_simulation_simple(
             "agents": []
         }
 
-        # Add grounded_variables if present
+        # Add grounded_variables if present - convert to dict for JSON serialization
         if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
-            agent_metadata["game_master"]["grounded_variables"] = config.game_master.grounded_variables
+            agent_metadata["game_master"]["grounded_variables"] = [
+                var.model_dump() if hasattr(var, 'model_dump') else var
+                for var in config.game_master.grounded_variables
+            ]
 
         for agent in config.agents:
             agent_info = {
@@ -1146,9 +1161,18 @@ async def run_simulation_simple(
             # Add nested_simulation if present
             if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
                 agent_info["nested_simulation"] = agent.nested_simulation
-            # Add components if present
+            # Add components if present - convert to dict for JSON serialization
             if hasattr(agent, 'components') and agent.components:
-                agent_info["components"] = agent.components
+                # Handle both dict components and model components
+                if hasattr(agent.components, 'model_dump'):
+                    agent_info["components"] = agent.components.model_dump()
+                elif isinstance(agent.components, dict):
+                    agent_info["components"] = {
+                        k: v.model_dump() if hasattr(v, 'model_dump') else v
+                        for k, v in agent.components.items()
+                    }
+                else:
+                    agent_info["components"] = agent.components
             agent_metadata["agents"].append(agent_info)
 
         # Add game-theoretic action data if available

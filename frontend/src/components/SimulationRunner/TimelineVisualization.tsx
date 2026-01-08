@@ -64,11 +64,40 @@ export default function TimelineVisualization({ filename }: TimelineVisualizatio
   const getFilteredEvents = (): TimelineEvent[] => {
     if (!analytics) return [];
 
+    let events = analytics.timeline;
+
     if (filter === 'steps') {
-      return analytics.timeline.filter(event => event.type === 'step');
+      events = events.filter(event => event.type === 'step');
     }
 
-    return analytics.timeline;
+    // Deduplicate by step number to handle any data issues
+    const seen = new Set<number>();
+    const deduplicated: TimelineEvent[] = [];
+
+    for (const event of events) {
+      if (seen.has(event.step)) {
+        continue;
+      }
+      seen.add(event.step);
+
+      // Also deduplicate description text if it appears to contain repetition
+      let description = event.description;
+      // Check for common patterns of duplication in the text itself
+      // e.g., "Step 1step" or repeated content
+      if (description) {
+        // Remove "step" or "Step" suffix if it appears to be a duplicate
+        description = description.replace(/steps?\s*$/i, '');
+        // Trim whitespace
+        description = description.trim();
+      }
+
+      deduplicated.push({
+        ...event,
+        description
+      });
+    }
+
+    return deduplicated;
   };
 
   if (!filename) {
@@ -211,9 +240,12 @@ export default function TimelineVisualization({ filename }: TimelineVisualizatio
                           {event.type}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700 line-clamp-2">
-                        {event.description}
-                      </p>
+                      {/* Only show preview in collapsed mode */}
+                      {selectedEvent?.step !== event.step && (
+                        <p className="text-sm text-gray-700 line-clamp-2">
+                          {event.description}
+                        </p>
+                      )}
                     </div>
                     <svg
                       className={`ml-2 h-5 w-5 text-gray-400 transition-transform ${

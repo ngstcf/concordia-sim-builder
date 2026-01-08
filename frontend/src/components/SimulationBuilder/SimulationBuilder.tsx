@@ -24,6 +24,8 @@ import {
   getVaccineHesitancyTemplate,
   getNestedSimulationTemplate,
   getGroundedVariablesTemplate,
+  getPhishingAttackSimulationTemplate,
+  getUrbanGentrificationTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -41,6 +43,8 @@ const TEMPLATES = [
   { id: 'vaccine-hesitancy', name: 'Vaccine Hesitancy Study', description: 'Psychological component research demo', category: 'Research' },
   { id: 'nested-simulation', name: 'Nested Simulation Demo', description: 'PhoneGameMaster pattern (mini-sims)', category: 'Advanced' },
   { id: 'grounded-variables', name: 'Grounded Variables Demo', description: 'Track metrics during simulation', category: 'Advanced' },
+  { id: 'phishing-attack-simulation', name: 'Phishing Attack Simulation', description: 'Cybersecurity tabletop exercise', category: 'Research' },
+  { id: 'urban-gentrification', name: 'Urban Gentrification', description: 'Housing policy & neighborhood change', category: 'Research' },
   { id: 'dialogic', name: 'Dialogic Conversation', description: 'Therapy session', category: 'Prefab Types' },
   { id: 'strategic', name: 'Strategic Game', description: 'Prisoner\'s Dilemma', category: 'Prefab Types' },
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
@@ -62,6 +66,8 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   'vaccine-hesitancy': getVaccineHesitancyTemplate,
   'nested-simulation': getNestedSimulationTemplate,
   'grounded-variables': getGroundedVariablesTemplate,
+  'phishing-attack-simulation': getPhishingAttackSimulationTemplate,
+  'urban-gentrification': getUrbanGentrificationTemplate,
   dialogic: getDialogicConversationTemplate,
   strategic: getStrategicGameTemplate,
   interviewer: getInterviewerTemplate,
