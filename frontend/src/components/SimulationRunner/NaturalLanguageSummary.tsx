@@ -3,6 +3,7 @@
  * Displays AI-generated natural language summary of simulation results
  */
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { getSimulationAnalytics } from '../../utils/api';
 
 interface AnalyticsData {
@@ -21,9 +22,9 @@ interface AnalyticsData {
   }>;
   word_count: number;
   character_count: number;
-  premise: string;
+  premise?: string;
   agent_details?: Record<string, {
-    actions: Array<{ step: number | null; text: string }>;
+    actions: Array<{ step: number; action: string; goal?: string }>;
     goal: string;
     memories: string[];
   }>;
@@ -121,7 +122,7 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
           summaryText += `**Key Actions**:\n`;
           details.actions.slice(0, 3).forEach((action) => {
             const stepPrefix = action.step !== null ? `[Step ${action.step}] ` : '';
-            summaryText += `- ${stepPrefix}${action.text.substring(0, 80)}...\n`;
+            summaryText += `- ${stepPrefix}${action.action.substring(0, 80)}...\n`;
           });
           if (details.actions.length > 3) {
             summaryText += `- *...and ${details.actions.length - 3} more action${details.actions.length - 3 > 1 ? 's' : ''}*\n`;
@@ -259,7 +260,6 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
     const lines = text.split('\n');
     const elements: JSX.Element[] = [];
     let currentList: string[] = [];
-    let inList = false;
 
     const flushList = () => {
       if (currentList.length > 0) {
@@ -272,7 +272,6 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
         );
         currentList = [];
       }
-      inList = false;
     };
 
     lines.forEach((line, index) => {
@@ -301,7 +300,6 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
       }
       // List items
       else if (line.trim().startsWith('- ')) {
-        inList = true;
         const content = line.trim().substring(2);
         // Handle bold markdown
         const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');

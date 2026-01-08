@@ -75,8 +75,7 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
 };
 
 export default function SimulationBuilder() {
-  const { config, setConfig, setValidation, llmSettings } = useSimulation();
-  const [validating, setValidating] = useState(false);
+  const { config, setConfig, setValidation } = useSimulation();
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [loadingTemplate, setLoadingTemplate] = useState(false);
 
@@ -89,15 +88,12 @@ export default function SimulationBuilder() {
         return;
       }
 
-      setValidating(true);
       try {
         const result = await validateConfig(config);
         setValidation(result);
       } catch (err) {
         console.error('Validation error:', err);
         // Don't show validation errors on auto-validate - just log it
-      } finally {
-        setValidating(false);
       }
     };
 

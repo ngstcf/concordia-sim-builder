@@ -7,7 +7,8 @@ import { getSimulationAnalytics } from '../../utils/api';
 
 interface AgentAction {
   step: number | null;
-  text: string;
+  action: string;
+  goal?: string;
 }
 
 interface AgentDetails {
@@ -19,8 +20,8 @@ interface AgentDetails {
 interface AnalyticsData {
   filename: string;
   agents: string[];
-  agent_details: Record<string, AgentDetails>;
-  premise: string;
+  agent_details?: Record<string, AgentDetails>;
+  premise?: string;
 }
 
 interface ActionsViewProps {
@@ -125,7 +126,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
     );
   }
 
-  const currentAgent = selectedAgent ? analytics.agent_details[selectedAgent] : null;
+  const currentAgent = selectedAgent && analytics.agent_details ? analytics.agent_details[selectedAgent] : null;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -147,7 +148,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
           >
             {analytics.agents.map((agent) => (
               <option key={agent} value={agent}>
-                {agent} ({analytics.agent_details[agent]?.actions.length || 0} actions)
+                {agent} ({analytics.agent_details?.[agent]?.actions.length || 0} actions)
               </option>
             ))}
           </select>
@@ -216,7 +217,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
                         {/* Action Content */}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-900 leading-relaxed">
-                            {action.text}
+                            {action.action}
                           </p>
                         </div>
                       </div>

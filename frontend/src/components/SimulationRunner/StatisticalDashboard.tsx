@@ -4,7 +4,7 @@
  * Now supports nested simulations, grounded variables, and component analysis
  */
 import { useState, useEffect } from 'react';
-import { getSimulationAnalytics, SimulationAnalytics } from '../../utils/api';
+import { getSimulationAnalytics, type SimulationAnalytics } from '../../utils/api';
 
 interface StatisticalDashboardProps {
   filename: string | null;

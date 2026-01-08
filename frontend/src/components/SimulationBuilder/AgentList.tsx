@@ -7,7 +7,7 @@ import { useSimulation } from '../../contexts/SimulationContext';
 import AgentEditor from './AgentEditor';
 
 export default function AgentList() {
-  const { config, addAgent, removeAgent, reorderAgents } = useSimulation();
+  const { config, addAgent, removeAgent } = useSimulation();
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
 
   const handleAddAgent = () => {
@@ -45,7 +45,7 @@ export default function AgentList() {
         </div>
       ) : (
         <div className="space-y-3">
-          {config.agents.map((agent, index) => (
+          {config.agents.map((agent) => (
             <div
               key={agent.id}
               className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100"
