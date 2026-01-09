@@ -6,7 +6,7 @@
 // Type aliases for string literals (better API compatibility than enums)
 export type EngineType = 'sequential' | 'simultaneous' | 'interview' | 'survey';
 export type ActingOrder = 'fixed' | 'random' | 'game_master_choice';
-export type LLMProvider = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama';
+export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama';
 export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'observation' | 'step_end' | 'simulation_complete' | 'error';
 
 // Constants for enum-like usage
@@ -25,6 +25,7 @@ export const ActingOrder = {
 
 export const LLMProvider = {
   OPENAI: 'openai' as LLMProvider,
+  AZURE: 'azure' as LLMProvider,
   DEEPSEEK: 'deepseek' as LLMProvider,
   GEMINI: 'gemini' as LLMProvider,
   ANTHROPIC: 'anthropic' as LLMProvider,
@@ -110,6 +111,7 @@ export interface LLMSettings {
   embedder_model: string;
   temperature: number;
   max_tokens: number;
+  api_version?: string;  // For Azure OpenAI
 }
 
 // Execution Request

@@ -85,6 +85,9 @@ documentation.html
 simulation_for_sdgs.md
 GLM_SETUP.md
 
+# Custom documentation (keep untracked)
+docs/
+
 # Test scripts
 test_glm.py
 test_glm_integration.py

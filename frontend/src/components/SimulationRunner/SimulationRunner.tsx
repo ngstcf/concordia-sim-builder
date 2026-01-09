@@ -364,6 +364,7 @@ export default function SimulationRunner() {
                 >
                   <option value="deepseek">DeepSeek</option>
                   <option value="openai">OpenAI</option>
+                  <option value="azure">Azure OpenAI</option>
                   <option value="gemini">Gemini</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="glm">GLM (Zhipu AI)</option>
@@ -409,13 +410,22 @@ export default function SimulationRunner() {
                     ))}
                   </select>
                 ) : (
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={llmSettings.model_name}
-                    onChange={(e) => setLLMSettings({ ...llmSettings, model_name: e.target.value })}
-                    placeholder="Enter model name manually"
-                  />
+                  <>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={llmSettings.model_name}
+                      onChange={(e) => setLLMSettings({ ...llmSettings, model_name: e.target.value })}
+                      placeholder={llmSettings.provider === 'azure' ? "Enter deployment name (e.g., my-gpt4-deployment)" : "Enter model name manually"}
+                    />
+                    {llmSettings.provider === 'azure' && (
+                      <p className="text-xs text-blue-600 mt-1 bg-blue-50 p-2 rounded">
+                        <strong>Azure OpenAI:</strong> Enter your <strong>deployment name</strong> from Azure Portal.<br/>
+                        Other parameters (endpoint, API key, API version) are loaded from <code className="text-xs bg-blue-100 px-1 rounded">.env</code> file.<br/>
+                        Required env vars: <code className="text-xs bg-blue-100 px-1 rounded">AZURE_OAI_KEY</code>, <code className="text-xs bg-blue-100 px-1 rounded">AZURE_OAI_ENDPOINT</code>
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               <div>

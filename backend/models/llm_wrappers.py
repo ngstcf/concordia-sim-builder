@@ -21,10 +21,10 @@ import time
 class CustomGPTModel:
     """
     Custom GPT model wrapper that handles API compatibility issues.
-    Works with OpenAI, DeepSeek, and other OpenAI-compatible endpoints.
+    Works with OpenAI, Azure OpenAI, DeepSeek, and other OpenAI-compatible endpoints.
     """
-    def __init__(self, api_key: str, model_name: str, base_url: str = None, timeout: float = 300.0, verify_ssl: bool = True, disable_ssl_for_https: bool = False):
-        from openai import OpenAI
+    def __init__(self, api_key: str, model_name: str, base_url: str = None, timeout: float = 300.0, verify_ssl: bool = True, disable_ssl_for_https: bool = False, api_version: str = None):
+        from openai import OpenAI, AzureOpenAI
         import httpx
 
         # Support custom base URLs for OpenAI-compatible APIs like DeepSeek
@@ -34,7 +34,25 @@ class CustomGPTModel:
         if base_url and ('ollama' in base_url.lower() or 'myai.unu.edu' in base_url.lower()):
             timeout = max(timeout, 600.0)
 
-        if base_url:
+        # Detect if this is Azure OpenAI (has api_version parameter)
+        is_azure = api_version is not None
+
+        if is_azure:
+            # Azure OpenAI requires specific parameters
+            if not base_url:
+                raise ValueError("Azure OpenAI requires base_url (azure_endpoint)")
+            print(f"[DEBUG] AzureOpenAI client initialization:")
+            print(f"[DEBUG]   azure_endpoint: {base_url}")
+            print(f"[DEBUG]   api_version: {api_version}")
+            print(f"[DEBUG]   api_key: {api_key[:20]}..." if api_key else "   api_key: None")
+            print(f"[DEBUG]   timeout: {timeout}")
+            self._client = AzureOpenAI(
+                api_key=api_key,
+                azure_endpoint=base_url,
+                api_version=api_version,
+                timeout=timeout
+            )
+        elif base_url:
             # For HTTPS endpoints with SSL certificate issues, allow disabling verification
             # This is needed for self-hosted Ollama instances with custom certificates
             # disable_ssl_for_https flag or detection of known problematic endpoints triggers SSL bypass
@@ -61,6 +79,40 @@ class CustomGPTModel:
         self._model_name = model_name
         self._timeout = timeout
 
+    def _use_max_completion_tokens(self) -> bool:
+        """Check if model requires max_completion_tokens instead of max_tokens.
+
+        Newer models (GPT-5*, O3-*) require max_completion_tokens parameter.
+        """
+        model_lower = self._model_name.lower()
+        # O3 series models
+        if model_lower.startswith('o3-'):
+            return True
+        # GPT-5 series models
+        if model_lower.startswith('gpt-5'):
+            return True
+        # Future models can be added here
+        return False
+
+    def _is_reasoning_model(self) -> bool:
+        """Check if model is a reasoning model that doesn't support temperature.
+
+        Reasoning models (O1*, O3*, GPT-5*) use deterministic reasoning and don't
+        support sampling parameters like temperature, top_p, presence_penalty, etc.
+        """
+        model_lower = self._model_name.lower()
+        # O1 series models (original reasoning models)
+        if model_lower.startswith('o1-'):
+            return True
+        # O3 series models (new reasoning models)
+        if model_lower.startswith('o3-'):
+            return True
+        # GPT-5 series models
+        if model_lower.startswith('gpt-5'):
+            return True
+        # Future reasoning models can be added here
+        return False
+
     def sample_text(
         self,
         prompt: str,
@@ -76,17 +128,53 @@ class CustomGPTModel:
         from openai import APITimeoutError
         from httpcore import ConnectTimeout
 
+        # Newer models (o3-*, gpt-5*) require max_completion_tokens instead of max_tokens
+        use_max_completion_tokens = self._use_max_completion_tokens()
+        # Reasoning models (o1-*, o3-*, gpt-5*) don't support temperature parameter
+        is_reasoning_model = self._is_reasoning_model()
+
+        # Modern models have large context windows - be generous with token limits
+        # O3/GPT-5 models: Use max_completion_tokens with high limits (100k+ context windows)
+        # GPT-4/4O/3.5: Use max_tokens with reasonable limits
+        if use_max_completion_tokens:
+            # Reasoning models (O3, GPT-5) - use very generous limits
+            # These models have 100k+ token context windows, so we can be generous
+            max_tokens = max(max_tokens, 10000)  # Ensure at least 10k for reasoning models
+        elif max_tokens < 2000:
+            # For older models, ensure at least 2000 tokens for complex prompts
+            max_tokens = max(max_tokens, 2000)
+
         for attempt in range(max_retries):
             try:
-                response = self._client.chat.completions.create(
-                    model=self._model_name,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    seed=seed
-                    # Removed verbosity parameter that causes issues
-                )
-                return response.choices[0].message.content
+                # Build request parameters
+                request_params = {
+                    "model": self._model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "seed": seed
+                }
+
+                # Only add temperature for non-reasoning models
+                if not is_reasoning_model:
+                    request_params["temperature"] = temperature
+
+                # Use appropriate parameter based on model type
+                if use_max_completion_tokens:
+                    request_params["max_completion_tokens"] = max_tokens
+                else:
+                    request_params["max_tokens"] = max_tokens
+
+                response = self._client.chat.completions.create(**request_params)
+
+                # Check for empty response and log warning
+                content = response.choices[0].message.content
+                if not content or content.strip() == "":
+                    print(f"⚠️  Warning: Model {self._model_name} returned empty response")
+                    print(f"    Finish reason: {response.choices[0].finish_reason}")
+                    print(f"    Max tokens requested: {max_tokens}")
+                    if response.choices[0].finish_reason == "length":
+                        print(f"    Hint: Try increasing max_tokens for this model")
+
+                return content
 
             except (APITimeoutError, ConnectTimeout) as e:
                 if attempt < max_retries - 1:
@@ -115,7 +203,11 @@ class CustomGPTModel:
         choice_text = "\n".join([f"{i}. {r}" for i, r in enumerate(responses)])
         full_prompt = f"{prompt}\n\nChoices:\n{choice_text}\n\nRespond with only the number of your choice (0-{len(responses)-1})."
 
-        response = self.sample_text(full_prompt, max_tokens=10, seed=seed)
+        # Use generous max_tokens for modern models with large context windows
+        # Reasoning models (O3, GPT-5): 10000 tokens minimum (100k+ context windows)
+        # Standard models: 1000 tokens (more than enough for number response)
+        max_tokens_for_choice = 10000 if self._use_max_completion_tokens() else 1000
+        response = self.sample_text(full_prompt, max_tokens=max_tokens_for_choice, seed=seed)
 
         # Parse response
         try:
@@ -151,9 +243,10 @@ class GeminiModel:
     ) -> str:
         """Sample text from Gemini using the new google.genai package."""
         try:
-            # Gemini has a minimum token requirement - enforce a minimum of 500 tokens
-            # Values below this cause empty responses with finish_reason=MAX_TOKENS
-            actual_max_tokens = max(max_tokens, 500)
+            # Gemini models have large context windows (1M tokens for Gemini 2.0)
+            # Be generous with max_tokens to ensure complete responses
+            # Minimum 2000 tokens for all Gemini models (higher than old 500 minimum)
+            actual_max_tokens = max(max_tokens, 2000)
 
             # Use the new google.genai API
             # Generation parameters must be passed as a config dict
@@ -174,7 +267,9 @@ class GeminiModel:
 
             # The response object is a GenerateContentResponse with a .text property
             if response is None:
-                print(f"Warning: Gemini API returned None response for model {self._model_name}")
+                print(f"⚠️  Warning: Model {self._model_name} returned None response")
+                print(f"    Max tokens: {actual_max_tokens}")
+                print(f"    Hint: Check API key and model name")
                 return ""
 
             # Try to get text using the .text property
@@ -184,31 +279,25 @@ class GeminiModel:
                 return text
 
             # Fallback: debug and try to extract from candidates manually
-            print(f"Warning: Gemini API response.text was empty for model {self._model_name}")
-            print(f"Response has candidates: {hasattr(response, 'candidates')}")
-            if hasattr(response, 'candidates'):
-                print(f"Number of candidates: {len(response.candidates) if response.candidates else 0}")
+            print(f"⚠️  Warning: Model {self._model_name} returned empty response")
+            print(f"    Max tokens requested: {actual_max_tokens}")
 
+            finish_reason = "N/A"
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
-                print(f"Candidate finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}")
-                print(f"Candidate safety_ratings: {candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else 'N/A'}")
+                finish_reason = candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'
 
-                if hasattr(candidate, 'content'):
-                    content = candidate.content
-                    print(f"Content: {content}")
-                    if hasattr(content, 'parts'):
-                        print(f"Parts: {content.parts}")
-                        if content.parts:
-                            part = content.parts[0]
-                            print(f"First part: {part}")
-                            if hasattr(part, 'text'):
-                                print(f"Part text: {repr(part.text)}")
-                                if part.text:
-                                    return part.text
-                    # Content might have text directly
-                    if hasattr(content, 'text'):
-                        print(f"Content.text: {repr(content.text)}")
+            print(f"    Finish reason: {finish_reason}")
+
+            if finish_reason == "MAX_TOKENS":
+                print(f"    Hint: Try increasing max_tokens for this model")
+            else:
+                print(f"    Hint: Check prompt format and safety filters")
+
+            # Detailed debugging
+            print(f"    Response has candidates: {hasattr(response, 'candidates')}")
+            if hasattr(response, 'candidates'):
+                print(f"    Number of candidates: {len(response.candidates) if response.candidates else 0}")
 
             return ""
 
@@ -228,8 +317,9 @@ class GeminiModel:
         choice_text = "\n".join([f"{i}. {r}" for i, r in enumerate(responses)])
         full_prompt = f"{prompt}\n\nChoices:\n{choice_text}\n\nRespond with only the number of your choice (0-{len(responses)-1})."
 
-        # Use a minimum of 100 tokens for choice selection - 10 is too small for Gemini
-        response = self.sample_text(full_prompt, max_tokens=max(10, len(responses) * 10), seed=seed)
+        # Use generous max_tokens for Gemini models (1M context windows)
+        # 1000 tokens is more than enough for choice selection
+        response = self.sample_text(full_prompt, max_tokens=1000, seed=seed)
 
         # Handle None response
         if response is None:
@@ -275,6 +365,11 @@ class GLMModel:
         from openai import APITimeoutError
         from httpcore import ConnectTimeout
 
+        # GLM models have large context windows (128k-1M tokens depending on model)
+        # Be generous with max_tokens to ensure complete responses
+        # Minimum 2000 tokens for all GLM models
+        max_tokens = max(max_tokens, 2000)
+
         for attempt in range(max_retries):
             try:
                 # Debug: Log prompt details for empty response investigation
@@ -303,19 +398,22 @@ class GLMModel:
 
                 # Debug: Log if content is None/empty
                 if content is None:
-                    print(f"⚠️  GLM returned None content (raw API response)")
+                    print(f"⚠️  Warning: Model {self._model_name} returned None content")
+                    print(f"    Max tokens: {max_tokens}")
+                    print(f"    Hint: Check API key and quota")
                 elif content.strip() == "":
-                    print(f"⚠️  GLM returned whitespace-only content (length: {len(content)})")
+                    print(f"⚠️  Warning: Model {self._model_name} returned empty response")
+                    print(f"    Max tokens: {max_tokens}")
+                    print(f"    Hint: Try increasing max_tokens or check prompt format")
 
                 # Handle None or empty responses from GLM
                 if content is None or content.strip() == "":
                     if attempt < max_retries - 1:
-                        print(f"GLM returned empty response on attempt {attempt + 1}/{max_retries}. Retrying...")
+                        print(f"    Retrying... (attempt {attempt + 1}/{max_retries})")
                         time.sleep(1)
                         continue
                     else:
-                        print(f"GLM returned empty response after {max_retries} attempts. Using fallback.")
-                        print(f"Full prompt that failed:\n{prompt[:1000]}...")
+                        print(f"    Using fallback after {max_retries} attempts")
                         return "(No response generated)"
                 return content
 
@@ -343,7 +441,9 @@ class GLMModel:
         choice_text = "\n".join([f"{i}. {r}" for i, r in enumerate(responses)])
         full_prompt = f"{prompt}\n\nChoices:\n{choice_text}\n\nRespond with only the number of your choice (0-{len(responses)-1})."
 
-        response = self.sample_text(full_prompt, max_tokens=10, seed=seed)
+        # Use generous max_tokens for GLM models (large context windows)
+        # 1000 tokens is more than enough for choice selection
+        response = self.sample_text(full_prompt, max_tokens=1000, seed=seed)
 
         try:
             choice_idx = int(response.strip())
@@ -376,6 +476,11 @@ class AnthropicModel:
         max_retries: int = 3
     ) -> str:
         """Sample text from Anthropic Claude with retry logic."""
+        # Claude models have large context windows (200k tokens)
+        # Be generous with max_tokens to ensure complete responses
+        # Minimum 2000 tokens for all Claude models
+        max_tokens = max(max_tokens, 2000)
+
         for attempt in range(max_retries):
             try:
                 # Build the message creation parameters
@@ -417,10 +522,14 @@ class AnthropicModel:
                     if result:
                         return result
                     else:
-                        print("Warning: Anthropic API returned no text content")
+                        print(f"⚠️  Warning: Model {self._model_name} returned empty response")
+                        print(f"    Max tokens: {max_tokens}")
+                        print(f"    Hint: Check if prompt format is compatible with Claude API")
                         return ""
                 else:
-                    print("Warning: Anthropic API returned empty content")
+                    print(f"⚠️  Warning: Model {self._model_name} returned empty content")
+                    print(f"    Max tokens: {max_tokens}")
+                    print(f"    Hint: Try increasing max_tokens or check API usage limits")
                     return ""
 
             except Exception as e:
@@ -444,7 +553,9 @@ class AnthropicModel:
         choice_text = "\n".join([f"{i}. {r}" for i, r in enumerate(responses)])
         full_prompt = f"{prompt}\n\nChoices:\n{choice_text}\n\nRespond with only the number of your choice (0-{len(responses)-1})."
 
-        response = self.sample_text(full_prompt, max_tokens=10, seed=seed)
+        # Use generous max_tokens for Claude models (200k context windows)
+        # 1000 tokens is more than enough for choice selection
+        response = self.sample_text(full_prompt, max_tokens=1000, seed=seed)
 
         try:
             choice_idx = int(response.strip())

@@ -325,6 +325,11 @@ async def get_provider_models(
         except Exception as e:
             return {'provider': provider, 'models': [], 'error': str(e)}
 
+    elif provider == LLMProvider.AZURE.value:
+        # For Azure OpenAI, deployment names are user-specific and must be entered manually
+        # Return empty list so users always see the manual input field
+        return {'provider': provider, 'models': []}
+
     else:
         # For other providers, return static known models
         provider_info = next(
@@ -416,6 +421,14 @@ async def execute_simulation(request: ExecutionRequest):
     """
     config = request.config
     llm_settings = request.llm_settings
+
+    # Debug: Check if critical_decision_points are in the request
+    print(f"[DEBUG] execute_simulation: Checking for critical_decision_points in request...")
+    print(f"[DEBUG] hasattr(config, 'game_master'): {hasattr(config, 'game_master')}")
+    if hasattr(config, 'game_master'):
+        print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
+        if hasattr(config.game_master, 'critical_decision_points'):
+            print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
 
     # Validate first
     validation = await validate_config(config)

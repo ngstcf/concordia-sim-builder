@@ -97,6 +97,26 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             raise ValueError("OPENAI_API_KEY not set in settings or environment")
         model = CustomGPTModel(api_key=api_key, model_name=model_name, base_url=base_url)
 
+    elif provider == LLMProvider.AZURE.value:
+        # Azure OpenAI Service
+        # Parameters from .env: AZURE_OAI_KEY, AZURE_OAI_ENDPOINT, AZURE_OAI_VERSION
+        # User provides only: model_name (deployment name)
+        api_key = api_key or os.getenv('AZURE_OAI_KEY')
+        azure_endpoint = base_url or os.getenv('AZURE_OAI_ENDPOINT')
+        api_version = settings.api_version or os.getenv('AZURE_OAI_VERSION', '2024-12-01-preview')  # Default API version
+
+        if not api_key:
+            raise ValueError("AZURE_OAI_KEY not found in environment. Please add it to your .env file.")
+        if not azure_endpoint:
+            raise ValueError("AZURE_OAI_ENDPOINT not found in environment. Please add it to your .env file.")
+
+        model = CustomGPTModel(
+            api_key=api_key,
+            model_name=model_name,
+            base_url=azure_endpoint,
+            api_version=api_version
+        )
+
     elif provider == LLMProvider.DEEPSEEK.value:
         if not api_key:
             api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -167,6 +187,15 @@ def get_available_providers() -> list[dict]:
             "name": "OpenAI",
             "models": ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo"],
             "requires_api_key": True
+        },
+        {
+            "provider": LLMProvider.AZURE,
+            "name": "Azure OpenAI",
+            "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "o3-mini"],  # Example deployment names
+            "requires_api_key": False,  # Loaded from AZURE_OAI_KEY env var
+            "requires_api_version": False,  # Loaded from AZURE_OAI_API_VERSION env var (with default)
+            "requires_base_url": False,  # Loaded from AZURE_OAI_ENDPOINT env var
+            "note": "Configure in .env: AZURE_OAI_KEY, AZURE_OAI_ENDPOINT. Enter your deployment name manually."
         },
         {
             "provider": LLMProvider.DEEPSEEK,

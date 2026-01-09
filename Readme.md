@@ -19,7 +19,7 @@ A modern web application for visually creating and running agent-based social si
 - **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
 - **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
 - **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
-- **🌐 Multiple LLM Support** - OpenAI, DeepSeek (recommended), Gemini, Anthropic, GLM, and Ollama
+- **🌐 Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, GLM, and Ollama
 - **💾 Import/Export** - Save and share simulation configurations as JSON
 - **📝 Automatic Logging** - All simulations saved with timestamped, descriptive filenames
 
@@ -87,6 +87,9 @@ Create a `.env` file in the root directory:
 ```bash
 # LLM Provider Configuration
 OPENAI_API_KEY=sk-xxx                    # For OpenAI models
+AZURE_OAI_KEY=xxx                        # For Azure OpenAI (see docs/AZURE_OPENAI_SETUP.md)
+AZURE_OAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OAI_VERSION=2024-12-01-preview     # Optional: API version for Azure OpenAI
 DEEPSEEK_API_KEY=sk-xxx                  # For DeepSeek (recommended)
 GEMINI_API_KEY=xxx                       # For Gemini models
 ANTHROPIC_API_KEY=sk-xxx                # For Claude models

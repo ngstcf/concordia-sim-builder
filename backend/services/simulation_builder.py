@@ -296,6 +296,10 @@ def build_simulation(
 
     # Process critical decision points and append to premise
     premise_text = config.premise
+    print(f"[DEBUG] Checking for critical decision points...")
+    print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
+    if hasattr(config.game_master, 'critical_decision_points'):
+        print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
     if (hasattr(config.game_master, 'critical_decision_points') and
         config.game_master.critical_decision_points):
         decision_points = config.game_master.critical_decision_points
@@ -307,6 +311,9 @@ def build_simulation(
             decision_text += f"- Step {dp['step']}: {dp['event']}\n"
         premise_text = premise_text + decision_text
         print(f"[DEBUG] Appended critical decision points to premise")
+        print(f"[DEBUG] New premise length: {len(premise_text)}")
+    else:
+        print(f"[DEBUG] No critical decision points found")
 
     # Create simulation configuration
     sim_config = prefab_lib.Config(
