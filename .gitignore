@@ -99,3 +99,6 @@ backend/tests/
 analyze_simulation.py
 ARCHITECTURE.md
 reports/
+
+# Research use cases
+research-use-cases/

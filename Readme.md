@@ -1,15 +1,19 @@
 # Concordia Simulation Builder
 
-A modern web application for visually creating and running agent-based social simulations powered by Google DeepMind's [Concordia](https://github.com/google-deepmind/concordia) library.
+A web interface for Google DeepMind's [Concordia](https://github.com/google-deepmind/concordia) library that makes running agent-based social simulations accessible—no Python programming required.
+
+Configure agents, psychological components, and scenarios through forms. Run simulations powered by LLMs. Analyze results with built-in analytics including timeline visualization, cooperation metrics, grounded variables tracking, and AI-powered deep content analysis.
 
 ![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
 ![React](https://img.shields.io/badge/React-18+-blue)
 ![License](https://img.shields.io/badge/License-Apache%202.0-orange)
 
+**📖 Documentation:** [c3.unu.edu/projects/ai/simulator/](https://c3.unu.edu/projects/ai/simulator/)
+
 ## ✨ Features
 
-- **🎨 Form-Based Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
+- **🎨 Form-Based Configuration** - Intuitive web UI for configuring agent-based simulations without coding
 - **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
 - **🧩 Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
 - **🔄 Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
@@ -392,7 +396,6 @@ Frontend runs at: `http://localhost:5173`
   - Analyzes unstructured HTML logs to identify variable changes (explicit and inferred)
   - Supports numerical, categorical, boolean, and percentage variable types
   - Best for: Resource management, state tracking, dynamic scenarios, longitudinal analysis
-  - **Documentation:** See [docs/GROUNDED_VARIABLES_POST_PROCESSING.md](docs/GROUNDED_VARIABLES_POST_PROCESSING.md)
 
 - **Dialogic Conversation** (`/templates/dialogic-conversation`) - Therapy session with `dialogic__GameMaster`
   - Counselor-patient dialogue with auto-termination
@@ -454,8 +457,6 @@ const analysis = await analyzeSimulation('20260109_224705');
 console.log(analysis.executive_summary);
 console.log(analysis.recommendations);
 ```
-
-**Documentation:** See [backend/utils/SIMULATION_ANALYZER_README.md](backend/utils/SIMULATION_ANALYZER_README.md)
 
 ## 📚 API Endpoints
 
@@ -804,17 +805,6 @@ If you use this software in your research, please cite:
 - **Concordia Contributors** for building an amazing simulation library
 - **FastAPI** for the excellent web framework
 - **React Community** for the amazing ecosystem
-
-## 📞 Resources
-
-- **Online Documentation**: [c3.unu.edu/projects/ai/simulator/](https://c3.unu.edu/projects/ai/simulator/)
-- **Research Use Cases**: See [docs/research-use-cases/](docs/research-use-cases/) for detailed research documentation:
-  - [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md) - Psychological component system research
-  - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md) - Cybersecurity tabletop exercises
-  - [Urban Gentrification](docs/research-use-cases/urban-gentrification-simulation.md) - Housing policy & neighborhood change
-- **GitHub Issues**: Report bugs or request features
-- **Simulation Logs**: Review existing logs in the `logs/` directory
-- **Known Issues**: See [CONCORDIA_ISSUES.md](CONCORDIA_ISSUES.md) for documented framework limitations
 
 ## ⚠️ Known Limitations
 
