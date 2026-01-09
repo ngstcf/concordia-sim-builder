@@ -292,6 +292,26 @@ class SimulationResult(BaseModel):
     html_log: Optional[str] = None
 
 
+class GroundedVariablesExtractionRequest(BaseModel):
+    """Request to extract grounded variables from a completed simulation."""
+    simulation_id: str = Field(..., description="ID of the simulation")
+    html_file_path: str = Field(..., description="Path to the HTML log file")
+    llm_settings: LLMSettings = Field(..., description="LLM configuration for extraction")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "simulation_id": "20260109_185806",
+                "html_file_path": "20260109_185806_simulation.html",
+                "llm_settings": {
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.0
+                }
+            }
+        }
+
+
 # Resolve forward references
 NestedSimulationConfig.model_rebuild()
 AgentConfig.model_rebuild()

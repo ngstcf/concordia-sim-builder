@@ -536,6 +536,77 @@ export async function getSimulationAnalytics(filename: string): Promise<Simulati
 }
 
 /**
+ * Extract grounded variables from a completed simulation
+ */
+export async function extractGroundedVariables(
+  simulationId: string,
+  htmlFilePath: string,
+  llmSettings: LLMSettings
+): Promise<{
+  success: boolean;
+  simulation_id: string;
+  html_file: string;
+  metadata_file: string;
+  variables: Array<{
+    name: string;
+    type: string;
+    description: string;
+    initial_value: any;
+    final_value: any;
+    total_changes: number;
+    changes: Array<{
+      step: number;
+      from: any;
+      to: any;
+    }>;
+    history: Array<{
+      step: number;
+      value: any;
+    }>;
+  }>;
+}> {
+  const response = await api.post('/api/simulations/grounded-variables/extract', {
+    simulation_id: simulationId,
+    html_file_path: htmlFilePath,
+    llm_settings: llmSettings
+  });
+  return response.data;
+}
+
+/**
+ * Get extracted grounded variables for a simulation
+ */
+export async function getGroundedVariables(
+  simulationId: string
+): Promise<{
+  success: boolean;
+  simulation_id: string;
+  metadata_file: string;
+  variables: Array<{
+    name: string;
+    type: string;
+    description: string;
+    default_value: any;
+    has_history: boolean;
+    initial_value?: any;
+    final_value?: any;
+    total_changes?: number;
+    changes?: Array<{
+      step: number;
+      from: any;
+      to: any;
+    }>;
+    history?: Array<{
+      step: number;
+      value: any;
+    }>;
+  }>;
+}> {
+  const response = await api.get(`/api/simulations/grounded-variables/${simulationId}`);
+  return response.data;
+}
+
+/**
  * Cancel a running simulation
  */
 export async function cancelSimulation(taskId: string): Promise<{
@@ -571,6 +642,37 @@ export async function getSimulationStatus(taskId: string): Promise<{
   };
 }> {
   const response = await api.get(`/api/simulations/status/${taskId}`);
+  return response.data;
+}
+
+/**
+ * Get checkpoint files
+ */
+export async function getCheckpointFiles(): Promise<{
+  success: boolean;
+  checkpoints: Array<{
+    filename: string;
+    size: number;
+    modified: number;
+    path: string;
+  }>;
+  total_count: number;
+  total_size: number;
+}> {
+  const response = await api.get('/api/simulations/logs/checkpoints');
+  return response.data;
+}
+
+/**
+ * Delete all checkpoint files
+ */
+export async function deleteCheckpointFiles(): Promise<{
+  success: boolean;
+  deleted_count: number;
+  deleted_files: string[];
+  message: string;
+}> {
+  const response = await api.delete('/api/simulations/logs/checkpoints');
   return response.data;
 }
 

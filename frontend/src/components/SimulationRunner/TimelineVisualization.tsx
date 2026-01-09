@@ -158,25 +158,27 @@ export default function TimelineVisualization({ filename }: TimelineVisualizatio
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Timeline Visualization</h3>
-        <div className="flex items-center gap-3">
-          {/* Filter */}
-          <select
-            className="text-sm border border-gray-300 rounded-lg py-1.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as 'all' | 'steps')}
-          >
-            <option value="all">All Events</option>
-            <option value="steps">Steps Only</option>
-          </select>
+      <div className="px-5 py-4 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h3 className="text-lg font-semibold text-gray-900">Timeline Visualization</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Filter */}
+            <select
+              className="text-sm border border-gray-300 rounded-lg py-1.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'steps')}
+            >
+              <option value="all">All Events</option>
+              <option value="steps">Steps Only</option>
+            </select>
 
-          <button
-            onClick={loadAnalytics}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Refresh
-          </button>
+            <button
+              onClick={loadAnalytics}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 

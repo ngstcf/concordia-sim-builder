@@ -13,6 +13,7 @@ from backend.models.schemas import (
     PrefabInfo,
     ExecutionRequest,
     ComponentValidationRequest,
+    GroundedVariablesExtractionRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -3049,7 +3050,7 @@ async def get_urban_gentrification_template():
 
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
-    """Get list of recent simulation logs."""
+    """Get list of recent simulation logs, excluding checkpoint files."""
     import os
     from pathlib import Path
 
@@ -3057,10 +3058,14 @@ async def get_recent_simulations(limit: int = 20):
     if not logs_dir.exists():
         return []
 
-    # Get all HTML files in logs directory
+    # Get all HTML files in logs directory, excluding checkpoints
     log_files = []
     for file_path in logs_dir.glob("*.html"):
         try:
+            # Skip checkpoint files
+            if "_checkpoint_step" in file_path.name:
+                continue
+
             stat = file_path.stat()
             log_files.append({
                 "filename": file_path.name,
@@ -3077,6 +3082,114 @@ async def get_recent_simulations(limit: int = 20):
 
     # Return limited number of results
     return log_files[:limit]
+
+
+@router.get("/logs/checkpoints")
+async def get_checkpoint_files():
+    """
+    Get list of all checkpoint files in the logs directory.
+
+    Returns:
+        List of checkpoint files with metadata
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        logs_dir = Path("logs")
+        if not logs_dir.exists():
+            return {
+                "success": True,
+                "checkpoints": [],
+                "total_size": 0
+            }
+
+        # Find all checkpoint files
+        checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
+
+        checkpoints = []
+        total_size = 0
+
+        for file_path in checkpoint_files:
+            stat = file_path.stat()
+            checkpoints.append({
+                "filename": file_path.name,
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+                "path": str(file_path)
+            })
+            total_size += stat.st_size
+
+        # Sort by modified time (newest first)
+        checkpoints.sort(key=lambda x: x["modified"], reverse=True)
+
+        return {
+            "success": True,
+            "checkpoints": checkpoints,
+            "total_count": len(checkpoints),
+            "total_size": total_size
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get checkpoint files: {str(e)}"
+        )
+
+
+@router.delete("/logs/checkpoints")
+async def delete_checkpoint_files():
+    """
+    Delete all checkpoint files from the logs directory.
+
+    Checkpoint files are incremental saves created during simulation
+    and have filenames ending with '_checkpoint_stepN.html'.
+
+    Returns:
+        Summary of deleted files
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        logs_dir = Path("logs")
+        if not logs_dir.exists():
+            return {
+                "success": False,
+                "message": "Logs directory not found",
+                "deleted_count": 0
+            }
+
+        # Find all checkpoint files
+        checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
+
+        deleted_count = 0
+        deleted_files = []
+
+        for file_path in checkpoint_files:
+            try:
+                file_path.unlink()
+                deleted_count += 1
+                deleted_files.append(str(file_path.name))
+            except Exception as e:
+                print(f"Failed to delete {file_path}: {e}")
+
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "deleted_files": deleted_files,
+            "message": f"Deleted {deleted_count} checkpoint file(s)"
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete checkpoint files: {str(e)}"
+        )
 
 
 @router.get("/logs/{filename}")
@@ -3990,3 +4103,229 @@ async def get_simulation_status(task_id: str):
             "num_agents": len(sim.config.agents) if hasattr(sim.config, 'agents') else 0
         }
     }
+
+
+@router.post("/grounded-variables/extract")
+async def extract_grounded_variables(request: GroundedVariablesExtractionRequest):
+    """
+    Extract grounded variables from a completed simulation using post-processing.
+
+    This endpoint analyzes the HTML log of a completed simulation and uses LLM to
+    identify and extract how grounded variables changed throughout the simulation.
+
+    Args:
+        request: Extraction request with simulation_id, html_file_path, and llm_settings
+
+    Returns:
+        Extracted variable history with changes at each step
+    """
+    import os
+    from pathlib import Path
+    from backend.utils.grounded_variables_post_processor import GroundedVariablesPostProcessor
+    from backend.services.llm_factory import get_model_and_embedder
+
+    try:
+        simulation_id = request.simulation_id
+        html_file_path = request.html_file_path
+        llm_settings = request.llm_settings
+
+        # Validate HTML file exists
+        html_path = Path(html_file_path)
+        if not html_path.is_absolute():
+            # Assume relative to logs directory
+            html_path = Path("logs") / html_file_path
+
+        if not html_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"HTML file not found: {html_file_path}"
+            )
+
+        # Find corresponding metadata file
+        metadata_path = html_path.with_suffix(".metadata.json")
+        if not metadata_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Metadata file not found: {metadata_path.name}"
+            )
+
+        # Load metadata to get variable configurations
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        # Check if simulation has grounded variables
+        if "game_master" not in metadata or "grounded_variables" not in metadata["game_master"]:
+            return {
+                "success": False,
+                "message": "Simulation does not have grounded variables configured",
+                "variables": []
+            }
+
+        # Build variable configs from metadata
+        variable_configs = []
+        for var in metadata["game_master"]["grounded_variables"]:
+            variable_configs.append({
+                "name": var["name"],
+                "variable_type": var["variable_type"],
+                "description": var.get("description", ""),
+                "default_value": var.get("default_value"),
+                "min_value": var.get("min_value"),
+                "max_value": var.get("max_value"),
+                "allowed_values": var.get("allowed_values"),
+                "update_rule": var.get("update_rule"),
+            })
+
+        # Create LLM instance using the existing factory function
+        # Note: We only need the model, not the embedder
+        model, _ = get_model_and_embedder(llm_settings)
+
+        # Create post-processor and extract variables
+        processor = GroundedVariablesPostProcessor(model, variable_configs)
+        history = processor.process_simulation(
+            str(html_path),
+            str(metadata_path)
+        )
+
+        # Format results for response
+        results = {
+            "success": True,
+            "simulation_id": simulation_id,
+            "html_file": str(html_path),
+            "metadata_file": str(metadata_path),
+            "variables": []
+        }
+
+        for var_name, var_history in history.items():
+            # Find the variable config
+            var_config = next((v for v in metadata["game_master"]["grounded_variables"] if v["name"] == var_name), None)
+
+            if var_history:
+                initial_value = var_history[0]["value"]
+                final_value = var_history[-1]["value"]
+
+                # Count changes
+                changes = []
+                prev_value = initial_value
+                for entry in var_history:
+                    if entry["value"] != prev_value:
+                        changes.append({
+                            "step": entry["step"],
+                            "from": prev_value,
+                            "to": entry["value"]
+                        })
+                        prev_value = entry["value"]
+
+                results["variables"].append({
+                    "name": var_name,
+                    "type": var_config["variable_type"] if var_config else "unknown",
+                    "description": var_config.get("description", "") if var_config else "",
+                    "initial_value": initial_value,
+                    "final_value": final_value,
+                    "total_changes": len(changes),
+                    "changes": changes,
+                    "history": var_history
+                })
+
+        return results
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to extract grounded variables: {str(e)}"
+        )
+
+
+@router.get("/grounded-variables/{simulation_id}")
+async def get_grounded_variables(simulation_id: str):
+    """
+    Get extracted grounded variables for a simulation.
+
+    Returns the variable history from the metadata file if it exists.
+
+    Args:
+        simulation_id: ID of the simulation (timestamp format)
+
+    Returns:
+        Extracted variable history
+    """
+    import glob
+    from pathlib import Path
+
+    try:
+        # Find metadata files matching the simulation ID
+        logs_dir = Path("logs")
+        pattern = f"*{simulation_id}*.metadata.json"
+        matches = list(logs_dir.glob(pattern))
+
+        if not matches:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No metadata found for simulation: {simulation_id}"
+            )
+
+        # Use the first match
+        metadata_path = matches[0]
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        # Check if grounded variables exist
+        if "game_master" not in metadata or "grounded_variables" not in metadata["game_master"]:
+            return {
+                "success": False,
+                "message": "Simulation does not have grounded variables",
+                "variables": []
+            }
+
+        variables = []
+        for var in metadata["game_master"]["grounded_variables"]:
+            var_data = {
+                "name": var["name"],
+                "type": var["variable_type"],
+                "description": var.get("description", ""),
+                "default_value": var.get("default_value"),
+                "has_history": "history" in var and len(var.get("history", [])) > 0
+            }
+
+            # Include history if available
+            if "history" in var and var["history"]:
+                var_data["history"] = var["history"]
+                var_data["initial_value"] = var["history"][0]["value"]
+                var_data["final_value"] = var["history"][-1]["value"]
+
+                # Count changes
+                changes = []
+                prev_value = var_data["initial_value"]
+                for entry in var["history"]:
+                    if entry["value"] != prev_value:
+                        changes.append({
+                            "step": entry["step"],
+                            "from": prev_value,
+                            "to": entry["value"]
+                        })
+                        prev_value = entry["value"]
+                var_data["total_changes"] = len(changes)
+                var_data["changes"] = changes
+
+            variables.append(var_data)
+
+        return {
+            "success": True,
+            "simulation_id": simulation_id,
+            "metadata_file": str(metadata_path),
+            "variables": variables
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get grounded variables: {str(e)}"
+        )

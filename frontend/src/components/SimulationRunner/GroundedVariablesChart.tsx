@@ -3,8 +3,8 @@
  * Displays time-series charts for grounded variables
  */
 import { useState, useEffect } from 'react';
-import { getSimulationAnalytics } from '../../utils/api';
-import type { SimulationAnalytics } from '../../utils/api';
+import { getSimulationAnalytics, extractGroundedVariables, getGroundedVariables } from '../../utils/api';
+import type { SimulationAnalytics, LLMSettings } from '../../utils/api';
 
 interface VariableValue {
   step: number;
@@ -22,13 +22,32 @@ interface ChartableVariable {
 
 interface GroundedVariablesChartProps {
   filename: string | null;
+  simulationId?: string | null;
+  llmSettings?: LLMSettings | null;
 }
 
-export default function GroundedVariablesChart({ filename }: GroundedVariablesChartProps) {
+export default function GroundedVariablesChart({
+  filename,
+  simulationId,
+  llmSettings
+}: GroundedVariablesChartProps) {
   const [analytics, setAnalytics] = useState<SimulationAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedVariables, setSelectedVariables] = useState<Set<string>>(new Set());
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extractSuccess, setExtractSuccess] = useState(false);
+
+  // Extract simulation ID from filename (timestamp format: YYYYMMDD_HHMMSS)
+  const getSimulationIdFromFilename = (filename: string | null): string | null => {
+    if (!filename) return null;
+    // Extract timestamp from filename like "20260107_220128_simulation.html"
+    const match = filename.match(/(\d{8}_\d{6})/);
+    return match ? match[1] : null;
+  };
+
+  const actualSimulationId = simulationId || getSimulationIdFromFilename(filename);
 
   useEffect(() => {
     if (filename) {
@@ -72,6 +91,33 @@ export default function GroundedVariablesChart({ filename }: GroundedVariablesCh
       newSelected.add(varName);
     }
     setSelectedVariables(newSelected);
+  };
+
+  const handleExtractVariables = async () => {
+    if (!filename || !actualSimulationId || !llmSettings) {
+      setExtractError('Missing required information for extraction');
+      return;
+    }
+
+    setExtracting(true);
+    setExtractError(null);
+    setExtractSuccess(false);
+
+    try {
+      await extractGroundedVariables(actualSimulationId, filename, llmSettings);
+
+      // Reload analytics after extraction
+      await loadAnalytics();
+      setExtractSuccess(true);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setExtractSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('Error extracting grounded variables:', err);
+      setExtractError(err.message || 'Failed to extract grounded variables');
+    } finally {
+      setExtracting(false);
+    }
   };
 
   // Get chartable variables (numerical, percentage) with their history
@@ -224,13 +270,56 @@ export default function GroundedVariablesChart({ filename }: GroundedVariablesCh
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           <p className="mt-4 text-sm text-gray-500">No data available for grounded variables</p>
-          <p className="text-xs text-gray-400 mt-2">The simulation may not have run long enough to generate variable history.</p>
-          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-xs text-yellow-800">
-              <strong>Backend Issue Detected:</strong> Grounded variables exist but have no history data.
-              The simulation backend needs to track variable changes over time.
+          <p className="text-xs text-gray-400 mt-2">Variable history needs to be extracted from the simulation log.</p>
+
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-800 mb-3">
+              <strong>Extract Variable History:</strong> Use AI to analyze the simulation log and extract how variables changed over time.
             </p>
-            <p className="text-xs text-yellow-700 mt-1">
+
+            {extractSuccess && (
+              <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded">
+                <p className="text-xs text-green-800">✓ Variables extracted successfully!</p>
+              </div>
+            )}
+
+            {extractError && (
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded">
+                <p className="text-xs text-red-800">{extractError}</p>
+              </div>
+            )}
+
+            {llmSettings && actualSimulationId ? (
+              <button
+                onClick={handleExtractVariables}
+                disabled={extracting}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {extracting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Extracting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Extract Variables
+                  </>
+                )}
+              </button>
+            ) : (
+              <p className="text-xs text-gray-500">
+                {!llmSettings && 'LLM settings not configured. '}
+                {!actualSimulationId && 'Simulation ID not found.'}
+              </p>
+            )}
+
+            <p className="text-xs text-blue-700 mt-2">
               Variables found: {chartableVars.length} chartable, {getNonChartableVariables().length} other
             </p>
           </div>

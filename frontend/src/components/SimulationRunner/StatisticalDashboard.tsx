@@ -107,14 +107,16 @@ export default function StatisticalDashboard({ filename }: StatisticalDashboardP
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-      <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Statistical Dashboard</h3>
-        <button
-          onClick={loadAnalytics}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
-          Refresh
-        </button>
+      <div className="px-5 py-4 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h3 className="text-lg font-semibold text-gray-900">Statistical Dashboard</h3>
+          <button
+            onClick={loadAnalytics}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap self-start sm:self-auto"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="p-5 space-y-6">

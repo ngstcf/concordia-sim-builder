@@ -813,7 +813,11 @@ export default function SimulationRunner() {
                 )}
 
                 {activeTab === 'grounded-variables' && (
-                  <GroundedVariablesChart filename={results.log_filename || null} />
+                  <GroundedVariablesChart
+                    filename={results.log_filename || null}
+                    simulationId={results.task_id || null}
+                    llmSettings={llmSettings}
+                  />
                 )}
 
                 {activeTab === 'cooperation' && (
