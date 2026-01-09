@@ -9,7 +9,7 @@ A modern web application for visually creating and running agent-based social si
 
 ## ✨ Features
 
-- **🎨 Visual Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
+- **🎨 Form-Based Simulation Builder** - Intuitive web UI for creating agent-based simulations without coding
 - **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
 - **🧩 Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
 - **🔄 Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
