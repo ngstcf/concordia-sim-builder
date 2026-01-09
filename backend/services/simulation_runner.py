@@ -755,7 +755,13 @@ async def run_simulation_stream(
             }
             # Add nested_simulation if present
             if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
-                agent_info["nested_simulation"] = agent.nested_simulation
+                # Convert to dict for JSON serialization
+                if hasattr(agent.nested_simulation, 'model_dump'):
+                    agent_info["nested_simulation"] = agent.nested_simulation.model_dump()
+                elif hasattr(agent.nested_simulation, 'dict'):
+                    agent_info["nested_simulation"] = agent.nested_simulation.dict()
+                else:
+                    agent_info["nested_simulation"] = agent.nested_simulation
             # Add components if present - convert to dict for JSON serialization
             if hasattr(agent, 'components') and agent.components:
                 # Handle both dict components and model components
@@ -1335,7 +1341,13 @@ async def run_simulation_simple(
             }
             # Add nested_simulation if present
             if hasattr(agent, 'nested_simulation') and agent.nested_simulation:
-                agent_info["nested_simulation"] = agent.nested_simulation
+                # Convert to dict for JSON serialization
+                if hasattr(agent.nested_simulation, 'model_dump'):
+                    agent_info["nested_simulation"] = agent.nested_simulation.model_dump()
+                elif hasattr(agent.nested_simulation, 'dict'):
+                    agent_info["nested_simulation"] = agent.nested_simulation.dict()
+                else:
+                    agent_info["nested_simulation"] = agent.nested_simulation
             # Add components if present - convert to dict for JSON serialization
             if hasattr(agent, 'components') and agent.components:
                 # Handle both dict components and model components
