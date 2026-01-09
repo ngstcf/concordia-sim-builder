@@ -19,7 +19,7 @@ A modern web application for visually creating and running agent-based social si
 - **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
 - **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
 - **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
-- **🌐 Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, GLM, and Ollama
+- **🌐 Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, and Ollama
 - **💾 Import/Export** - Save and share simulation configurations as JSON
 - **📝 Automatic Logging** - All simulations saved with timestamped, descriptive filenames
 
@@ -54,7 +54,7 @@ A modern web application for visually creating and running agent-based social si
 
 - Python 3.10 or higher
 - Node.js 18 or higher
-- API keys for at least one LLM provider (OpenAI, DeepSeek, Gemini, Anthropic, or GLM), OR Ollama for local models
+- API keys for at least one LLM provider (OpenAI, DeepSeek, Gemini, or Anthropic), OR Ollama for local models
 
 ### Backend Setup
 
@@ -93,7 +93,6 @@ AZURE_OAI_VERSION=2024-12-01-preview     # Optional: API version for Azure OpenA
 DEEPSEEK_API_KEY=sk-xxx                  # For DeepSeek (recommended)
 GEMINI_API_KEY=xxx                       # For Gemini models
 ANTHROPIC_API_KEY=sk-xxx                # For Claude models
-GLM_API_KEY=xxx                          # For GLM (Zhipu AI) models
 # OLLAMA_BASE_URL=http://localhost:11434/v1  # Optional: Custom Ollama endpoint
 ```
 
@@ -164,23 +163,6 @@ If you're using a hosted Ollama service (like OpenWebUI) that requires authentic
 OLLAMA_BASE_URL=https://your-openwebui-instance.com/v1
 OLLAMA_API_KEY=your-api-key-here
 ```
-
-### Using GLM (Zhipu AI)
-
-**⚠️ NOT RECOMMENDED for Concordia simulations**
-
-GLM models have compatibility issues with Concordia's prompt format and frequently return empty responses, causing simulations to fail. GLM may work for basic text generation but does not work reliably with Concordia's agent observation system.
-
-**Issues:**
-- Returns empty responses for many Concordia prompt types
-- Agents fail to generate observations, breaking simulations
-- Not suitable for production use with Concordia
-
-**Recommended alternatives:**
-- **DeepSeek** - DeepSeek V3.2 serves as a superior cost alternative to GPT-4-class models (10-50× cheaper with better coding/math benchmarks) and a strong GPT-5 competitor on reasoning tasks
-- **OpenAI/Anthropic** - Premium options with full compatibility
-
-GLM is kept as an option for experimentation or basic testing, but **DeepSeek is strongly recommended** instead.
 
 ### Configuring Game-Theoretic Simulations
 
@@ -542,15 +524,6 @@ lsof -ti:5173 | xargs kill -9
 - This is common with local models, especially larger ones or on slower hardware
 - **Solution**: Use **DeepSeek** instead (fully compatible and reliable)
 
-**GLM compatibility issues**
-- **⚠️ GLM models are NOT recommended for Concordia simulations**
-- GLM returns empty responses for many Concordia prompt types, making simulations fail
-- Symptoms: "GLM returned empty response" followed by fallback text
-- Solutions:
-  1. **Use DeepSeek instead** - fully compatible and cost-effective
-  2. Or use OpenAI/Anthropic for premium quality
-  3. GLM may work for basic text generation but fails with Concordia's agent observations
-
 **DeepSeek connection issues**
 - Verify API key is correct and has credits
 - Check network connectivity to `https://api.deepseek.com`
@@ -677,7 +650,6 @@ The `game_theoretic_and_dramaturgic__GameMaster` prefab has a confirmed issue wh
 
 - [x] **Analytics Dashboard** - Statistical analysis and natural language summaries of simulation results ✅
 - [x] **Real-time Progress Streaming** - Watch simulations unfold live in the browser with step-by-step progress ✅
-- [x] **GLM Integration** - Fast, reliable Chinese/English language models ✅
 - [x] **Console Progress Logging** - Detailed real-time logs during simulation execution ✅
 - [x] **Timeline Visualization** - Step-by-step event timeline ✅
 - [x] **Actions View** - Per-agent action breakdown with extracted goals ✅
