@@ -13,7 +13,7 @@ A modern web application for visually creating and running agent-based social si
 - **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
 - **🧩 Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
 - **🔄 Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
-- **📊 Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.)
+- **📊 Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.) with AI-powered post-processing to extract variable history from simulation logs
 - **⚡ Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
 - **📊 Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
 - **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
@@ -368,6 +368,7 @@ Frontend runs at: `http://localhost:5173`
 - **Urban Gentrification** (`/templates/urban-gentrification`) - Housing policy and neighborhood change simulation
   - 6 stakeholders debate housing policies while GM tracks 11 neighborhood indicators
   - Grounded variables track rent, displacement, business survival, community cohesion, affordability
+  - **AI-Powered Post-Processing:** Extract variable history from completed simulations to analyze policy impacts
   - Longitudinal urban economics research with policy intervention testing
   - Based on gentrification dynamics, rent gap theory, displacement mechanisms
   - Best for: Urban planning research, housing policy evaluation, neighborhood change studies
@@ -380,9 +381,12 @@ Frontend runs at: `http://localhost:5173`
 
 - **Grounded Variables Demo** (`/templates/grounded-variables-demo`) - Grounded variables tracking demo
   - Project management scenario tracking team morale, budget, tasks, health, crisis mode, completion %
-  - Demonstrates GM tracking and updating state variables during simulation
+  - **AI-Powered Post-Processing:** Extract variable history from completed simulations using LLM analysis
+  - Works around Concordia's limitation where variables aren't updated during simulation
+  - Analyzes unstructured HTML logs to identify variable changes (explicit and inferred)
   - Supports numerical, categorical, boolean, and percentage variable types
-  - Best for: Resource management, state tracking, dynamic scenarios
+  - Best for: Resource management, state tracking, dynamic scenarios, longitudinal analysis
+  - **Documentation:** See [docs/GROUNDED_VARIABLES_POST_PROCESSING.md](docs/GROUNDED_VARIABLES_POST_PROCESSING.md)
 
 - **Dialogic Conversation** (`/templates/dialogic-conversation`) - Therapy session with `dialogic__GameMaster`
   - Counselor-patient dialogue with auto-termination
