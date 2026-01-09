@@ -13,6 +13,7 @@ import ActionsView from './ActionsView';
 import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
 import CooperationRateChart from './CooperationRateChart';
+import SimulationAnalysis from './SimulationAnalysis';
 
 // Inject CSS styles into Concordia HTML logs to improve readability
 function injectStyles(html: string): string {
@@ -188,7 +189,7 @@ export default function SimulationRunner() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<{
@@ -770,6 +771,16 @@ export default function SimulationRunner() {
                     >
                       AI Summary
                     </button>
+                    <button
+                      onClick={() => setActiveTab('analysis')}
+                      className={`${
+                        activeTab === 'analysis'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
+                    >
+                      Analysis
+                    </button>
                   </nav>
                 </div>
               </div>
@@ -822,6 +833,14 @@ export default function SimulationRunner() {
 
                 {activeTab === 'cooperation' && (
                   <CooperationRateChart filename={results.log_filename || null} />
+                )}
+
+                {activeTab === 'analysis' && (
+                  <SimulationAnalysis
+                    simulationId={results.task_id || null}
+                    logFilename={results.log_filename || null}
+                    llmSettings={llmSettings}
+                  />
                 )}
               </div>
 

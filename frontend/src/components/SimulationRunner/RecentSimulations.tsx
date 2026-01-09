@@ -94,7 +94,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
     setLoading(true);
     setError(null);
     try {
-      const recentLogs = await getRecentSimulations(20);
+      const recentLogs = await getRecentSimulations(100);
       setLogs(recentLogs);
     } catch (err: any) {
       console.error('Error loading recent simulations:', err);
