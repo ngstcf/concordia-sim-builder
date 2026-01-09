@@ -28,7 +28,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const [logs, setLogs] = useState<SimulationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [checkpointInfo, setCheckpointInfo] = useState<{ count: number; size: number } | null>(null);
+  const [checkpointInfo, setCheckpointInfo] = useState<{ count: number; size: number }>({ count: 0, size: 0 });
   const [showCleanup, setShowCleanup] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
@@ -42,20 +42,25 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const loadCheckpointInfo = async () => {
     try {
       const data = await getCheckpointFiles();
+      console.log('Checkpoint data received:', data);
       setCheckpointInfo({
-        count: data.total_count,
-        size: data.total_size
+        count: data.total_count || 0,
+        size: data.total_size || 0
       });
       // Convert checkpoint data to SimulationLog format
-      setCheckpoints(data.checkpoints.map(cp => ({
-        filename: cp.filename,
-        path: cp.path,
-        size: cp.size,
-        modified: cp.modified,
-        created: cp.modified
-      })));
+      if (data.checkpoints && data.checkpoints.length > 0) {
+        setCheckpoints(data.checkpoints.map(cp => ({
+          filename: cp.filename,
+          path: cp.path,
+          size: cp.size,
+          modified: cp.modified,
+          created: cp.modified
+        })));
+      }
     } catch (err) {
       console.error('Failed to load checkpoint info:', err);
+      // Set empty state on error
+      setCheckpointInfo({ count: 0, size: 0 });
     }
   };
 
@@ -73,7 +78,9 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
       const result = await deleteCheckpointFiles();
       alert(result.message);
       setCheckpointInfo({ count: 0, size: 0 });
+      setCheckpoints([]);
       setShowCleanup(false);
+      setShowCheckpoints(false);
       // Reload simulations list
       loadRecentSimulations();
     } catch (err: any) {
@@ -190,7 +197,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
           <h3 className="text-lg font-semibold text-gray-900">Recent Simulations</h3>
           <div className="flex items-center gap-3 flex-wrap">
             {/* Show checkpoints toggle */}
-            {checkpointInfo && checkpointInfo.count > 0 && (
+            {checkpointInfo.count > 0 && (
               <button
                 onClick={toggleShowCheckpoints}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border transition-colors whitespace-nowrap"
@@ -207,7 +214,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
               </button>
             )}
             {/* Checkpoint cleanup button */}
-            {checkpointInfo && checkpointInfo.count > 0 && (
+            {checkpointInfo.count > 0 && (
               <button
                 onClick={() => setShowCleanup(true)}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors whitespace-nowrap"
@@ -239,12 +246,12 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">Checkpoint files:</span>
-                <span className="font-medium text-gray-900">{checkpointInfo?.count || 0} files</span>
+                <span className="font-medium text-gray-900">{checkpointInfo.count} files</span>
               </div>
               <div className="flex items-center justify-between text-sm mt-2">
                 <span className="text-gray-600">Total size:</span>
                 <span className="font-medium text-gray-900">
-                  {checkpointInfo ? formatFileSize(checkpointInfo.size) : '0 B'}
+                  {formatFileSize(checkpointInfo.size)}
                 </span>
               </div>
             </div>

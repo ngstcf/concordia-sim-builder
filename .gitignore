@@ -94,3 +94,8 @@ test_glm_integration.py
 test_glm_models_concordia.pyarxiv_paper.md
 images/
 backend/tests/
+
+# Analysis and reports
+analyze_simulation.py
+ARCHITECTURE.md
+reports/

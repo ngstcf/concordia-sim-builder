@@ -676,4 +676,47 @@ export async function deleteCheckpointFiles(): Promise<{
   return response.data;
 }
 
+/**
+ * Analyze a simulation log using LLM
+ */
+export async function analyzeSimulation(simulationId: string, llmSettings?: {
+  provider?: string;
+  model_name?: string;
+  api_key?: string;
+  temperature?: number;
+  embedder_model?: string;
+}): Promise<{
+  success: boolean;
+  simulation_id: string;
+  log_file: string;
+  analysis: {
+    metadata: any;
+    executive_summary: string;
+    timeline: Array<{
+      step: number;
+      summary: string;
+      details: string;
+    }>;
+    team_effectiveness: {
+      analysis: string;
+      agents_analyzed: number;
+    };
+    insights: {
+      analysis: string;
+      categories: string[];
+    };
+    recommendations: {
+      recommendations: string;
+      timeframes: string[];
+    };
+    analysis_date: string;
+  };
+}> {
+  const response = await api.post('/api/simulations/analyze-simulation', {
+    simulation_id: simulationId,
+    llm_settings: llmSettings
+  });
+  return response.data;
+}
+
 export default api;

@@ -16,7 +16,8 @@ A modern web application for visually creating and running agent-based social si
 - **📊 Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.) with AI-powered post-processing to extract variable history from simulation logs
 - **⚡ Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
 - **📊 Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
-- **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results
+- **🧠 LLM-Powered Simulation Analyzer** - Automated deep content analysis generating executive summaries, team effectiveness assessments, insights, and recommendations
+- **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results with checkpoint file management
 - **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
 - **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
 - **🌐 Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, and Ollama
@@ -420,6 +421,42 @@ Frontend runs at: `http://localhost:5173`
   - Agents with detailed formative memories
   - Best for: Character-driven narratives
 
+### 4. Simulation Analyzer - LLM-Powered Deep Analysis
+
+The Simulation Analyzer automatically analyzes simulation logs using LLM to generate comprehensive reports.
+
+**Available via:**
+- **Web API**: `POST /api/simulations/analyze-simulation`
+- **CLI**: `python backend/scripts/analyze_simulation.py <log_path>`
+
+**Features:**
+- **Executive Summary** - High-level overview of what happened
+- **Timeline Analysis** - Step-by-step event breakdown
+- **Team Effectiveness** - Agent/team performance assessment
+- **Key Insights** - Technical findings, human factors, decision quality
+- **Recommendations** - Actionable suggestions organized by timeframe
+
+**Usage Examples:**
+
+```bash
+# Analyze a simulation via CLI
+python backend/scripts/analyze_simulation.py logs/20260109_224705_simulation.html
+
+# Specify custom output path
+python backend/scripts/analyze_simulation.py logs/simulation.html reports/analysis.md
+```
+
+```typescript
+// Analyze via Web API (from frontend)
+import { analyzeSimulation } from './utils/api';
+
+const analysis = await analyzeSimulation('20260109_224705');
+console.log(analysis.executive_summary);
+console.log(analysis.recommendations);
+```
+
+**Documentation:** See [backend/utils/SIMULATION_ANALYZER_README.md](backend/utils/SIMULATION_ANALYZER_README.md)
+
 ## 📚 API Endpoints
 
 ### Core Endpoints
@@ -460,6 +497,12 @@ Frontend runs at: `http://localhost:5173`
 |----------|--------|-------------|
 | `/api/simulations/grounded-variables/extract` | POST | Extract variable history from simulation log using AI |
 | `/api/simulations/grounded-variables/{simulation_id}` | GET | Get grounded variables data for simulation |
+
+### Analysis & Insights
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/analyze-simulation` | POST | Generate comprehensive LLM-powered analysis report |
 
 ### Component System
 

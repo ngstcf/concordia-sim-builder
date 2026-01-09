@@ -4329,3 +4329,89 @@ async def get_grounded_variables(simulation_id: str):
             status_code=500,
             detail=f"Failed to get grounded variables: {str(e)}"
         )
+
+
+@router.post("/analyze-simulation")
+async def analyze_simulation_endpoint(request: dict):
+    """
+    Generate comprehensive analysis report for a simulation using LLM.
+    
+    This endpoint uses the SimulationAnalyzer to perform deep content analysis
+    of simulation logs, generating insights, recommendations, and assessments.
+    
+    Args:
+        request: Dictionary containing:
+            - simulation_id: ID of the simulation (timestamp format)
+            - llm_settings: Optional LLM settings (uses defaults if not provided)
+    
+    Returns:
+        Analysis report containing:
+            - metadata: Simulation metadata
+            - executive_summary: High-level overview
+            - timeline: Step-by-step events
+            - team_effectiveness: Agent/team analysis
+            - insights: Key findings
+            - recommendations: Actionable suggestions
+    """
+    from pathlib import Path
+    from backend.utils.simulation_analyzer import SimulationAnalyzer
+    from backend.services.llm_factory import get_model_and_embedder
+    from backend.models.schemas import LLMSettings, LLMProvider
+    
+    try:
+        simulation_id = request.get("simulation_id")
+        if not simulation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="simulation_id is required"
+            )
+        
+        # Find the HTML log file
+        logs_dir = Path("logs")
+        html_files = list(logs_dir.glob(f"{simulation_id}*.html"))
+        
+        # Filter out checkpoint files
+        html_files = [f for f in html_files if "_checkpoint_step" not in f.name]
+        
+        if not html_files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Simulation log not found for ID: {simulation_id}"
+            )
+        
+        # Use the first matching file (should be only one non-checkpoint file)
+        log_path = str(html_files[0])
+        
+        # Get LLM settings from request or use defaults
+        llm_settings_dict = request.get("llm_settings", {})
+        llm_settings = LLMSettings(
+            provider=LLMProvider(llm_settings_dict.get("provider", "glm")),
+            model_name=llm_settings_dict.get("model_name", "glm-4.7"),
+            api_key=llm_settings_dict.get("api_key"),
+            temperature=llm_settings_dict.get("temperature", 0.7),
+            embedder_model=llm_settings_dict.get("embedder_model", "all-MiniLM-L6-v2")
+        )
+        
+        # Get LLM client
+        model, embedder = get_model_and_embedder(llm_settings)
+        
+        # Run analysis
+        analyzer = SimulationAnalyzer(model)
+        analysis = analyzer.analyze_simulation(log_path)
+        
+        return {
+            "success": True,
+            "simulation_id": simulation_id,
+            "log_file": html_files[0].name,
+            "analysis": analysis
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze simulation: {str(e)}"
+        )
