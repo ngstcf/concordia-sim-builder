@@ -90,10 +90,15 @@ async def run_simulation_stream(
         max_steps = config.max_steps
         start_time_progress = [time.time()]
 
+        # Variables for partial checkpointing
+        last_checkpoint_step = [0]  # Use list for mutable access
+        checkpoint_interval = 5  # Save partial results every N steps
+
         print("🎮 Running simulation...")
         print(f"   (This may take a while depending on {max_steps} steps and {len(config.agents)} agents)")
         print(f"   Each step requires multiple LLM API calls...")
-        print(f"   Progress will be shown below:\n")
+        print(f"   Progress will be shown below:")
+        print(f"   Partial checkpoints will be saved every {checkpoint_interval} steps\n")
 
         start_time = time.time()
 
@@ -146,6 +151,36 @@ async def run_simulation_stream(
                         progress_data
                     )
                     print(f"[DEBUG] Successfully queued SSE progress event")
+
+                    # Save partial checkpoint every N steps
+                    if step % checkpoint_interval == 0 and step > last_checkpoint_step[0]:
+                        last_checkpoint_step[0] = step
+                        print(f"[CHECKPOINT] Saving partial results at step {step}/{max_steps}...")
+                        try:
+                            # Get partial results from simulation object
+                            partial_results = str(sim)
+
+                            # Create partial checkpoint filename
+                            import re
+                            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            safe_premise = re.sub(r'[^\w\s-]', '', config.premise[:50])
+                            safe_premise = re.sub(r'[-\s]+', '_', safe_premise.strip())
+                            safe_premise = safe_premise[:50]
+                            agent_names = '_'.join([agent.name[:15] for agent in config.agents[:3]])
+                            if len(config.agents) > 3:
+                                agent_names += f"_and_{len(config.agents) - 3}_more"
+
+                            checkpoint_filename = f"{timestamp}_{agent_names}_{safe_premise}_checkpoint_step{step}.html"
+                            checkpoint_path = LOGS_DIR / checkpoint_filename
+
+                            # Save partial results with styles injected
+                            styled_partial = _inject_html_styles(partial_results)
+                            with open(checkpoint_path, 'w', encoding='utf-8') as f:
+                                f.write(styled_partial)
+
+                            print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename}")
+                        except Exception as checkpoint_error:
+                            print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
                 else:
                     print(f"   ✓ Initializing simulation...")
             except Exception as e:
@@ -162,6 +197,12 @@ async def run_simulation_stream(
                 get_state_callback=sync_progress_callback
             )
 
+        # Watchdog settings - detect when simulation hangs
+        # Can be overridden via WATCHDOG_TIMEOUT_SECONDS environment variable
+        import os
+        watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600'))  # Default: 10 minutes
+        last_progress_time = [time.time()]  # Use list for mutable access
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(run_simulation_blocking)
 
@@ -169,11 +210,20 @@ async def run_simulation_stream(
             while not future.done():
                 try:
                     # Get progress with timeout to check if simulation is done
-                    progress_data = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                    progress_data = await asyncio.wait_for(progress_queue.get(), timeout=5.0)
                     print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
                     yield _format_sse(EventType.STEP_PROGRESS, progress_data)
+                    # Update last progress time
+                    last_progress_time[0] = time.time()
                 except asyncio.TimeoutError:
-                    # No progress update, check if simulation is done
+                    # No progress update for 5 seconds, check for hang
+                    time_since_progress = time.time() - last_progress_time[0]
+                    if time_since_progress > watchdog_timeout:
+                        print(f"[WATCHDOG] No progress for {time_since_progress:.0f}s - simulation may be hung")
+                        print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
+                        print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
+                        # Don't kill the simulation - just warn and continue monitoring
+                    # Check if simulation is done
                     continue
 
             # Simulation done, get results

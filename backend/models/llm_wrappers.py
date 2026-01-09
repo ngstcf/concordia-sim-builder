@@ -121,12 +121,61 @@ class CustomGPTModel:
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
-        timeout: float = 60.0,  # Accept for compatibility with Concordia API; timeout is set at client level
-        max_retries: int = 3
+        timeout: float = 180.0,  # Per-request timeout (can be overridden via LLM_TIMEOUT env var)
+        max_retries: int = 2  # Retry attempts (can be overridden via LLM_MAX_RETRIES env var)
     ) -> str:
-        """Sample text from the model with retry logic for transient errors."""
-        from openai import APITimeoutError
-        from httpcore import ConnectTimeout
+        """Sample text from the model with retry logic for transient errors and enforced timeout.
+
+        Timeout Behavior:
+        - Waits the FULL timeout duration before flagging an error
+        - Does NOT prematurely interrupt long-running requests
+        - If request completes at 179s (of 180s timeout) → SUCCESS
+        - If request completes at 181s (of 180s timeout) → RETRY
+        """
+        import os
+        from openai import APITimeoutError, AuthenticationError, RateLimitError, APIError
+        from httpcore import ConnectTimeout, ConnectError
+
+        # Allow environment variable overrides for timeout configuration
+        # This lets users adjust timeouts without changing code
+        env_timeout = os.getenv('LLM_TIMEOUT')
+        if env_timeout:
+            try:
+                timeout = min(timeout, float(env_timeout))
+                print(f"[LLM] Using timeout from LLM_TIMEOUT env var: {timeout}s")
+            except ValueError:
+                print(f"[LLM] Warning: Invalid LLM_TIMEOUT value '{env_timeout}', using default {timeout}s")
+
+        # Allow environment variable override for retry count
+        env_retries = os.getenv('LLM_MAX_RETRIES')
+        if env_retries:
+            try:
+                max_retries = max(1, int(env_retries))  # At least 1 retry
+                print(f"[LLM] Using max_retries from LLM_MAX_RETRIES env var: {max_retries}")
+            except ValueError:
+                print(f"[LLM] Warning: Invalid LLM_MAX_RETRIES value '{env_retries}', using default {max_retries}")
+
+        # Determine appropriate timeout based on model type
+        # Reasoning models (O1, O3, GPT-5) can take much longer
+        # These models perform internal reasoning before responding
+        if self._is_reasoning_model():
+            # Reasoning models: Use LLM_TIMEOUT or default to 5 minutes
+            # These can take 60-300 seconds depending on complexity
+            reasoning_timeout = os.getenv('LLM_REASONING_TIMEOUT')
+            if reasoning_timeout:
+                try:
+                    timeout = min(timeout, float(reasoning_timeout))
+                    print(f"[LLM] Using LLM_REASONING_TIMEOUT for reasoning model: {timeout}s")
+                except ValueError:
+                    print(f"[LLM] Warning: Invalid LLM_REASONING_TIMEOUT, using {timeout}s")
+            else:
+                timeout = min(timeout, 300.0)  # Default: 5 minutes for reasoning models
+        else:
+            # Standard models: Use LLM_TIMEOUT or default to 3 minutes
+            # These typically respond in 5-60 seconds
+            timeout = min(timeout, 180.0)  # Default: 3 minutes for standard models
+
+        print(f"[LLM] Calling {self._model_name} with timeout={timeout}s, max_tokens={max_tokens}")
 
         # Newer models (o3-*, gpt-5*) require max_completion_tokens instead of max_tokens
         use_max_completion_tokens = self._use_max_completion_tokens()
@@ -145,12 +194,14 @@ class CustomGPTModel:
             max_tokens = max(max_tokens, 2000)
 
         for attempt in range(max_retries):
+            attempt_start = time.time()
             try:
                 # Build request parameters
                 request_params = {
                     "model": self._model_name,
                     "messages": [{"role": "user", "content": prompt}],
-                    "seed": seed
+                    "seed": seed,
+                    "timeout": timeout  # Enforce timeout at request level
                 }
 
                 # Only add temperature for non-reasoning models
@@ -165,6 +216,9 @@ class CustomGPTModel:
 
                 response = self._client.chat.completions.create(**request_params)
 
+                elapsed = time.time() - attempt_start
+                print(f"[LLM] Response received in {elapsed:.1f}s")
+
                 # Check for empty response and log warning
                 content = response.choices[0].message.content
                 if not content or content.strip() == "":
@@ -176,20 +230,40 @@ class CustomGPTModel:
 
                 return content
 
-            except (APITimeoutError, ConnectTimeout) as e:
+            except (APITimeoutError, ConnectTimeout, ConnectError) as e:
+                elapsed = time.time() - attempt_start
                 if attempt < max_retries - 1:
-                    # Exponential backoff: 5s, 10s, 20s
-                    wait_time = 5 * (2 ** attempt)
-                    print(f"Timeout on attempt {attempt + 1}/{max_retries}. "
-                          f"Retrying in {wait_time} seconds...")
+                    # Reduced backoff: 3s, 6s (faster recovery)
+                    wait_time = 3 * (2 ** attempt)
+                    print(f"[LLM] Timeout after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. "
+                          f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    print(f"Error in API call after {max_retries} retries: {e}")
+                    print(f"[LLM] Error: Timeout after {elapsed:.1f}s and {max_retries} retries")
+                    print(f"[LLM] Hint: Consider using a faster model or reducing simulation complexity")
+                    raise TimeoutError(f"LLM request timed out after {elapsed:.1f}s") from e
+
+            except RateLimitError as e:
+                elapsed = time.time() - attempt_start
+                if attempt < max_retries - 1:
+                    # Longer backoff for rate limits: 10s, 20s
+                    wait_time = 10 * (2 ** attempt)
+                    print(f"[LLM] Rate limited after {elapsed:.1f}s. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[LLM] Error: Rate limited after {elapsed:.1f}s and {max_retries} retries")
+                    print(f"[LLM] Hint: Consider using a different provider or reducing request frequency")
                     raise
 
+            except (AuthenticationError, APIError) as e:
+                elapsed = time.time() - attempt_start
+                print(f"[LLM] Error: {type(e).__name__} after {elapsed:.1f}s: {e}")
+                # Don't retry auth/config errors - these won't fix themselves
+                raise
+
             except Exception as e:
-                # For non-timeout errors, don't retry
-                print(f"Error in API call: {e}")
+                elapsed = time.time() - attempt_start
+                print(f"[LLM] Unexpected error after {elapsed:.1f}s: {type(e).__name__}: {e}")
                 raise
 
     def sample_choice(

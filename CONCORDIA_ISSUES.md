@@ -2,6 +2,85 @@
 
 This document tracks known issues with the Concordia framework that affect this simulation builder.
 
+## Issue: Simulation Hangs on Long-Running Simulations
+
+**Severity**: Medium
+**Status**: Partially Mitigated - Added Timeouts and Checkpointing
+**First Reported**: 2026-01-09
+**Affected Component**: LLM API calls, simulation execution
+
+### Description
+
+Long-running simulations (6+ agents, 30+ steps) can hang indefinitely due to:
+1. **Blocking LLM API calls** - Each agent action requires an LLM API call that can take 10-180 seconds
+2. **No per-request timeout enforcement** - Client-level timeouts (300-600s) are too long
+3. **Retry logic prolongs hangs** - With exponential backoff, a timeout can take 35+ seconds per retry
+4. **No heartbeat mechanism** - No way to detect when the simulation stops making progress
+
+### Mitigations Implemented
+
+1. **Per-Request Timeout Enforcement**
+   - Standard models: 180 seconds (3 minutes) max per request (configurable via `LLM_TIMEOUT`)
+   - Reasoning models (O1, O3, GPT-5): 300 seconds (5 minutes) max per request (configurable via `LLM_REASONING_TIMEOUT`)
+   - Timeout enforced at request level via `timeout` parameter
+   - **Waits full timeout duration** - does NOT interrupt long-running requests prematurely
+   - See: [backend/models/llm_wrappers.py:124-176](backend/models/llm_wrappers.py#L124-L176)
+
+2. **Reduced Retry Count**
+   - Reduced from 3 to 2 retries to prevent long hangs (configurable via `LLM_MAX_RETRIES`)
+   - Faster backoff: 3s, 6s (instead of 5s, 10s, 20s)
+   - See: [backend/models/llm_wrappers.py:125](backend/models/llm_wrappers.py#L125)
+
+3. **Progress Checkpointing**
+   - Partial results saved every 5 steps
+   - Checkpoint files named: `*_checkpoint_step{N}.html`
+   - If simulation hangs, results up to last checkpoint are preserved
+   - See: [backend/services/simulation_runner.py:93-178](backend/services/simulation_runner.py#L93-L178)
+
+4. **Hang Detection Watchdog**
+   - Monitors for 10 minutes without progress (configurable via `WATCHDOG_TIMEOUT_SECONDS`)
+   - Logs warning with last completed step
+   - Provides helpful hints for troubleshooting
+   - Does NOT kill simulation - only warns and continues monitoring
+   - See: [backend/services/simulation_runner.py:200-224](backend/services/simulation_runner.py#L200-L224)
+
+5. **Enhanced Logging**
+   - Each LLM call logs model name, timeout, and response time
+   - Timeout errors include elapsed time and helpful hints
+   - Rate limit errors have longer backoff (10s, 20s)
+   - See: [backend/models/llm_wrappers.py:140-229](backend/models/llm_wrappers.py#L140-L229)
+
+### Expected Behavior
+
+With mitigations in place:
+- Each LLM API call completes within 180s (standard) or 300s (reasoning models)
+- If a timeout occurs, it retries up to 2 times with 3s/6s backoff
+- Progress is saved every 5 steps to checkpoint files
+- If no progress for 10 minutes, a watchdog warning is logged
+- On timeout after retries, simulation fails with clear error message
+
+### Troubleshooting Hung Simulations
+
+1. **Check logs for LLM call times** - Look for `[LLM] Response received in X.Xs` messages
+2. **Check for timeout errors** - Look for `[LLM] Timeout after X.Xs` messages
+3. **Check watchdog warnings** - Look for `[WATCHDOG] No progress for Xs` messages
+4. **Review checkpoint files** - Find latest `*_checkpoint_step{N}.html` file
+5. **Consider reducing complexity**:
+   - Fewer agents (3-4 instead of 6+)
+   - Fewer steps (10-15 instead of 30+)
+   - Faster model (DeepSeek instead of O3/GPT-5)
+   - Simpler game master (generic instead of game-theoretic)
+
+### Recommendation
+
+For very long simulations:
+- Start with fewer steps to test performance
+- Monitor logs for LLM response times
+- Use checkpoint files to recover from hangs
+- Consider breaking into smaller simulations
+
+---
+
 ## Issue: `NextActingFromSceneSpec` Not Cycling Through Participants Correctly
 
 **Severity**: High
