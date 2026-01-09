@@ -209,10 +209,59 @@ Game-theoretic simulations automatically track action choices (COOPERATE/DEFECT,
 **Frontend Configuration:**
 
 ```bash
-# Simulation timeout in milliseconds (default: 1800000 = 30 minutes)
-# Increase this for very long simulations (e.g., 3600000 = 60 minutes)
-VITE_SIMULATION_TIMEOUT=1800000
+# Simulation timeout in milliseconds (default: 10800000 = 3 hours)
+# Increase this for very long simulations
+VITE_SIMULATION_TIMEOUT=10800000
 ```
+
+### Simulation Checkpointing and Hang Prevention
+
+The Simulation Builder includes robust features to prevent data loss from long-running simulations:
+
+**Automatic Checkpointing:**
+- Partial results are saved every 5 steps to `logs/` directory
+- Checkpoint files include `_checkpoint_step{N}.html` suffix
+- Enables recovery if simulation encounters issues
+- No manual intervention required
+
+**Watchdog Monitoring:**
+- Detects when simulation hangs (no progress for 10 minutes)
+- Configurable via `WATCHDOG_TIMEOUT_SECONDS` environment variable
+- Prevents indefinite waiting on stuck simulations
+
+**Per-Request Timeout Enforcement:**
+- Default: 180 seconds per LLM request (standard models)
+- Default: 300 seconds per LLM request (reasoning models like O1, O3)
+- Configurable via `LLM_TIMEOUT` and `LLM_REASONING_TIMEOUT` environment variables
+- System waits FULL timeout before flagging error (no premature interruption)
+
+**Configuration:**
+
+```bash
+# Per-LLM-request timeout in seconds (default: 180 = 3 minutes)
+LLM_TIMEOUT=180
+
+# Per-LLM-request timeout for reasoning models (default: 300 = 5 minutes)
+LLM_REASONING_TIMEOUT=300
+
+# Maximum retry attempts for LLM requests (default: 2)
+LLM_MAX_RETRIES=2
+
+# Simulation watchdog timeout in seconds (default: 600 = 10 minutes)
+WATCHDOG_TIMEOUT_SECONDS=600
+
+# Frontend simulation timeout in milliseconds (default: 10800000 = 3 hours)
+VITE_SIMULATION_TIMEOUT=10800000
+```
+
+**Important Notes:**
+- The system waits the FULL timeout duration before flagging an error
+- If a request completes at 179s (of 180s timeout) → SUCCESS
+- If a request completes at 181s (of 180s timeout) → RETRY
+- Checkpoints are saved automatically - no configuration needed
+- All timeout values are configurable via environment variables
+
+For detailed configuration guidance, see [docs/TIMEOUT_CONFIGURATION.md](docs/TIMEOUT_CONFIGURATION.md).
 
 ## 🚀 Running the Application
 
