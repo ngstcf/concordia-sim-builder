@@ -417,22 +417,56 @@ Frontend runs at: `http://localhost:5173`
 
 ## 📚 API Endpoints
 
+### Core Endpoints
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
 | `/api/simulations/prefabs` | GET | List available entity/game master prefabs |
 | `/api/simulations/providers` | GET | List supported LLM providers |
+| `/api/simulations/models/{provider}` | GET | List available models for a provider |
 | `/api/simulations/validate` | POST | Validate simulation configuration |
 | `/api/simulations/execute` | POST | Run simulation with **real-time progress streaming** ✨ |
 | `/api/simulations/execute-simple` | POST | Run simulation (non-streaming, for testing) |
 | `/api/simulations/export-template` | GET | Get blank configuration template |
 | `/api/simulations/import` | POST | Import configuration from JSON |
-| `/api/simulations/recent` | GET | List recent simulation logs |
-| `/api/simulations/logs/{filename}` | GET | Get specific simulation log HTML |
-| `/api/simulations/logs/{filename}/analytics` | GET | Get analytics for simulation log |
+
+### Simulation Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/simulations/status` | GET | Get status of all running simulations |
 | `/api/simulations/status/{task_id}` | GET | Get status of specific simulation |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation |
+
+### Logs & Analytics
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/recent` | GET | List recent simulation logs |
+| `/api/simulations/logs/{filename}` | GET | Get specific simulation log HTML |
+| `/api/simulations/logs/{filename}/analytics` | GET | Get analytics for simulation log |
+| `/api/simulations/logs/checkpoints` | GET | List checkpoint files (with filter options) |
+| `/api/simulations/logs/checkpoints` | DELETE | Delete checkpoint files (with filter options) |
+
+### Grounded Variables
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/grounded-variables/extract` | POST | Extract variable history from simulation log using AI |
+| `/api/simulations/grounded-variables/{simulation_id}` | GET | Get grounded variables data for simulation |
+
+### Component System
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/components/templates` | GET | List available psychological component templates |
+| `/api/simulations/components/validate` | POST | Validate component parameters |
+
+### Templates
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/simulations/templates/peace-negotiation` | GET | Peace negotiation template |
 | `/api/simulations/templates/coffee-shop` | GET | Coffee shop demo template |
 | `/api/simulations/templates/planning-agent` | GET | Planning agent template |
@@ -453,8 +487,6 @@ Frontend runs at: `http://localhost:5173`
 | `/api/simulations/templates/grounded-variables-demo` | GET | Grounded variables tracking demo |
 | `/api/simulations/templates/phishing-attack-simulation` | GET | Phishing attack simulation (cybersecurity) |
 | `/api/simulations/templates/urban-gentrification` | GET | Urban gentrification simulation (housing policy) |
-| `/api/simulations/components/templates` | GET | List available psychological component templates |
-| `/api/simulations/components/validate` | POST | Validate component parameters |
 
 ## 🎨 Supported Prefabs
 

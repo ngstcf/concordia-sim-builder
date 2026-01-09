@@ -1051,164 +1051,302 @@ company is hesitant about losing independence.
                         API Reference
                     </h2>
 
-                    <div class="overflow-x-auto">
+                    <!-- Core Endpoints -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4 mt-8">Core Endpoints</h3>
+                    <div class="overflow-x-auto mb-8">
                         <table class="min-w-full bg-white rounded-lg shadow-sm">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                                        Endpoint
-                                    </th>
-                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                                        Method
-                                    </th>
-                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                                        Description
-                                    </th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /health
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Health check
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/health</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Health check</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/prefabs
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        List available prefabs
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/prefabs</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List available entity/game master prefabs</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/providers
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        List LLM providers
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/providers</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List supported LLM providers</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/validate
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                            POST
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Validate configuration
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/models/{provider}</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List available models for a provider</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/execute
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                            POST
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Run simulation with <strong>real-time progress streaming</strong> ✨
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/validate</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Validate simulation configuration</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/execute-simple
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                            POST
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Run simulation (non-streaming, for testing)
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/execute</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Run simulation with <strong>real-time progress streaming</strong> ✨</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/recent
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        List recent simulation logs ✨
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/execute-simple</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Run simulation (non-streaming, for testing)</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/logs/{filename}
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Get specific simulation log HTML ✨
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/export-template</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get blank configuration template</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/logs/{filename}/analytics
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Get analytics for simulation log ✨
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/import</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Import configuration from JSON</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Simulation Management -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Simulation Management</h3>
+                    <div class="overflow-x-auto mb-8">
+                        <table class="min-w-full bg-white rounded-lg shadow-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/status</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get status of all running simulations</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/export-template
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                                            GET
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Get blank template
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/status/{task_id}</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get status of specific simulation</td>
                                 </tr>
                                 <tr>
-                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">
-                                        /api/simulations/import
-                                    </td>
-                                    <td class="px-4 py-3 text-sm">
-                                        <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                            POST
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        Import configuration
-                                    </td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/cancel/{task_id}</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Cancel a running simulation</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Logs & Analytics -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Logs & Analytics</h3>
+                    <div class="overflow-x-auto mb-8">
+                        <table class="min-w-full bg-white rounded-lg shadow-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/recent</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List recent simulation logs</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/logs/{filename}</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get specific simulation log HTML</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/logs/{filename}/analytics</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get analytics for simulation log ✨</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/logs/checkpoints</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List checkpoint files (with filter options)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/logs/checkpoints</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded">DELETE</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Delete checkpoint files (with filter options)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Grounded Variables -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Grounded Variables</h3>
+                    <div class="overflow-x-auto mb-8">
+                        <table class="min-w-full bg-white rounded-lg shadow-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/grounded-variables/extract</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Extract variable history from simulation log using AI</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/grounded-variables/{simulation_id}</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Get grounded variables data for simulation</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Component System -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Component System</h3>
+                    <div class="overflow-x-auto mb-8">
+                        <table class="min-w-full bg-white rounded-lg shadow-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/components/templates</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">List available psychological component templates</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/components/validate</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">POST</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Validate component parameters</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Templates -->
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Templates</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white rounded-lg shadow-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Endpoint</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Method</th>
+                                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/peace-negotiation</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Peace negotiation template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/coffee-shop</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Coffee shop demo template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/planning-agent</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Planning agent template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/scripted-entity</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Scripted entity (focus group moderator) template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/context-aware-moderator</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Context-aware moderator (support group) template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/dialogic-conversation</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Dialogic conversation template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/strategic-game</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Strategic game theory template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/interviewer</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Interview/survey template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/formative-memories</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Character backstory template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/marketplace</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Marketplace trading template</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/state-formation</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">State formation simulation (SDG 16)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/labor-action</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Labor strike simulation (SDG 8)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/commons-dilemma</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Fishery management simulation (SDG 12/13)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/disaster-response</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Flood evacuation simulation (SDG 11/13)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/inequality-mobility</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Educational opportunity simulation (SDG 10)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/vaccine-hesitancy</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Vaccine hesitancy research demo</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/nested-simulation-demo</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Nested simulation (PhoneGameMaster) demo</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/grounded-variables-demo</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Grounded variables tracking demo</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/phishing-attack-simulation</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Phishing attack simulation (cybersecurity)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-800">/api/simulations/templates/urban-gentrification</td>
+                                    <td class="px-4 py-3 text-sm"><span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">GET</span></td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">Urban gentrification simulation (housing policy)</td>
                                 </tr>
                             </tbody>
                         </table>
