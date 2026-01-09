@@ -543,7 +543,7 @@ concordia-sim-builder/
 │   │   ├── simulation_builder.py   # Simulation construction
 │   │   ├── simulation_runner.py    # Execution with streaming + logging
 │   │   ├── simulation_state.py     # Task state management
-│   │   └── llm_factory.py          # LLM provider factory
+│   │   └── llm_factory.py          # LLM provider factory (multi-provider support)
 │   └── main.py                      # FastAPI app with .env loading
 ├── frontend/
 │   ├── src/
@@ -567,6 +567,55 @@ concordia-sim-builder/
 ├── negotiatepeace.py                # Original CLI simulation
 └── requirements.txt                 # Python dependencies
 ```
+
+## 🔌 LLM Integration Architecture
+
+### Why We Built Our Own LLM Factory
+
+The Simulation Builder includes a custom multi-provider LLM integration layer instead of using Concordia's built-in `GptLanguageModel`. This architectural decision provides significant advantages:
+
+**Business Case:**
+
+1. **Cost Optimization** (10-50× savings)
+   - **DeepSeek**: Superior cost alternative to GPT-4-class models at a fraction of the price
+   - **Ollama**: Free local execution for privacy-sensitive simulations
+   - **Azure OpenAI**: Enterprise pricing and compliance requirements
+   - **Model Choice**: Select the right provider for each use case
+
+2. **Geographic & Compliance Flexibility**
+   - **Azure OpenAI**: Data residency requirements (EU, Asia, etc.)
+   - **Anthropic**: Alternative provider for risk diversification
+   - **Gemini**: Google Cloud integration and enterprise agreements
+   - **Ollama**: Air-gapped environments and offline operation
+
+3. **Model-Specific Optimizations**
+   - **O3/GPT-5 Models**: Automatic detection, correct API parameters (`max_completion_tokens`, no `temperature`)
+   - **Token Management**: Generous limits (2k-10k minimum) prevent cutoff responses
+   - **Error Handling**: Retry logic, helpful debug warnings, empty response detection
+
+4. **Production Reliability**
+   - **Fallback Options**: Switch providers if one is down or rate-limited
+   - **Enhanced Logging**: Actionable error messages for troubleshooting
+   - **Consistent Interface**: Uniform API across all providers
+
+**Technical Implementation:**
+
+```
+backend/models/llm_wrappers.py     # Provider-specific wrappers (OpenAI, Azure, Anthropic, Gemini, GLM)
+backend/services/llm_factory.py    # Factory pattern for provider selection
+backend/models/schemas.py          # LLMSettings with provider-specific fields
+```
+
+**Supported Providers:**
+- **OpenAI**: GPT-4, GPT-4-Turbo, GPT-3.5-Turbo
+- **Azure OpenAI**: Enterprise-grade OpenAI with data residency
+- **DeepSeek**: Cost-effective reasoning models (recommended)
+- **Anthropic**: Claude 3.5 Sonnet, Claude Opus
+- **Gemini**: Google Gemini 1.5/2.0 models
+- **Ollama**: Local LLaMA, Mistral, and other open-source models
+
+**Why Not Concordia's Built-in?**
+Concordia's `GptLanguageModel` only supports OpenAI's API, lacks Azure support, has no alternative provider options, and uses a rigid configuration model. Our custom implementation enables the multi-provider flexibility required for production deployments across different organizational needs, cost constraints, and compliance requirements.
 
 ## 🤝 Contributing
 
