@@ -227,6 +227,7 @@ The Simulation Builder includes robust features to prevent data loss from long-r
 **Watchdog Monitoring:**
 - Detects when simulation hangs (no progress for 10 minutes)
 - Configurable via `WATCHDOG_TIMEOUT_SECONDS` environment variable
+- Can be disabled via `WATCHDOG_ENABLED=false` if warnings interfere with simulations
 - Prevents indefinite waiting on stuck simulations
 
 **Per-Request Timeout Enforcement:**
@@ -249,6 +250,10 @@ LLM_MAX_RETRIES=2
 
 # Simulation watchdog timeout in seconds (default: 600 = 10 minutes)
 WATCHDOG_TIMEOUT_SECONDS=600
+
+# Enable/disable watchdog monitoring (default: true)
+# Set to 'false' to disable hang prevention if it interferes with simulations
+WATCHDOG_ENABLED=true
 
 # Frontend simulation timeout in milliseconds (default: 10800000 = 3 hours)
 VITE_SIMULATION_TIMEOUT=10800000
