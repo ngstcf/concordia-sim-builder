@@ -92,8 +92,14 @@ docs/
 test_glm.py
 test_glm_integration.py
 test_glm_models_concordia.pyarxiv_paper.md
+test.py
+test2.py
 images/
 backend/tests/
+
+# Development backups
+*.bak
+requirements-dev.bak
 
 # Analysis and reports
 analyze_simulation.py
