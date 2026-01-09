@@ -10,11 +10,12 @@
 - ✅ Scripted entity prefab (`basic_scripted__Entity`)
 - ✅ SSE streaming for simulation execution
 - ✅ Analytics and recent simulations endpoints
-
-### Known Issues
-- ⚠️ GLM models may return empty responses (not recommended for production)
-- ⚠️ Ollama with certain models (deepseek-r1:70b) may have compatibility issues
-- ⚠️ Large model simulations (>15 steps, 5+ agents) may timeout on slower hardware
+- ✅ Grounded variables tracking with AI-powered post-processing
+- ✅ Checkpoint management for long-running simulations
+- ✅ Watchdog monitoring with configurable timeouts
+- ✅ Dashboard visualizations (Timeline, Statistical Dashboard, Natural Language Summary)
+- ✅ Cooperation rate chart and grounded variables chart
+- ✅ Responsive UI design for all screen sizes
 
 ### Template List (Validated)
 1. Peace Negotiation - Russia-Ukraine talks
