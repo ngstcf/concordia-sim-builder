@@ -199,8 +199,10 @@ async def run_simulation_stream(
 
         # Watchdog settings - detect when simulation hangs
         # Can be overridden via WATCHDOG_TIMEOUT_SECONDS environment variable
+        # Can be disabled via WATCHDOG_ENABLED environment variable
         import os
-        watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600'))  # Default: 10 minutes
+        watchdog_enabled = os.getenv('WATCHDOG_ENABLED', 'true').lower() == 'true'
+        watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600')) if watchdog_enabled else None  # Default: 10 minutes
         last_progress_time = [time.time()]  # Use list for mutable access
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -218,7 +220,7 @@ async def run_simulation_stream(
                 except asyncio.TimeoutError:
                     # No progress update for 5 seconds, check for hang
                     time_since_progress = time.time() - last_progress_time[0]
-                    if time_since_progress > watchdog_timeout:
+                    if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
                         print(f"[WATCHDOG] No progress for {time_since_progress:.0f}s - simulation may be hung")
                         print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
                         print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")

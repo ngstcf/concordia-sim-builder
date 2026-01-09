@@ -138,10 +138,11 @@ class CustomGPTModel:
 
         # Allow environment variable overrides for timeout configuration
         # This lets users adjust timeouts without changing code
+        # Environment variable takes precedence over passed timeout value
         env_timeout = os.getenv('LLM_TIMEOUT')
         if env_timeout:
             try:
-                timeout = min(timeout, float(env_timeout))
+                timeout = float(env_timeout)
                 print(f"[LLM] Using timeout from LLM_TIMEOUT env var: {timeout}s")
             except ValueError:
                 print(f"[LLM] Warning: Invalid LLM_TIMEOUT value '{env_timeout}', using default {timeout}s")
@@ -159,21 +160,18 @@ class CustomGPTModel:
         # Reasoning models (O1, O3, GPT-5) can take much longer
         # These models perform internal reasoning before responding
         if self._is_reasoning_model():
-            # Reasoning models: Use LLM_TIMEOUT or default to 5 minutes
+            # Reasoning models: Use LLM_REASONING_TIMEOUT or default to 5 minutes
             # These can take 60-300 seconds depending on complexity
             reasoning_timeout = os.getenv('LLM_REASONING_TIMEOUT')
             if reasoning_timeout:
                 try:
-                    timeout = min(timeout, float(reasoning_timeout))
+                    timeout = float(reasoning_timeout)
                     print(f"[LLM] Using LLM_REASONING_TIMEOUT for reasoning model: {timeout}s")
                 except ValueError:
                     print(f"[LLM] Warning: Invalid LLM_REASONING_TIMEOUT, using {timeout}s")
-            else:
-                timeout = min(timeout, 300.0)  # Default: 5 minutes for reasoning models
-        else:
-            # Standard models: Use LLM_TIMEOUT or default to 3 minutes
-            # These typically respond in 5-60 seconds
-            timeout = min(timeout, 180.0)  # Default: 3 minutes for standard models
+            elif timeout < 300.0:
+                # Ensure minimum timeout for reasoning models
+                timeout = 300.0  # Default: 5 minutes for reasoning models
 
         print(f"[LLM] Calling {self._model_name} with timeout={timeout}s, max_tokens={max_tokens}")
 

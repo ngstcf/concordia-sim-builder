@@ -46,6 +46,15 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
         if temperature is None:
             temperature = self._temperature
 
+        # Override timeout with LLM_TIMEOUT environment variable if set
+        # This allows global timeout configuration without code changes
+        env_timeout = os.getenv('LLM_TIMEOUT')
+        if env_timeout:
+            try:
+                timeout = float(env_timeout)
+            except ValueError:
+                pass  # Use the provided timeout
+
         # Call the underlying model's sample_text with the temperature
         return self._model.sample_text(
             prompt,
