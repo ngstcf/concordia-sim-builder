@@ -276,7 +276,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
             onClick={() => handleLoadSimulation(log.filename)}
           >
-            <div className="flex items-start justify-between gap-3 w-full">
+            <div className="flex items-start justify-between gap-3 max-w-full">
               <div className="flex-1 min-w-0">
                 <h4 className="text-sm font-medium text-gray-900 break-all">
                   {extractTitle(log.filename)}
@@ -307,7 +307,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 className="p-4 hover:bg-amber-50 transition-colors cursor-pointer bg-amber-50/30"
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
-                <div className="flex items-start justify-between gap-3 w-full">
+                <div className="flex items-start justify-between gap-3 max-w-full">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-start gap-2 min-w-0">
