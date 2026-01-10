@@ -24,6 +24,9 @@ export default function GameMasterConfig() {
   useEffect(() => {
     if (config.game_master.grounded_variables) {
       setVariables(config.game_master.grounded_variables.map((v, i) => ({ ...v, id: `var-${i}` })));
+    } else {
+      // Clear variables when template has none
+      setVariables([]);
     }
   }, [config.game_master.grounded_variables]);
 
