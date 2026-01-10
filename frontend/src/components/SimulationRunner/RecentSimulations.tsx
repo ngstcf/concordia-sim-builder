@@ -309,7 +309,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
               >
                 <div className="flex items-center justify-between gap-3 w-full">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
