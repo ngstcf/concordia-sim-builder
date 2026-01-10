@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import Editor from '@monaco-editor/react';
 import type { VariableConfig } from '../../types/simulation';
 
 interface VariableConfigWithId extends VariableConfig {
@@ -784,28 +785,36 @@ export default function GameMasterConfig() {
                     </span>
                   )}
                 </label>
-                <textarea
-                  id="gm-parameters"
-                  rows={8}
-                  className={`block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 sm:text-sm font-mono text-xs ${
-                    jsonError ? 'border-red-300 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
-                  }`}
-                  value={config.game_master.parameters ? JSON.stringify(config.game_master.parameters, null, 2) : ''}
-                  onChange={(e) => {
-                    try {
-                      const params = e.target.value ? JSON.parse(e.target.value) : {};
-                      setGameMaster({ ...config.game_master, parameters: params });
-                      setJsonError(null);
-                    } catch (err) {
-                      setJsonError('Invalid JSON: ' + (err as Error).message);
-                    }
-                  }}
-                  placeholder={`{
-  "scene_type": {
-    "name": "decision"
-  }
-}`}
-                />
+
+                <div className="border border-gray-300 rounded-md overflow-hidden" style={{ height: '300px' }}>
+                  <Editor
+                    height="300px"
+                    defaultLanguage="json"
+                    value={config.game_master.parameters ? JSON.stringify(config.game_master.parameters, null, 2) : ''}
+                    onChange={(value) => {
+                      try {
+                        const params = value ? JSON.parse(value) : {};
+                        setGameMaster({ ...config.game_master, parameters: params });
+                        setJsonError(null);
+                      } catch (err) {
+                        setJsonError('Invalid JSON: ' + (err as Error).message);
+                      }
+                    }}
+                    theme="vs-light"
+                    options={{
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 12,
+                      lineNumbers: 'on',
+                      folding: true,
+                      automaticLayout: true,
+                      tabSize: 2,
+                      wordWrap: 'on',
+                      formatOnPaste: true,
+                      formatOnType: true,
+                    }}
+                  />
+                </div>
 
                 {jsonError && (
                   <p className="mt-1 text-xs text-red-600">
