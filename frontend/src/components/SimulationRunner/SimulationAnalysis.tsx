@@ -2,7 +2,7 @@
  * SimulationAnalysis Component
  * LLM-powered deep content analysis of simulation logs
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { analyzeSimulation } from '../../utils/api';
 import type { LLMSettings } from '../../types/simulation';
 
@@ -16,6 +16,13 @@ export default function SimulationAnalysis({ simulationId, logFilename, llmSetti
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset analysis state when simulation changes
+  useEffect(() => {
+    setAnalysis(null);
+    setError(null);
+    setAnalyzing(false);
+  }, [simulationId]);
 
   const handleAnalyze = async () => {
     if (!simulationId) {
