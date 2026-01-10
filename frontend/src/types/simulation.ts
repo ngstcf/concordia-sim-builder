@@ -89,6 +89,16 @@ export interface GameMasterConfig {
   acting_order: ActingOrder;
   parameters: Record<string, any>;
   grounded_variables?: VariableConfig[];
+  critical_decision_points?: CriticalDecisionPoint[];
+}
+
+// Critical Decision Point
+export interface CriticalDecisionPoint {
+  step: number;
+  description: string;
+  options: string[];
+  // Legacy format support (Urban Gentrification uses 'event' instead of description/options)
+  event?: string;
 }
 
 // Main Simulation Configuration

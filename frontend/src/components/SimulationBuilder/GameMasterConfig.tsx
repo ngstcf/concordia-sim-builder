@@ -27,17 +27,22 @@ export default function GameMasterConfig() {
     }
   }, [config.game_master.grounded_variables]);
 
-  // Get critical decision points from parameters
+  // Get critical decision points from game_master (can be at root level or in parameters)
   const getCriticalDecisionPoints = (): Array<{step: number; description: string; options: string[]}> => {
+    // Check at game master root level first (Urban Gentrification format)
+    if ((config.game_master as any).critical_decision_points) {
+      return (config.game_master as any).critical_decision_points;
+    }
+    // Fall back to parameters format (newer format)
     const params = config.game_master.parameters || {};
     return params.critical_decision_points || [];
   };
 
   const setCriticalDecisionPoints = (points: Array<{step: number; description: string; options: string[]}>) => {
-    const params = config.game_master.parameters || {};
+    // Store at game master root level to match schema and existing templates
     setGameMaster({
       ...config.game_master,
-      parameters: { ...params, critical_decision_points: points }
+      critical_decision_points: points as any
     });
   };
 
@@ -546,61 +551,86 @@ export default function GameMasterConfig() {
                           </p>
                         </div>
 
-                        {/* Description */}
-                        <div className="mb-3">
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Decision Description
-                          </label>
-                          <textarea
-                            rows={2}
-                            className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
-                            value={decision.description}
-                            onChange={(e) => updateCriticalDecisionPoint(decisionIndex, { description: e.target.value })}
-                            placeholder="e.g., Budget allocation vote - Council must decide between competing priorities"
-                          />
-                        </div>
-
-                        {/* Options */}
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-xs font-medium text-gray-700">
-                              Available Options
+                        {/* Description or Event (legacy format support) */}
+                        {(decision as any).event ? (
+                          <div className="mb-3">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Event (Legacy Format)
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => addOptionToDecision(decisionIndex)}
-                              className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
-                            >
-                              + Add Option
-                            </button>
+                            <div className="bg-yellow-50 p-2 rounded border border-yellow-200 mb-2">
+                              <p className="text-xs text-yellow-800">
+                                ⚠️ This decision point uses the legacy event format. Consider converting to the new format with description and options.
+                              </p>
+                            </div>
+                            <textarea
+                              rows={3}
+                              className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
+                              value={(decision as any).event}
+                              onChange={(e) => updateCriticalDecisionPoint(decisionIndex, { event: e.target.value } as any)}
+                              placeholder="Full event description with outcome"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              The complete event text including the decision and its outcome
+                            </p>
                           </div>
-
-                          {decision.options.map((option, optionIndex) => (
-                            <div key={optionIndex} className="flex items-center gap-2 mb-2">
-                              <input
-                                type="text"
-                                className="flex-1 border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
-                                value={option}
-                                onChange={(e) => updateDecisionOption(decisionIndex, optionIndex, e.target.value)}
-                                placeholder={`Option ${optionIndex + 1}`}
+                        ) : (
+                          <>
+                            <div className="mb-3">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Decision Description
+                              </label>
+                              <textarea
+                                rows={2}
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
+                                value={decision.description}
+                                onChange={(e) => updateCriticalDecisionPoint(decisionIndex, { description: e.target.value })}
+                                placeholder="e.g., Budget allocation vote - Council must decide between competing priorities"
                               />
-                              {decision.options.length > 1 && (
+                            </div>
+
+                            {/* Options */}
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <label className="block text-xs font-medium text-gray-700">
+                                  Available Options
+                                </label>
                                 <button
                                   type="button"
-                                  onClick={() => removeDecisionOption(decisionIndex, optionIndex)}
-                                  className="text-red-400 hover:text-red-600 text-sm"
-                                  title="Remove option"
+                                  onClick={() => addOptionToDecision(decisionIndex)}
+                                  className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
                                 >
-                                  ✕
+                                  + Add Option
                                 </button>
-                              )}
-                            </div>
-                          ))}
+                              </div>
 
-                          <p className="mt-1 text-xs text-gray-500">
-                            Agents will choose from these options at the decision point
-                          </p>
-                        </div>
+                              {decision.options.map((option, optionIndex) => (
+                                <div key={optionIndex} className="flex items-center gap-2 mb-2">
+                                  <input
+                                    type="text"
+                                    className="flex-1 border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                    value={option}
+                                    onChange={(e) => updateDecisionOption(decisionIndex, optionIndex, e.target.value)}
+                                    placeholder={`Option ${optionIndex + 1}`}
+                                  />
+                                  {decision.options.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeDecisionOption(decisionIndex, optionIndex)}
+                                      className="text-red-400 hover:text-red-600 text-sm"
+                                      title="Remove option"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                Agents will choose from these options at the decision point
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
