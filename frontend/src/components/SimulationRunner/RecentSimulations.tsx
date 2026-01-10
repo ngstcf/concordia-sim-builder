@@ -278,7 +278,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
           >
             <div className="flex items-start justify-between gap-3 max-w-full">
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-gray-900 break-all">
+                <h4 className="text-sm font-medium text-gray-900 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   {extractTitle(log.filename)}
                 </h4>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
@@ -314,7 +314,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                           CHECKPOINT
                         </span>
-                        <h4 className="text-sm font-medium text-gray-900 break-all flex-1">
+                        <h4 className="text-sm font-medium text-gray-900 break-all flex-1" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                           {extractTitle(checkpoint.filename)}
                         </h4>
                         {extractCheckpointStep(checkpoint.filename) && (
