@@ -3004,6 +3004,8 @@ async def get_checkpoint_files():
     """
     Get list of all checkpoint files in the logs directory.
 
+    Includes regular checkpoints, emergency checkpoints, and watchdog emergency files.
+
     Returns:
         List of checkpoint files with metadata
     """
@@ -3019,13 +3021,18 @@ async def get_checkpoint_files():
                 "total_size": 0
             }
 
-        # Find all checkpoint files
+        # Find all checkpoint files (regular, emergency, and watchdog)
         checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
+        emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
+        watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
+
+        # Combine all checkpoint types
+        all_checkpoint_files = checkpoint_files + emergency_files + watchdog_files
 
         checkpoints = []
         total_size = 0
 
-        for file_path in checkpoint_files:
+        for file_path in all_checkpoint_files:
             stat = file_path.stat()
             checkpoints.append({
                 "filename": file_path.name,
@@ -3059,8 +3066,10 @@ async def delete_checkpoint_files():
     """
     Delete all checkpoint files from the logs directory.
 
-    Checkpoint files are incremental saves created during simulation
-    and have filenames ending with '_checkpoint_stepN.html'.
+    Checkpoint files include:
+    - Regular checkpoints: '*_checkpoint_stepN.html'
+    - Emergency checkpoints: '*_EMERGENCY_CHECKPOINT.html'
+    - Watchdog emergency: '*_WATCHDOG_EMERGENCY*.html'
 
     Returns:
         Summary of deleted files
@@ -3077,13 +3086,18 @@ async def delete_checkpoint_files():
                 "deleted_count": 0
             }
 
-        # Find all checkpoint files
+        # Find all checkpoint files (regular, emergency, and watchdog)
         checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
+        emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
+        watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
+
+        # Combine all checkpoint types
+        all_checkpoint_files = checkpoint_files + emergency_files + watchdog_files
 
         deleted_count = 0
         deleted_files = []
 
-        for file_path in checkpoint_files:
+        for file_path in all_checkpoint_files:
             try:
                 file_path.unlink()
                 deleted_count += 1
