@@ -276,9 +276,9 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
             onClick={() => handleLoadSimulation(log.filename)}
           >
-            <div className="flex items-center justify-between gap-3 w-full">
-              <div className="flex-1 min-w-0 overflow-hidden">
-                <h4 className="text-sm font-medium text-gray-900 truncate">
+            <div className="flex items-start justify-between gap-3 w-full">
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-medium text-gray-900 break-words">
                   {extractTitle(log.filename)}
                 </h4>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
@@ -307,17 +307,15 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 className="p-4 hover:bg-amber-50 transition-colors cursor-pointer bg-amber-50/30"
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
-                <div className="flex items-center justify-between gap-3 w-full">
+                <div className="flex items-start justify-between gap-3 w-full">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <h4 className="text-sm font-medium text-gray-900 truncate">
-                          {extractTitle(checkpoint.filename)}
-                        </h4>
-                      </div>
+                      <h4 className="text-sm font-medium text-gray-900 break-words">
+                        {extractTitle(checkpoint.filename)}
+                      </h4>
                       {extractCheckpointStep(checkpoint.filename) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-900 flex-shrink-0">
                           {extractCheckpointStep(checkpoint.filename)}
