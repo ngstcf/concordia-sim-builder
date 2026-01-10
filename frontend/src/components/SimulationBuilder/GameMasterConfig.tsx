@@ -274,20 +274,19 @@ export default function GameMasterConfig() {
 
         {/* Grounded Variables - optional advanced feature */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">
-              <span className="flex items-center">
-                <svg className="h-4 w-4 text-orange-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Grounded Variables
-                <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Advanced</span>
-              </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center flex-shrink-0">
+              <svg className="h-4 w-4 text-orange-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Grounded Variables
+              <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Advanced</span>
             </label>
+            <div className="flex-grow"></div>
             <button
               type="button"
               onClick={() => setShowVariables(!showVariables)}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0"
             >
               {showVariables ? '− Hide' : '+ Show'}
             </button>
@@ -478,22 +477,21 @@ export default function GameMasterConfig() {
 
         {/* Critical Decision Points - available for all Game Master types */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">
-              <span className="flex items-center">
-                <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                Critical Decision Points
-                {config.game_master.prefab !== 'generic__GameMaster' && (
-                  <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
-                )}
-              </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center flex-shrink-0">
+              <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Critical Decision Points
+              {config.game_master.prefab !== 'generic__GameMaster' && (
+                <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
+              )}
             </label>
+            <div className="flex-grow"></div>
             <button
               type="button"
               onClick={() => setShowCriticalDecisions(!showCriticalDecisions)}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-blue-600 hover:text-blue-800 flex-shrink-0"
             >
               {showCriticalDecisions ? '− Hide' : '+ Show'}
             </button>
@@ -652,17 +650,15 @@ export default function GameMasterConfig() {
 
         {/* Extra Components - grounded_variables_intro for all Game Master types */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">
-              <span className="flex items-center">
-                <svg className="h-4 w-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Grounded Variables Introduction
-                {config.game_master.prefab !== 'generic__GameMaster' && (
-                  <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
-                )}
-              </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center">
+              <svg className="h-4 w-4 text-green-500 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Grounded Variables Introduction
+              {config.game_master.prefab !== 'generic__GameMaster' && (
+                <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
+              )}
             </label>
           </div>
 
