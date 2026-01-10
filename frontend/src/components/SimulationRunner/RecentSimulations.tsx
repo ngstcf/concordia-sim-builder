@@ -308,12 +308,12 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
                 <div className="flex items-center justify-between gap-3 w-full">
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
-                      <h4 className="text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
+                      <h4 className="text-sm font-medium text-gray-900 truncate">
                         {extractTitle(checkpoint.filename)}
                       </h4>
                       {extractCheckpointStep(checkpoint.filename) && (
