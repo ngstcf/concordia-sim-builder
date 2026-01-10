@@ -111,47 +111,123 @@ class SimulationAnalyzer:
 
     def _extract_title(self, soup: BeautifulSoup) -> str:
         """Extract simulation title/premise."""
-        title_elem = soup.find('h1') or soup.find('title')
-        return title_elem.get_text(strip=True) if title_elem else "Unknown Simulation"
+        # Try h1 first
+        title_elem = soup.find('h1')
+        if title_elem:
+            return title_elem.get_text(strip=True)
+
+        # Try title tag
+        title_elem = soup.find('title')
+        if title_elem:
+            return title_elem.get_text(strip=True)
+
+        # Try to find premise in meta tags or specific divs
+        premise_elem = soup.find(class_=re.compile(r'premise|scenario|context', re.I))
+        if premise_elem:
+            return premise_elem.get_text(strip=True)[:500]
+
+        return "Unknown Simulation"
 
     def _extract_steps(self, soup: BeautifulSoup) -> List[Dict]:
         """Extract all steps from the simulation."""
         steps = []
 
-        # Look for step containers (adjust selectors based on actual HTML structure)
-        step_containers = soup.find_all(class_=re.compile(r'step|phase|round', re.I))
+        # Look for <details> tags with Step X in summary
+        details_tags = soup.find_all('details')
 
-        for container in step_containers:
-            step_text = container.get_text(strip=True)
-            # Try to extract step number
-            step_num_match = re.search(r'step\s*(\d+)', step_text, re.I)
-            step_num = int(step_num_match.group(1)) if step_num_match else len(steps) + 1
+        for details in details_tags:
+            # Get the summary (usually contains "Step X: Title")
+            summary = details.find('summary')
+            if not summary:
+                continue
+
+            summary_text = summary.get_text(strip=True)
+
+            # Extract step number from summary
+            step_num_match = re.search(r'step\s*(\d+)', summary_text, re.I)
+            if not step_num_match:
+                continue
+
+            step_num = int(step_num_match.group(1))
+
+            # Get the full content inside the details tag (excluding summary)
+            content_parts = []
+            for elem in details.find_all(text=True):
+                if elem.parent.name != 'summary':
+                    content_parts.append(elem.strip())
+
+            step_text = ' '.join(content_parts).strip()
+
+            # Also include summary text for context
+            full_content = f"{summary_text}\n\n{step_text}"
 
             steps.append({
                 'step_number': step_num,
-                'content': step_text[:1000],  # Truncate for analysis
-                'full_content': step_text
+                'summary': summary_text,
+                'content': step_text[:2000] if step_text else '',
+                'full_content': full_content[:5000]
             })
 
-        return steps
+        # Sort by step number and remove duplicates
+        seen_steps = set()
+        unique_steps = []
+        for step in sorted(steps, key=lambda x: x['step_number']):
+            if step['step_number'] not in seen_steps:
+                seen_steps.add(step['step_number'])
+                unique_steps.append(step)
+
+        return unique_steps
 
     def _extract_agent_actions(self, soup: BeautifulSoup) -> Dict[str, List[str]]:
         """Extract agent actions by agent name."""
         actions = {}
 
-        # Look for agent action sections
-        action_sections = soup.find_all(class_=re.compile(r'action|observation|act', re.I))
+        # Look for <details> tags and extract agent info from summaries
+        details_tags = soup.find_all('details')
 
-        for section in action_sections:
-            text = section.get_text(strip=True)
+        for details in details_tags:
+            summary = details.find('summary')
+            if not summary:
+                continue
 
-            # Try to identify agent name
-            agent_match = re.search(r'(Sarah|Marcus|Elena|David|Agent|Player)', text, re.I)
+            summary_text = summary.get_text(strip=True)
+
+            # Try to identify agent name from summary (format: "Step X AgentName --- Event: ...")
+            agent_match = re.search(r'(?:Step\s+\d+\s+)?([^—\s]+)(?:\s+---|$)', summary_text)
             if agent_match:
-                agent_name = agent_match.group(1)
-                if agent_name not in actions:
-                    actions[agent_name] = []
-                actions[agent_name].append(text[:500])
+                agent_name = agent_match.group(1).strip()
+                # Clean up agent name
+                agent_name = re.sub(r'\s+', ' ', agent_name)
+                agent_name = agent_name.split(' ')[0] if ' ' in agent_name and len(agent_name) < 50 else agent_name
+
+                if agent_name and len(agent_name) < 50:  # Sanity check
+                    if agent_name not in actions:
+                        actions[agent_name] = []
+
+                    # Get the action content
+                    content_parts = []
+                    for elem in details.find_all(text=True):
+                        if elem.parent.name != 'summary':
+                            text = elem.strip()
+                            if text:
+                                content_parts.append(text)
+
+                    action_text = ' '.join(content_parts[:10]).strip()  # Limit to first 10 text nodes
+                    if action_text and len(action_text) > 20:
+                        actions[agent_name].append(action_text[:1000])
+
+        # If no actions found via details, try class-based approach as fallback
+        if not actions:
+            action_sections = soup.find_all(class_=re.compile(r'action|observation|act', re.I))
+            for section in action_sections:
+                text = section.get_text(strip=True)
+                # Try to identify agent name
+                agent_match = re.search(r'([A-Z][a-z]+)\s+(?:said|did|acted|responded)', text)
+                if agent_match:
+                    agent_name = agent_match.group(1)
+                    if agent_name not in actions:
+                        actions[agent_name] = []
+                    actions[agent_name].append(text[:500])
 
         return actions
 
@@ -221,29 +297,52 @@ class SimulationAnalyzer:
 
     def _build_summary_prompt(self, parsed_data: Dict, metadata: Optional[Dict]) -> str:
         """Build prompt for executive summary generation."""
-        premise = metadata.get('premise', '') if metadata else parsed_data.get('title', '')
+        # Get premise from metadata or parsed title
+        if metadata:
+            premise = metadata.get('premise', '')
+            if not premise:
+                # Try to construct premise from agents and scenario
+                agents = metadata.get('agents', [])
+                if agents:
+                    agent_names = ', '.join([a.get('name', 'Unknown') for a in agents[:3]])
+                    premise = f"Simulation involving agents: {agent_names}"
+                else:
+                    premise = parsed_data.get('title', 'Unknown Simulation')
+        else:
+            premise = parsed_data.get('title', 'Unknown Simulation')
+
+        # Get first few steps to understand the scenario
+        steps = parsed_data.get('steps', [])
+        steps_overview = ""
+        if steps:
+            first_step = steps[0].get('summary', steps[0].get('content', ''))[:500]
+            steps_overview = f"\n**First Event:**\n{first_step}"
 
         prompt = f"""Analyze this simulation and provide a comprehensive executive summary:
 
-**Simulation Premise:**
+**Simulation Premise/Title:**
 {premise}
+{steps_overview}
 
-**Timeline Overview:**
-{self._format_timeline_for_prompt(parsed_data.get('steps', []))}
+**Timeline Overview ({len(steps)} total steps):**
+{self._format_timeline_for_prompt(steps)}
+
+**Agent Actions:**
+{self._format_actions_for_prompt(parsed_data.get('agent_actions', {}))}
 
 **Key Outcomes:**
-{chr(10).join(parsed_data.get('final_outcomes', [])[:5])}
+{chr(10).join(parsed_data.get('final_outcomes', [])[:5]) if parsed_data.get('final_outcomes') else 'No explicit outcomes section found'}
 
 **Nested Simulations:**
 {len(parsed_data.get('nested_simulations', []))} nested simulations were run.
 
 Provide a 3-4 paragraph executive summary covering:
-1. What scenario was simulated and why
-2. Key events and outcomes (including any multi-phase developments)
-3. Team effectiveness and decision quality
-4. Critical insights or recommendations
+1. What scenario was simulated and the key participants
+2. Key events, decisions, and outcomes
+3. Agent behavior patterns and effectiveness
+4. Critical insights or takeaways
 
-Format as professional analysis prose."""
+Base your analysis ONLY on the provided timeline and agent actions. If information is missing or unclear, state that explicitly."""
 
         return prompt
 
@@ -253,8 +352,10 @@ Format as professional analysis prose."""
             return "No steps data available"
 
         formatted = []
-        for step in steps[:10]:  # Limit to avoid token limits
-            formatted.append(f"Step {step['step_number']}: {step['content'][:200]}...")
+        for step in steps[:15]:  # Limit to avoid token limits
+            # Use summary if available, otherwise content
+            summary_text = step.get('summary', step.get('content', ''))[:300]
+            formatted.append(f"Step {step['step_number']}: {summary_text}")
 
         return "\n".join(formatted)
 
@@ -263,10 +364,14 @@ Format as professional analysis prose."""
         timeline = []
 
         for step in parsed_data.get('steps', []):
+            # Use summary if available for the brief description
+            summary = step.get('summary', step.get('content', ''))[:300]
+            details = step.get('full_content', step.get('content', ''))
+
             timeline.append({
                 'step': step['step_number'],
-                'summary': step['content'][:300],
-                'details': step['content']
+                'summary': summary,
+                'details': details
             })
 
         return timeline

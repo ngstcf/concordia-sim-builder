@@ -12,17 +12,26 @@ interface SimulationAnalysisProps {
   llmSettings?: LLMSettings;
 }
 
-export default function SimulationAnalysis({ simulationId, logFilename, llmSettings }: SimulationAnalysisProps) {
+export default function SimulationAnalysis({ simulationId: propSimulationId, logFilename, llmSettings }: SimulationAnalysisProps) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Derive simulation ID from filename if not provided
+  const extractSimulationId = (filename: string): string | null => {
+    // Extract timestamp from filename like "20260109_224705_Simulation_Name.html"
+    const match = filename.match(/^(\d{8}_\d{6})_/);
+    return match ? match[1] : null;
+  };
+
+  const simulationId = propSimulationId || (logFilename ? extractSimulationId(logFilename) : null);
 
   // Reset analysis state when simulation changes
   useEffect(() => {
     setAnalysis(null);
     setError(null);
     setAnalyzing(false);
-  }, [simulationId]);
+  }, [propSimulationId, logFilename]);
 
   const handleAnalyze = async () => {
     if (!simulationId) {
@@ -43,16 +52,6 @@ export default function SimulationAnalysis({ simulationId, logFilename, llmSetti
       setAnalyzing(false);
     }
   };
-
-  const extractSimulationId = (filename: string): string | null => {
-    // Extract timestamp from filename like "20260109_224705_Simulation_Name.html"
-    const match = filename.match(/^(\d{8}_\d{6})_/);
-    return match ? match[1] : null;
-  };
-
-  if (!simulationId && logFilename) {
-    simulationId = extractSimulationId(logFilename);
-  }
 
   if (!simulationId) {
     return (
