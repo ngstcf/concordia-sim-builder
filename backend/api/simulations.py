@@ -595,12 +595,6 @@ Key Issues on the Table:
                 "Agent R": "You represent Russia and must protect its core interests while showing willingness to negotiate.",
                 "Agent U": "You represent Ukraine and must defend its sovereignty and territorial integrity."
             }
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.5
         }
     }
 
@@ -654,12 +648,6 @@ at a corner table working on a laptop.""",
                 "It's 10 AM on a Monday.",
                 "Both Alice and Bob know each other casually."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.5
         }
     }
 
@@ -737,11 +725,6 @@ for the next quarter.""",
                 "Budget is sufficient but not unlimited.",
                 "Competitors are launching similar products soon."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.9
         }
     }
 
@@ -874,11 +857,6 @@ The moderator's job is to guide the discussion, not dominate it."""
                 "LoveBot AI is a hypothetical app - it doesn't actually exist yet.",
                 "The company sponsoring this research wants genuine feedback, not just praise."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.9
         }
     }
 
@@ -939,11 +917,6 @@ anxiety about career changes with their counselor.""",
                 "Sessions last 50 minutes.",
                 "Jennifer has expressed interest in starting a boutique marketing agency."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.8
         }
     }
 
@@ -1039,11 +1012,6 @@ One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
                 "The goal is to maximize total points.",
                 "Payoffs: (C,C)=(3,3), (D,D)=(1,1), (C,D)=(0,5), (D,C)=(5,0)"
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.7
         }
     }
 
@@ -1139,11 +1107,6 @@ management, and benefits.""",
                 "The company values honest feedback.",
                 "Responses will be aggregated for management review."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.6
         }
     }
 
@@ -1221,11 +1184,6 @@ in Chicago. You've never really grown up but you're okay with that.
 You're single and loving life. You want to make people laugh and
 hear their stories."""
             }
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 1.0
         }
     }
 
@@ -1365,11 +1323,6 @@ Success requires strategic thinking about timing, competition, and market condit
                 "Strategic timing of decisions affects overall success.",
                 "Competition is friendly but participants maximize their own outcomes."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.8
         }
     }
 
@@ -1466,11 +1419,6 @@ that can protect property rights and maintain order.""",
                 "A neighboring territory threatens to invade if they remain divided.",
                 "Everyone remembers the chaos of the 'state of nature' they just escaped."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.95
         }
     }
 
@@ -1563,11 +1511,6 @@ being fired if the movement fails.""",
                 "The union strike fund can support workers for 3 weeks maximum.",
                 "Past strike at a sister plant failed after 2 weeks - workers were fired."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 1.0
         }
     }
 
@@ -1661,11 +1604,6 @@ as possible before others do.""",
                 "External buyers offer premium prices, incentivizing overfishing.",
                 "Alternative livelihoods (tourism, aquaculture) are possible but require investment."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.9
         }
     }
 
@@ -1774,11 +1712,6 @@ sharing will determine who gets to safety in time.""",
                 "Highways are already congesting as people start leaving.",
                 "The storm will arrive in exactly 12 hours and is intensifying."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.95
         }
     }
 
@@ -1874,11 +1807,6 @@ be an equalizer or if class divisions persist and even widen.""",
                 "The career center offers better internships to well-connected students.",
                 "Mental health services are overwhelmed but available to all students."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.85
         }
     }
 
@@ -2002,11 +1930,6 @@ async def get_context_aware_moderator_template():
                 "Everyone here is dealing with grief - not just of a job, but of identity, routine, and future plans.",
                 "The group culture is non-judgmental and supportive."
             ]
-        },
-        "llm_settings": {
-            "provider": "deepseek",
-            "model_name": "deepseek-chat",
-            "temperature": 0.85
         }
     }
 
@@ -2237,12 +2160,6 @@ async def get_vaccine_hesitancy_template():
                         )
                     }
                 }
-            },
-            "llm_settings": {
-                "provider": "gemini",
-                "model": "gemini-2.0-flash-exp",
-                "embedder_model": "all-MiniLM-L6-v2",
-                "temperature": 0.85
             }
         }
     }
@@ -2340,12 +2257,6 @@ async def get_nested_simulation_demo_template():
                 "acting_order": "game_master_choice",
                 "parameters": {}
             }
-        },
-        "llm_settings": {
-            "provider": "gemini",
-            "model": "gemini-2.0-flash-exp",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.8
         }
     }
 
@@ -2610,12 +2521,6 @@ async def get_phishing_attack_simulation_template():
                 "acting_order": "game_master_choice",
                 "parameters": {}
             }
-        },
-        "llm_settings": {
-            "provider": "gemini",
-            "model": "gemini-2.0-flash-exp",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.8
         }
     }
 
@@ -2745,12 +2650,6 @@ async def get_grounded_variables_demo_template():
                     }
                 ]
             }
-        },
-        "llm_settings": {
-            "provider": "gemini",
-            "model": "gemini-2.0-flash-exp",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.8
         }
     }
 
@@ -3038,12 +2937,6 @@ async def get_urban_gentrification_template():
                     }
                 ]
             }
-        },
-        "llm_settings": {
-            "provider": "gemini",
-            "model": "gemini-2.0-flash-exp",
-            "embedder_model": "all-MiniLM-L6-v2",
-            "temperature": 0.8
         }
     }
 
