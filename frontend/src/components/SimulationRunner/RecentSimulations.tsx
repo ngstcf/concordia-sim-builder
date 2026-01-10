@@ -276,7 +276,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
             onClick={() => handleLoadSimulation(log.filename)}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <h4 className="text-sm font-medium text-gray-900 truncate min-w-0">
                   {extractTitle(log.filename)}
@@ -307,9 +307,9 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 className="p-4 hover:bg-amber-50 transition-colors cursor-pointer bg-amber-50/30"
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 whitespace-nowrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
