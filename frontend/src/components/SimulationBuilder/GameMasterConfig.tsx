@@ -18,6 +18,7 @@ export default function GameMasterConfig() {
   const [showVariables, setShowVariables] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showExample, setShowExample] = useState(false);
+  const [showCriticalDecisions, setShowCriticalDecisions] = useState(false);
 
   // Sync variables with config when config changes externally
   useEffect(() => {
@@ -25,6 +26,70 @@ export default function GameMasterConfig() {
       setVariables(config.game_master.grounded_variables.map((v, i) => ({ ...v, id: `var-${i}` })));
     }
   }, [config.game_master.grounded_variables]);
+
+  // Get critical decision points from parameters
+  const getCriticalDecisionPoints = (): Array<{step: number; description: string; options: string[]}> => {
+    const params = config.game_master.parameters || {};
+    return params.critical_decision_points || [];
+  };
+
+  const setCriticalDecisionPoints = (points: Array<{step: number; description: string; options: string[]}>) => {
+    const params = config.game_master.parameters || {};
+    setGameMaster({
+      ...config.game_master,
+      parameters: { ...params, critical_decision_points: points }
+    });
+  };
+
+  const addCriticalDecisionPoint = () => {
+    const current = getCriticalDecisionPoints();
+    const maxStep = current.length > 0 ? Math.max(...current.map(p => p.step)) : 0;
+    setCriticalDecisionPoints([
+      ...current,
+      { step: maxStep + 5, description: '', options: ['Option A', 'Option B'] }
+    ]);
+  };
+
+  const updateCriticalDecisionPoint = (index: number, updates: Partial<{step: number; description: string; options: string[]}>) => {
+    const current = getCriticalDecisionPoints();
+    const updated = [...current];
+    updated[index] = { ...updated[index], ...updates };
+    setCriticalDecisionPoints(updated);
+  };
+
+  const removeCriticalDecisionPoint = (index: number) => {
+    const current = getCriticalDecisionPoints();
+    setCriticalDecisionPoints(current.filter((_, i) => i !== index));
+  };
+
+  const addOptionToDecision = (index: number) => {
+    const current = getCriticalDecisionPoints();
+    const updated = [...current];
+    updated[index] = {
+      ...updated[index],
+      options: [...updated[index].options, `Option ${String.fromCharCode(65 + updated[index].options.length)}`]
+    };
+    setCriticalDecisionPoints(updated);
+  };
+
+  const updateDecisionOption = (decisionIndex: number, optionIndex: number, value: string) => {
+    const current = getCriticalDecisionPoints();
+    const updated = [...current];
+    const options = [...updated[decisionIndex].options];
+    options[optionIndex] = value;
+    updated[decisionIndex] = { ...updated[decisionIndex], options };
+    setCriticalDecisionPoints(updated);
+  };
+
+  const removeDecisionOption = (decisionIndex: number, optionIndex: number) => {
+    const current = getCriticalDecisionPoints();
+    const updated = [...current];
+    updated[decisionIndex] = {
+      ...updated[decisionIndex],
+      options: updated[decisionIndex].options.filter((_, i) => i !== optionIndex)
+    };
+    setCriticalDecisionPoints(updated);
+  };
 
   // Get prefab-specific example
   const getPrefabExample = (): string => {
@@ -400,6 +465,198 @@ export default function GameMasterConfig() {
             </div>
           )}
         </div>
+
+        {/* Critical Decision Points - for generic__GameMaster */}
+        {config.game_master.prefab === 'generic__GameMaster' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  Critical Decision Points
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowCriticalDecisions(!showCriticalDecisions)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                {showCriticalDecisions ? '− Hide' : '+ Show'}
+              </button>
+            </div>
+
+            {showCriticalDecisions && (
+              <div className="mt-3 bg-purple-50 p-4 rounded-md border border-purple-200">
+                <p className="text-xs text-gray-600 mb-3">
+                  Define key decision points in the simulation where agents must make important choices.
+                  At each step, the Game Master will present agents with the specified options.
+                </p>
+
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs text-gray-600">
+                    {getCriticalDecisionPoints().length} decision point{getCriticalDecisionPoints().length !== 1 ? 's' : ''} configured
+                  </span>
+                  <button
+                    type="button"
+                    onClick={addCriticalDecisionPoint}
+                    className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-md hover:bg-purple-200"
+                  >
+                    + Add Decision Point
+                  </button>
+                </div>
+
+                {getCriticalDecisionPoints().length === 0 ? (
+                  <p className="text-sm text-gray-500 italic text-center py-4">
+                    No critical decision points defined. Add decision points to create key choice moments in your simulation.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {getCriticalDecisionPoints().map((decision, decisionIndex) => (
+                      <div key={decisionIndex} className="bg-white p-4 rounded-md border border-gray-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="text-sm font-medium text-gray-900">
+                            Decision Point {decisionIndex + 1}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => removeCriticalDecisionPoint(decisionIndex)}
+                            className="text-red-400 hover:text-red-600 text-sm"
+                          >
+                            ✕ Remove
+                          </button>
+                        </div>
+
+                        {/* Step Number */}
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Step Number
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
+                            value={decision.step}
+                            onChange={(e) => updateCriticalDecisionPoint(decisionIndex, { step: parseInt(e.target.value) || 1 })}
+                            placeholder="e.g., 10"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">
+                            The simulation step when this decision point occurs
+                          </p>
+                        </div>
+
+                        {/* Description */}
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Decision Description
+                          </label>
+                          <textarea
+                            rows={2}
+                            className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
+                            value={decision.description}
+                            onChange={(e) => updateCriticalDecisionPoint(decisionIndex, { description: e.target.value })}
+                            placeholder="e.g., Budget allocation vote - Council must decide between competing priorities"
+                          />
+                        </div>
+
+                        {/* Options */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-medium text-gray-700">
+                              Available Options
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => addOptionToDecision(decisionIndex)}
+                              className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+                            >
+                              + Add Option
+                            </button>
+                          </div>
+
+                          {decision.options.map((option, optionIndex) => (
+                            <div key={optionIndex} className="flex items-center gap-2 mb-2">
+                              <input
+                                type="text"
+                                className="flex-1 border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                value={option}
+                                onChange={(e) => updateDecisionOption(decisionIndex, optionIndex, e.target.value)}
+                                placeholder={`Option ${optionIndex + 1}`}
+                              />
+                              {decision.options.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeDecisionOption(decisionIndex, optionIndex)}
+                                  className="text-red-400 hover:text-red-600 text-sm"
+                                  title="Remove option"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          <p className="mt-1 text-xs text-gray-500">
+                            Agents will choose from these options at the decision point
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-3 text-xs text-gray-500 italic">
+                  💡 Tip: Critical decision points create dramatic moments where agent choices significantly impact the simulation outcome.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Extra Components - grounded_variables_intro for generic__GameMaster */}
+        {config.game_master.prefab === 'generic__GameMaster' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Grounded Variables Introduction
+                </span>
+              </label>
+            </div>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Provide instructions to the Game Master about what variables to track and how to interpret them during the simulation.
+            </p>
+
+            <textarea
+              rows={4}
+              className="mt-2 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={((config.game_master.parameters?.extra_components as any)?.grounded_variables_intro as string) || ''}
+              onChange={(e) => {
+                const params = config.game_master.parameters || {};
+                const extra = (params.extra_components as any) || {};
+                setGameMaster({
+                  ...config.game_master,
+                  parameters: {
+                    ...params,
+                    extra_components: { ...extra, grounded_variables_intro: e.target.value }
+                  }
+                });
+              }}
+              placeholder={`Track key outcomes throughout this simulation:
+- Outcome 1: Brief description
+- Outcome 2: Brief description
+- Outcome 3: Brief description`}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              💡 This text will be shown to the Game Master at the start of the simulation to guide variable tracking.
+            </p>
+          </div>
+        )}
 
         {/* Parameters (JSON) */}
         <div>
