@@ -278,12 +278,10 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             onClick={() => handleLoadSimulation(log.filename)}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0 w-0">
-                <span className="block break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  <h4 className="text-sm font-medium text-gray-900">
-                    {extractTitle(log.filename)}
-                  </h4>
-                </span>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-medium text-gray-900 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', width: '100%' }}>
+                  {extractTitle(log.filename)}
+                </h4>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>{formatDate(log.modified)}</span>
                   <span>{formatFileSize(log.size)}</span>
@@ -311,16 +309,14 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0 w-0">
+                  <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
-                      <span className="min-w-0 flex-1 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                        <h4 className="text-sm font-medium text-gray-900">
-                          {extractTitle(checkpoint.filename)}
-                        </h4>
-                      </span>
+                      <h4 className="min-w-0 flex-1 text-sm font-medium text-gray-900 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', width: '100%' }}>
+                        {extractTitle(checkpoint.filename)}
+                      </h4>
                       {extractCheckpointStep(checkpoint.filename) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-900 flex-shrink-0">
                           {extractCheckpointStep(checkpoint.filename)}
