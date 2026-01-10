@@ -348,7 +348,7 @@ export default function StatisticalDashboard({ filename }: StatisticalDashboardP
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Filename</span>
-              <span className="text-sm font-medium text-gray-900 truncate ml-4 max-w-xs" title={analytics.filename}>
+              <span className="text-sm font-medium text-gray-900 break-all ml-4 max-w-xs" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }} title={analytics.filename}>
                 {analytics.filename}
               </span>
             </div>
