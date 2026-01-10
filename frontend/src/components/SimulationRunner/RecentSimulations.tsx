@@ -119,12 +119,13 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   };
 
   const extractTitle = (filename: string): string => {
-    // Remove timestamp and .html extension
+    // Remove path prefix, timestamp and .html extension
     return filename
-      .replace(/^\d{8}_\d{6}_/, '')
-      .replace(/_/g, ' ')
-      .replace(/\.html$/, '')
-      .substring(0, 80);
+      .replace(/^.*\//, '') // Remove any path prefix (e.g., "logs/")
+      .replace(/^\d{8}_\d{6}_/, '') // Remove timestamp
+      .replace(/_/g, ' ') // Replace underscores with spaces
+      .replace(/\.html$/, '') // Remove .html extension
+      .trim(); // Remove any extra whitespace
   };
 
   const extractCheckpointStep = (filename: string): string | null => {
