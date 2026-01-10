@@ -157,8 +157,13 @@ async def run_simulation_stream(
                         last_checkpoint_step[0] = step
                         print(f"[CHECKPOINT] Saving partial results at step {step}/{max_steps}...")
                         try:
-                            # Get partial results from simulation object
-                            partial_results = str(sim)
+                            # Get partial results from simulation object's raw log
+                            from concordia.utils import html as html_lib
+
+                            raw_log = sim.get_raw_log()
+
+                            # Convert raw log to HTML using the same method as final results
+                            partial_log_html = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
 
                             # Create partial checkpoint filename
                             import re
@@ -174,13 +179,15 @@ async def run_simulation_stream(
                             checkpoint_path = LOGS_DIR / checkpoint_filename
 
                             # Save partial results with styles injected
-                            styled_partial = _inject_html_styles(partial_results)
+                            styled_partial = _inject_html_styles(partial_log_html)
                             with open(checkpoint_path, 'w', encoding='utf-8') as f:
                                 f.write(styled_partial)
 
-                            print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename}")
+                            print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename} ({len(styled_partial):,} chars)")
                         except Exception as checkpoint_error:
                             print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
+                            import traceback
+                            traceback.print_exc()
                 else:
                     print(f"   ✓ Initializing simulation...")
             except Exception as e:
@@ -249,7 +256,9 @@ async def run_simulation_stream(
                 # Try to get partial results from the simulation object
                 # The simulation object may have partial state that can be salvaged
                 try:
-                    results = str(sim)  # Get whatever state we can
+                    from concordia.utils import html as html_lib
+                    raw_log = sim.get_raw_log()
+                    results = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
                     print(f"[WARNING] Saving partial results due to simulation error")
                 except Exception as partial_error:
                     # If we can't even get partial results, create a minimal error log
