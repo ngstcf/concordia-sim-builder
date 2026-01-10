@@ -4294,21 +4294,34 @@ async def analyze_simulation_endpoint(request: dict):
                 status_code=400,
                 detail="simulation_id is required"
             )
-        
+
         # Find the HTML log file
         logs_dir = Path("logs")
         html_files = list(logs_dir.glob(f"{simulation_id}*.html"))
-        
-        # Filter out checkpoint files
-        html_files = [f for f in html_files if "_checkpoint_step" not in f.name]
-        
+
+        # Note: We include ALL HTML files including checkpoints for analysis
+        # Checkpoints can be analyzed to understand partial simulation progress
+
         if not html_files:
             raise HTTPException(
                 status_code=404,
                 detail=f"Simulation log not found for ID: {simulation_id}"
             )
-        
-        # Use the first matching file (should be only one non-checkpoint file)
+
+        # Sort by preference: final file > emergency > watchdog > regular checkpoint
+        # This ensures we analyze the most complete data available
+        def file_priority(f):
+            name = f.name
+            if "_checkpoint_step" in name:
+                return 3  # Regular checkpoint - lowest priority
+            elif "WATCHDOG_EMERGENCY" in name:
+                return 2  # Watchdog emergency
+            elif "EMERGENCY_CHECKPOINT" in name:
+                return 1  # Emergency checkpoint
+            else:
+                return 0  # Final file - highest priority
+
+        html_files.sort(key=file_priority)
         log_path = str(html_files[0])
         
         # Get LLM settings from request or use defaults
