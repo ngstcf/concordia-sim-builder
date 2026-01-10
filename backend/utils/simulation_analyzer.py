@@ -211,7 +211,7 @@ class SimulationAnalyzer:
         try:
             summary = self.llm.sample_text(
                 prompt,
-                max_tokens=2000,
+                max_tokens=8000,
                 temperature=0.3
             )
             return summary.strip()
@@ -296,7 +296,7 @@ Format as structured markdown with agent sections."""
         try:
             analysis = self.llm.sample_text(
                 prompt,
-                max_tokens=3000,
+                max_tokens=8000,
                 temperature=0.3
             )
             return {
@@ -358,7 +358,7 @@ Format as structured markdown with clear section headers."""
         try:
             insights = self.llm.sample_text(
                 prompt,
-                max_tokens=3000,
+                max_tokens=8000,
                 temperature=0.3
             )
             return {
@@ -406,7 +406,7 @@ Format each recommendation as:
         try:
             recommendations = self.llm.sample_text(
                 prompt,
-                max_tokens=2500,
+                max_tokens=8000,
                 temperature=0.3
             )
             return {

@@ -253,7 +253,7 @@ Return valid JSON only:"""
         try:
             response = self._model.sample_text(
                 prompt,
-                max_tokens=2000,
+                max_tokens=8000,
                 temperature=0.0
             )
 
