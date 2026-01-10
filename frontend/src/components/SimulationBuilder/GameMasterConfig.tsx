@@ -665,7 +665,11 @@ export default function GameMasterConfig() {
             <textarea
               rows={4}
               className="mt-2 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              value={((config.game_master.parameters?.extra_components as any)?.grounded_variables_intro as string) || ''}
+              value={
+                ((config.game_master as any).params?.extra_components?.grounded_variables_intro as string) ||
+                ((config.game_master.parameters?.extra_components as any)?.grounded_variables_intro as string) ||
+                ''
+              }
               onChange={(e) => {
                 const params = config.game_master.parameters || {};
                 const extra = (params.extra_components as any) || {};

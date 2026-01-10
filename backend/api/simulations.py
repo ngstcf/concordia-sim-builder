@@ -2922,6 +2922,28 @@ async def get_urban_gentrification_template():
                         "update_rule": "Changes based on combination of rent, displacement, and business variables"
                     }
                 ],
+                "params": {
+                    "extra_components": {
+                        "grounded_variables_intro": (
+                            "Track key outcomes throughout this urban gentrification simulation:\n"
+                            "- Median monthly rent - Monitor affordability pressures on residents\n"
+                            "- Low income displacement rate - Track households forced to leave the neighborhood\n"
+                            "- Small business survival rate - Monitor local business closures and openings\n"
+                            "- Community cohesion index - Measure sense of belonging and neighborly interaction\n"
+                            "- New housing units permitted - Count development approvals and construction\n"
+                            "- Affordable housing units - Track units accessible to low-moderate income households\n"
+                            "- Housing affordability index - Percentage of rental units affordable to area median income\n"
+                            "- Rent control active - Whether rent stabilization policies are in effect\n"
+                            "- Inclusionary zoning active - Whether developers must include affordable units\n"
+                            "- Neighborhood character - Overall identity and atmosphere of the community\n\n"
+                            "Pay special attention to:\n"
+                            "- Policy decisions (City Council votes) and their impacts\n"
+                            "- Threshold crossings (e.g., when displacement exceeds 30%)\n"
+                            "- Trade-offs between economic development and community preservation\n"
+                            "- Stories of individual residents and business owners"
+                        )
+                    }
+                },
                 "critical_decision_points": [
                     {
                         "step": 10,
