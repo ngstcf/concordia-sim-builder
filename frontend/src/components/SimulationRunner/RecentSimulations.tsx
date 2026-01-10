@@ -309,20 +309,18 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
               >
                 <div className="flex items-start justify-between gap-3 max-w-full">
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <div className="flex items-start gap-2 min-w-0">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
-                          CHECKPOINT
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
+                        CHECKPOINT
+                      </span>
+                      <h4 className="text-sm font-medium text-gray-900 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                        {extractTitle(checkpoint.filename)}
+                      </h4>
+                      {extractCheckpointStep(checkpoint.filename) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-900 flex-shrink-0">
+                          {extractCheckpointStep(checkpoint.filename)}
                         </span>
-                        <h4 className="text-sm font-medium text-gray-900 break-all flex-1" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                          {extractTitle(checkpoint.filename)}
-                        </h4>
-                        {extractCheckpointStep(checkpoint.filename) && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-200 text-amber-900 flex-shrink-0">
-                            {extractCheckpointStep(checkpoint.filename)}
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                     <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                       <span>{formatDate(checkpoint.modified)}</span>
