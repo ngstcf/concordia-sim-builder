@@ -276,11 +276,13 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
             onClick={() => handleLoadSimulation(log.filename)}
           >
-            <div className="flex items-start justify-between gap-3 max-w-full">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-gray-900 break-all" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  {extractTitle(log.filename)}
-                </h4>
+                <span className="block min-w-0 break-all" style={{ overflowWrap: 'anywhere' }}>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {extractTitle(log.filename)}
+                  </h4>
+                </span>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>{formatDate(log.modified)}</span>
                   <span>{formatFileSize(log.size)}</span>
