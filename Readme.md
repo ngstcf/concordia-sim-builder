@@ -780,7 +780,7 @@ If you use this software in your research, please cite:
 
 ```bibtex
 @software{concordia_sim_builder,
-  title={Concordia Simulation Builder: A Web-Based Visual Interface for Multi-Agent Social Simulation},
+  title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
   author={Ng Chong},
   year={2026},
   url={https://github.com/ngstcf/concordia-sim-builder}
@@ -791,7 +791,7 @@ If you use this software in your research, please cite:
 
 ```bibtex
 @software{concordia_sim_builder,
-  title={Concordia Simulation Builder: A Web-Based Visual Interface for Multi-Agent Social Simulation},
+  title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
   author={Chong, Ng S. T.},
   year={2026},
   url={https://github.com/ngstcf/concordia-sim-builder},

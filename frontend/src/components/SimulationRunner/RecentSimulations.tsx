@@ -35,7 +35,6 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const loadCheckpointInfo = async () => {
     try {
       const data = await getCheckpointFiles();
-      console.log('Checkpoint data received:', data);
       setCheckpointInfo({
         count: data.total_count || 0,
         size: data.total_size || 0
