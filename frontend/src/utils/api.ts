@@ -14,9 +14,9 @@ import type {
 // API base URL - default to localhost in development
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// Simulation timeout in milliseconds (default: 30 minutes)
+// Simulation timeout in milliseconds (default: 5 hours)
 // Can be overridden via VITE_SIMULATION_TIMEOUT environment variable
-const SIMULATION_TIMEOUT = parseInt(import.meta.env.VITE_SIMULATION_TIMEOUT || '1800000', 10);
+const SIMULATION_TIMEOUT = parseInt(import.meta.env.VITE_SIMULATION_TIMEOUT || '18000000', 10);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

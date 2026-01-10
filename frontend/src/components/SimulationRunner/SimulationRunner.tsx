@@ -183,6 +183,63 @@ function injectStyles(html: string): string {
   return '<!DOCTYPE html><html><head>' + styles + '</head><body>' + html + '</body></html>';
 }
 
+// TimeoutWarning Component - shows warning when approaching simulation timeout
+function TimeoutWarning({ startTime, timeout, warningThreshold }: { startTime: number; timeout: number; warningThreshold: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const updateElapsed = () => {
+      setElapsed(Date.now() - startTime);
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const remaining = timeout - elapsed;
+  const isWarning = elapsed >= warningThreshold;
+  const isCritical = remaining < 5 * 60 * 1000; // Less than 5 minutes remaining
+
+  const formatTime = (ms: number): string => {
+    const seconds = Math.floor(ms / 1000);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  };
+
+  if (!isWarning) return null;
+
+  return (
+    <div className={`mx-5 mt-4 rounded-lg p-3 border flex items-center gap-3 ${
+      isCritical
+        ? 'bg-red-50 border-red-200'
+        : 'bg-yellow-50 border-yellow-200'
+    }`}>
+      <svg className={`h-5 w-5 flex-shrink-0 ${isCritical ? 'text-red-600' : 'text-yellow-600'}`} fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      </svg>
+      <div className="flex-1">
+        <p className={`text-sm font-medium ${isCritical ? 'text-red-800' : 'text-yellow-800'}`}>
+          {isCritical ? 'Critical: Simulation timeout imminent!' : 'Warning: Approaching timeout'}
+        </p>
+        <p className={`text-xs mt-0.5 ${isCritical ? 'text-red-700' : 'text-yellow-700'}`}>
+          Elapsed: {formatTime(elapsed)} • {isCritical ? `${formatTime(remaining)} remaining` : `Timeout in ${formatTime(remaining)}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function SimulationRunner() {
   const navigate = useNavigate();
   const { config, validation, setValidation, llmSettings, setLLMSettings } = useSimulation();
@@ -199,6 +256,10 @@ export default function SimulationRunner() {
     est_remaining: number;
     est_time_str: string;
   } | null>(null);
+
+  // Timeout warning state - track elapsed time for running simulations
+  const SIMULATION_TIMEOUT = parseInt(import.meta.env.VITE_SIMULATION_TIMEOUT || '18000000', 10);
+  const WARNING_THRESHOLD = SIMULATION_TIMEOUT * 0.8; // Show warning at 80% of timeout
 
   // Model selection state
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; [key: string]: any }>>([]);
@@ -650,6 +711,11 @@ export default function SimulationRunner() {
           {/* Results */}
           {results && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              {/* Timeout Warning Banner */}
+              {!results.completed && (
+                <TimeoutWarning startTime={results.timestamp * 1000} timeout={SIMULATION_TIMEOUT} warningThreshold={WARNING_THRESHOLD} />
+              )}
+
               {/* Results Header */}
               <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
