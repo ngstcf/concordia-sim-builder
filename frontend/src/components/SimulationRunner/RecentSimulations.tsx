@@ -276,17 +276,17 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
             className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
             onClick={() => handleLoadSimulation(log.filename)}
           >
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-gray-900 truncate">
+                <h4 className="text-sm font-medium text-gray-900 truncate min-w-0">
                   {extractTitle(log.filename)}
                 </h4>
-                <div className="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+                <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>{formatDate(log.modified)}</span>
                   <span>{formatFileSize(log.size)}</span>
                 </div>
               </div>
-              <div className="ml-4 flex-shrink-0">
+              <div className="flex-shrink-0">
                 <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -307,13 +307,13 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 className="p-4 hover:bg-amber-50 transition-colors cursor-pointer bg-amber-50/30"
                 onClick={() => handleLoadSimulation(checkpoint.filename)}
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
                         CHECKPOINT
                       </span>
-                      <h4 className="text-sm font-medium text-gray-900 truncate">
+                      <h4 className="text-sm font-medium text-gray-900 truncate min-w-0">
                         {extractTitle(checkpoint.filename)}
                       </h4>
                       {extractCheckpointStep(checkpoint.filename) && (
@@ -322,12 +322,12 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+                    <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                       <span>{formatDate(checkpoint.modified)}</span>
                       <span>{formatFileSize(checkpoint.size)}</span>
                     </div>
                   </div>
-                  <div className="ml-4 flex-shrink-0">
+                  <div className="flex-shrink-0">
                     <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
