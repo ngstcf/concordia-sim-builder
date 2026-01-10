@@ -19,6 +19,7 @@ export default function GameMasterConfig() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showExample, setShowExample] = useState(false);
   const [showCriticalDecisions, setShowCriticalDecisions] = useState(false);
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
   // Sync variables with config when config changes externally
   useEffect(() => {
@@ -474,26 +475,28 @@ export default function GameMasterConfig() {
           )}
         </div>
 
-        {/* Critical Decision Points - for generic__GameMaster */}
-        {config.game_master.prefab === 'generic__GameMaster' && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                <span className="flex items-center">
-                  <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                  Critical Decision Points
-                </span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowCriticalDecisions(!showCriticalDecisions)}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {showCriticalDecisions ? '− Hide' : '+ Show'}
-              </button>
-            </div>
+        {/* Critical Decision Points - available for all Game Master types */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <span className="flex items-center">
+                <svg className="h-4 w-4 text-purple-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Critical Decision Points
+                {config.game_master.prefab !== 'generic__GameMaster' && (
+                  <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
+                )}
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowCriticalDecisions(!showCriticalDecisions)}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              {showCriticalDecisions ? '− Hide' : '+ Show'}
+            </button>
+          </div>
 
             {showCriticalDecisions && (
               <div className="mt-3 bg-purple-50 p-4 rounded-md border border-purple-200">
@@ -644,134 +647,179 @@ export default function GameMasterConfig() {
                 </p>
               </div>
             )}
+        </div>
+
+        {/* Extra Components - grounded_variables_intro for all Game Master types */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              <span className="flex items-center">
+                <svg className="h-4 w-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Grounded Variables Introduction
+                {config.game_master.prefab !== 'generic__GameMaster' && (
+                  <span className="ml-2 text-xs font-normal text-gray-500">(optional for {config.game_master.prefab})</span>
+                )}
+              </span>
+            </label>
           </div>
-        )}
 
-        {/* Extra Components - grounded_variables_intro for generic__GameMaster */}
-        {config.game_master.prefab === 'generic__GameMaster' && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                <span className="flex items-center">
-                  <svg className="h-4 w-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Grounded Variables Introduction
-                </span>
-              </label>
-            </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Provide instructions to the Game Master about what variables to track and how to interpret them during the simulation.
+          </p>
 
-            <p className="mt-1 text-xs text-gray-500">
-              Provide instructions to the Game Master about what variables to track and how to interpret them during the simulation.
-            </p>
-
-            <textarea
-              rows={4}
-              className="mt-2 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              value={
-                ((config.game_master as any).params?.extra_components?.grounded_variables_intro as string) ||
-                ((config.game_master.parameters?.extra_components as any)?.grounded_variables_intro as string) ||
-                ''
-              }
-              onChange={(e) => {
-                const params = config.game_master.parameters || {};
-                const extra = (params.extra_components as any) || {};
-                setGameMaster({
-                  ...config.game_master,
-                  parameters: {
-                    ...params,
-                    extra_components: { ...extra, grounded_variables_intro: e.target.value }
-                  }
-                });
-              }}
-              placeholder={`Track key outcomes throughout this simulation:
+          <textarea
+            rows={4}
+            className="mt-2 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            value={
+              ((config.game_master as any).params?.extra_components?.grounded_variables_intro as string) ||
+              ((config.game_master.parameters?.extra_components as any)?.grounded_variables_intro as string) ||
+              ''
+            }
+            onChange={(e) => {
+              const params = config.game_master.parameters || {};
+              const extra = (params.extra_components as any) || {};
+              setGameMaster({
+                ...config.game_master,
+                parameters: {
+                  ...params,
+                  extra_components: { ...extra, grounded_variables_intro: e.target.value }
+                }
+              });
+            }}
+            placeholder={`Track key outcomes throughout this simulation:
 - Outcome 1: Brief description
 - Outcome 2: Brief description
 - Outcome 3: Brief description`}
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              💡 This text will be shown to the Game Master at the start of the simulation to guide variable tracking.
-            </p>
-          </div>
-        )}
-
-        {/* Parameters (JSON) */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label htmlFor="gm-parameters" className="block text-sm font-medium text-gray-700">
-              Parameters (JSON) - Optional
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowExample(!showExample)}
-              className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
-            >
-              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {showExample ? 'Hide' : 'Show'} Example
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Advanced configuration for {config.game_master.prefab}.{' '}
-            {config.game_master.prefab === 'game_theoretic_and_dramaturgic__GameMaster' && (
-              <span className="text-amber-600 font-medium">
-                Note: num_rounds must equal max_steps (not multiplied).
-              </span>
-            )}
-          </p>
-
-          {showExample && (
-            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-blue-800">
-                  Example for {config.game_master.prefab}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGameMaster({ ...config.game_master, parameters: JSON.parse(getPrefabExample()) });
-                    setShowExample(false);
-                  }}
-                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
-                >
-                  Use This Example
-                </button>
-              </div>
-              <pre className="text-xs font-mono text-gray-700 overflow-x-auto bg-white p-2 rounded border border-blue-100">
-                {getPrefabExample()}
-              </pre>
-            </div>
-          )}
-
-          <textarea
-            id="gm-parameters"
-            rows={8}
-            className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 sm:text-sm font-mono text-xs ${
-              jsonError ? 'border-red-300 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
-            }`}
-            value={config.game_master.parameters ? JSON.stringify(config.game_master.parameters, null, 2) : ''}
-            onChange={(e) => {
-              try {
-                const params = e.target.value ? JSON.parse(e.target.value) : {};
-                setGameMaster({ ...config.game_master, parameters: params });
-                setJsonError(null);
-              } catch (err) {
-                setJsonError('Invalid JSON: ' + (err as Error).message);
-              }
-            }}
           />
+          <p className="mt-1 text-xs text-gray-500">
+            💡 This text will be shown to the Game Master at the start of the simulation to guide variable tracking.
+          </p>
+        </div>
 
-          {jsonError && (
-            <p className="mt-1 text-xs text-red-600">
-              ⚠️ {jsonError}
-            </p>
-          )}
+        {/* Advanced Parameters (JSON) - Collapsible by default */}
+        <div className="border-t border-gray-200 pt-6">
+          <button
+            type="button"
+            onClick={() => setShowAdvancedJson(!showAdvancedJson)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-gray-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  Advanced JSON Configuration
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                Direct JSON editing for prefab-specific parameters and advanced configuration
+              </p>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transform transition-transform ${showAdvancedJson ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-          {!jsonError && config.game_master.parameters && Object.keys(config.game_master.parameters).length > 0 && (
-            <p className="mt-1 text-xs text-green-600">
-              ✓ Valid JSON ({Object.keys(config.game_master.parameters).length} top-level key{Object.keys(config.game_master.parameters).length !== 1 ? 's' : ''})
-            </p>
+          {showAdvancedJson && (
+            <div className="mt-4 space-y-4">
+              {/* Precedence Warning */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-xs text-amber-900">
+                  <strong>⚠️ Precedence Notice:</strong> Configuration in this JSON editor <strong>takes precedence</strong> over template values and UI builders above. If you define the same fields (like <code className="bg-amber-100 px-1 rounded">critical_decision_points</code> or <code className="bg-amber-100 px-1 rounded">extra_components.grounded_variables_intro</code>) here, those values will override the ones configured in the visual builders.
+                </p>
+              </div>
+
+              {/* Example Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-700">
+                    Example for {config.game_master.prefab}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowExample(!showExample)}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {showExample ? 'Hide' : 'Show'} Example
+                  </button>
+                </div>
+
+                {showExample && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-blue-800">
+                        Example for {config.game_master.prefab}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGameMaster({ ...config.game_master, parameters: JSON.parse(getPrefabExample()) });
+                          setShowExample(false);
+                        }}
+                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                      >
+                        Use This Example
+                      </button>
+                    </div>
+                    <pre className="text-xs font-mono text-gray-700 overflow-x-auto bg-white p-2 rounded border border-blue-100">
+                      {getPrefabExample()}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              {/* JSON Editor */}
+              <div>
+                <label htmlFor="gm-parameters" className="block text-xs font-medium text-gray-700 mb-1">
+                  Parameters (JSON)
+                  {config.game_master.prefab === 'game_theoretic_and_dramaturgic__GameMaster' && (
+                    <span className="ml-2 text-amber-600">
+                      • Note: num_rounds must equal max_steps
+                    </span>
+                  )}
+                </label>
+                <textarea
+                  id="gm-parameters"
+                  rows={8}
+                  className={`block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 sm:text-sm font-mono text-xs ${
+                    jsonError ? 'border-red-300 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+                  }`}
+                  value={config.game_master.parameters ? JSON.stringify(config.game_master.parameters, null, 2) : ''}
+                  onChange={(e) => {
+                    try {
+                      const params = e.target.value ? JSON.parse(e.target.value) : {};
+                      setGameMaster({ ...config.game_master, parameters: params });
+                      setJsonError(null);
+                    } catch (err) {
+                      setJsonError('Invalid JSON: ' + (err as Error).message);
+                    }
+                  }}
+                  placeholder={`{
+  "scene_type": {
+    "name": "decision"
+  }
+}`}
+                />
+
+                {jsonError && (
+                  <p className="mt-1 text-xs text-red-600">
+                    ⚠️ {jsonError}
+                  </p>
+                )}
+
+                {!jsonError && config.game_master.parameters && Object.keys(config.game_master.parameters).length > 0 && (
+                  <p className="mt-1 text-xs text-green-600">
+                    ✓ Valid JSON ({Object.keys(config.game_master.parameters).length} top-level key{Object.keys(config.game_master.parameters).length !== 1 ? 's' : ''})
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
