@@ -119,6 +119,11 @@ async def run_simulation_stream(
                 step_count_tracker[0] = step
                 elapsed = time.time() - start_time_progress[0]
 
+                # Log timestamp for debugging hangs
+                import datetime
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[HEARTBEAT] {current_time} - Step {step}/{max_steps} callback received")
+
                 # Calculate estimated time remaining
                 if step > 0:
                     avg_time_per_step = elapsed / step
@@ -227,10 +232,37 @@ async def run_simulation_stream(
                 except asyncio.TimeoutError:
                     # No progress update for 5 seconds, check for hang
                     time_since_progress = time.time() - last_progress_time[0]
+
+                    # Log periodic watchdog status every minute
+                    if int(time_since_progress) % 60 == 0 and time_since_progress > 0:
+                        import datetime
+                        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
+
                     if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
-                        print(f"[WATCHDOG] No progress for {time_since_progress:.0f}s - simulation may be hung")
+                        print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
                         print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
                         print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
+
+                        # Try to save emergency checkpoint if hung
+                        try:
+                            print(f"[WATCHDOG] Attempting emergency checkpoint save...")
+                            from concordia.utils import html as html_lib
+                            hung_raw_log = sim.get_raw_log()
+                            hung_html = html_lib.PythonObjectToHTMLConverter(hung_raw_log).convert()
+                            hung_styled = _inject_html_styles(hung_html)
+
+                            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            hung_filename = f"{timestamp}_WATCHDOG_EMERGENCY_step{step_count_tracker[0]}.html"
+                            hung_path = LOGS_DIR / hung_filename
+
+                            with open(hung_path, 'w', encoding='utf-8') as f:
+                                f.write(hung_styled)
+
+                            print(f"[WATCHDOG] ✓ Emergency checkpoint saved: {hung_filename} ({len(hung_styled):,} chars)")
+                        except Exception as hung_error:
+                            print(f"[WATCHDOG] Failed to save emergency checkpoint: {hung_error}")
+
                         # Don't kill the simulation - just warn and continue monitoring
                     # Check if simulation is done
                     continue
@@ -242,14 +274,17 @@ async def run_simulation_stream(
 
             # Use a try-except to handle Concordia errors while still saving partial results
             try:
+                print(f"[DEBUG] Waiting for future.result() to get simulation results...")
                 results = future.result()
-                print(f"[DEBUG] Simulation completed successfully, got results")
+                print(f"[DEBUG] Simulation completed successfully, got results (type: {type(results).__name__})")
+                print(f"[DEBUG] Results length: {len(str(results)) if results else 0} characters")
             except Exception as sim_error:
                 # Simulation failed, but try to save partial results
                 simulation_error = str(sim_error)
                 simulation_error_type = type(sim_error).__name__
 
                 print(f"[ERROR] Simulation failed with error: {sim_error}")
+                print(f"[ERROR] Error type: {simulation_error_type}")
                 import traceback
                 traceback.print_exc()
 
@@ -258,11 +293,14 @@ async def run_simulation_stream(
                 try:
                     from concordia.utils import html as html_lib
                     raw_log = sim.get_raw_log()
+                    print(f"[DEBUG] Retrieved raw_log with {len(raw_log)} entries")
                     results = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
-                    print(f"[WARNING] Saving partial results due to simulation error")
+                    print(f"[WARNING] Saved partial results due to simulation error ({len(results)} chars)")
                 except Exception as partial_error:
                     # If we can't even get partial results, create a minimal error log
                     print(f"[ERROR] Could not extract partial results: {partial_error}")
+                    import traceback
+                    traceback.print_exc()
                     results = f"<html><body><h1>Simulation Failed</h1><p>Error: {simulation_error}</p><pre>{traceback.format_exc()}</pre></body></html>"
 
 
@@ -276,8 +314,30 @@ async def run_simulation_stream(
                     break
 
         elapsed = time.time() - start_time
-        print(f"\n✓ Simulation completed in {elapsed:.1f} seconds")
+        print(f"\n✓ Simulation execution completed in {elapsed:.1f} seconds")
         print(f"{'='*60}\n")
+
+        # EMERGENCY CHECKPOINT: Save results immediately after simulation completes
+        # This ensures we have a saved copy even if HTML conversion fails
+        try:
+            print("[CHECKPOINT] Saving emergency checkpoint before HTML processing...")
+            from concordia.utils import html as html_lib
+            emergency_raw_log = sim.get_raw_log()
+            emergency_html = html_lib.PythonObjectToHTMLConverter(emergency_raw_log).convert()
+            emergency_styled = _inject_html_styles(emergency_html)
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            emergency_filename = f"{timestamp}_EMERGENCY_CHECKPOINT.html"
+            emergency_path = LOGS_DIR / emergency_filename
+
+            with open(emergency_path, 'w', encoding='utf-8') as f:
+                f.write(emergency_styled)
+
+            print(f"[CHECKPOINT] ✓ Emergency checkpoint saved: {emergency_filename} ({len(emergency_styled):,} chars)")
+        except Exception as emergency_error:
+            print(f"[WARNING] Failed to save emergency checkpoint: {emergency_error}")
+            import traceback
+            traceback.print_exc()
 
         # Send completion event with full results
         # Convert to HTML string
