@@ -27,11 +27,13 @@ LLM_LOGGING_ENABLED = os.getenv("LLM_LOGGING_ENABLED", "true").lower() == "true"
 # Messages that should ALWAYS be shown in BLUE (not filtered)
 IMPORTANT_PATTERNS = [
     '============================================================',
+    '==============================================================',
     'Starting Simulation Execution',
     'Provider:',
     'Model:',
     'Max Steps:',
     'Agents:',
+    'Premise:',
     'Simulation built successfully',
     '✓',  # Checkmarks for success
     '🎮',  # Game emoji
@@ -39,7 +41,9 @@ IMPORTANT_PATTERNS = [
     '⚠️',  # Warning emoji
     '❌',  # Error emoji
     'Step ',  # Progress updates (e.g., "Step 1/20")
-    ' of steps completed',  # Progress completion
+    'completed',  # Progress completion
+    'elapsed:',  # Progress timing info
+    'est. remaining:',  # Progress timing info
 ]
 
 
@@ -78,6 +82,10 @@ def should_filter(text):
         if not LLM_LOGGING_ENABLED:
             return True
 
+    # Filter [HEARTBEAT] messages
+    if '[HEARTBEAT]' in text:
+        return True
+
     return False
 
 
@@ -95,7 +103,6 @@ def suppress_print_statements():
 
         def __init__(self, original_stream):
             self.original_stream = original_stream
-            self.buffer = []
 
         def write(self, text):
             # Skip empty strings
