@@ -725,7 +725,7 @@ export default function SimulationRunner() {
                       <span className="text-green-600">✓ Completed</span>
                     ) : (
                       <span className="text-yellow-600">In Progress</span>
-                    )} • {new Date(results.timestamp).toLocaleString()}
+                    )} • {new Date(results.timestamp * 1000).toLocaleString()}
                   </p>
                 </div>
                 {results.log_filename && (

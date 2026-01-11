@@ -2977,8 +2977,10 @@ async def get_recent_simulations(limit: int = 20):
     log_files = []
     for file_path in logs_dir.glob("*.html"):
         try:
-            # Skip checkpoint files
-            if "_checkpoint_step" in file_path.name:
+            # Skip all checkpoint files (regular, emergency, watchdog)
+            if ("_checkpoint_step" in file_path.name or
+                "EMERGENCY_CHECKPOINT" in file_path.name or
+                "WATCHDOG_EMERGENCY" in file_path.name):
                 continue
 
             stat = file_path.stat()
