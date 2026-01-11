@@ -4,6 +4,15 @@ Concordia Simulation Builder - FastAPI Backend
 Main application entry point.
 """
 import os
+
+# Load environment variables from .env file FIRST
+# This must happen before any other imports that depend on debug_print
+from dotenv import load_dotenv
+load_dotenv()
+
+# Fix tokenizers parallelism warning
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +20,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from backend.api import simulations
-
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
-
-# Fix tokenizers parallelism warning
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 
 @asynccontextmanager
