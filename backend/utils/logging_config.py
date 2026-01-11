@@ -28,28 +28,45 @@ def suppress_print_statements():
 
         def __init__(self, original_stream):
             self.original_stream = original_stream
+            self.last_was_newline = False
 
         def write(self, text):
             # Skip empty strings
             if not text:
                 return
 
-            # Filter out pure whitespace (but keep newlines for formatting)
-            if text.strip() == '' and text not in ['\n', '\r\n', '\r']:
-                return
+            # Check if this should be filtered
+            should_skip = False
 
             # Filter [DEBUG] messages
             if '[DEBUG]' in text:
                 if not DEBUG_ENABLED:
-                    return
+                    should_skip = True
 
             # Filter [LLM] messages
             if '[LLM]' in text:
                 if not LLM_LOGGING_ENABLED:
-                    return
+                    should_skip = True
 
             # Filter [HEARTBEAT] messages
             if '[HEARTBEAT]' in text:
+                should_skip = True
+
+            # Skip if marked for filtering
+            if should_skip:
+                return
+
+            # Handle newlines properly - only allow single newlines
+            if text == '\n':
+                if not self.last_was_newline:
+                    self.original_stream.write(text)
+                    self.last_was_newline = True
+                return
+            else:
+                self.last_was_newline = False
+
+            # Filter out pure whitespace (spaces, tabs, multiple newlines)
+            if text.strip() == '':
                 return
 
             # Pass through to original stream
