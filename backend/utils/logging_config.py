@@ -45,13 +45,39 @@ IMPORTANT_PATTERNS = [
 
 def is_important_message(text):
     """Check if message contains important patterns that should always be shown."""
-    if not text or text.strip() in ['', '\n', '\r\n']:
+    if not text:
+        return False
+
+    text_stripped = text.strip()
+    if not text_stripped or text_stripped in ['\n', '\r', '\r\n']:
         return False
 
     text_lower = text.lower()
     for pattern in IMPORTANT_PATTERNS:
         if pattern.lower() in text_lower:
             return True
+    return False
+
+
+def should_filter(text):
+    """Check if text should be filtered out."""
+    if not text:
+        return True
+
+    # Filter out pure whitespace
+    if not text.strip():
+        return True
+
+    # Filter [DEBUG] messages
+    if '[DEBUG]' in text:
+        if not DEBUG_ENABLED:
+            return True
+
+    # Filter [LLM] messages
+    if '[LLM]' in text:
+        if not LLM_LOGGING_ENABLED:
+            return True
+
     return False
 
 
@@ -69,30 +95,23 @@ def suppress_print_statements():
 
         def __init__(self, original_stream):
             self.original_stream = original_stream
+            self.buffer = []
 
         def write(self, text):
             # Skip empty strings
             if not text:
                 return
 
-            # Always show important messages in BLUE
-            if is_important_message(text):
-                # Add blue color for important messages
-                self.original_stream.write(BLUE + text + RESET)
+            # Check if we should filter this text
+            if should_filter(text):
                 return
 
-            # Filter [DEBUG] messages
-            if '[DEBUG]' in text:
-                if not DEBUG_ENABLED:
-                    return
-
-            # Filter [LLM] messages
-            if '[LLM]' in text:
-                if not LLM_LOGGING_ENABLED:
-                    return
-
-            # Pass through to original stream (no color)
-            self.original_stream.write(text)
+            # Check if this is an important message (show in blue)
+            if is_important_message(text):
+                self.original_stream.write(BLUE + text + RESET)
+            else:
+                # Regular message - pass through
+                self.original_stream.write(text)
 
         def flush(self):
             self.original_stream.flush()
