@@ -16,10 +16,6 @@ from backend.api import simulations
 from dotenv import load_dotenv
 load_dotenv()
 
-# Setup console output filtering (suppress [DEBUG] and [LLM] messages based on .env)
-# Must be imported AFTER load_dotenv() to read DEBUG_ENABLED and LLM_LOGGING_ENABLED
-from backend.utils.logging_config import suppress_print_statements
-
 # Fix tokenizers parallelism warning
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
