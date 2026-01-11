@@ -345,10 +345,10 @@ export async function getLaborActionTemplate(): Promise<SimulationTemplate> {
 }
 
 /**
- * Get the commons dilemma template (SDG 12/13: Responsible Consumption/Climate Action)
+ * Get the fishery management template (SDG 14: Life Below Water)
  */
-export async function getCommonsDilemmaTemplate(): Promise<SimulationTemplate> {
-  const response = await api.get('/api/simulations/templates/commons-dilemma');
+export async function getFisheryManagementTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/fishery-management');
   return response.data;
 }
 

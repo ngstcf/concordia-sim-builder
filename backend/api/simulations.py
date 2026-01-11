@@ -1515,15 +1515,15 @@ being fired if the movement fails.""",
     }
 
 
-@router.get("/templates/commons-dilemma")
-async def get_commons_dilemma_template():
+@router.get("/templates/fishery-management")
+async def get_fishery_management_template():
     """
-    Template: Tragedy of the Commons (SDG 12: Responsible Consumption, SDG 13: Climate Action)
-    Use for: Modeling resource management, collective action for sustainability
+    Template: Fishery Management - Tragedy of the Commons (SDG 14: Life Below Water)
+    Use for: Modeling marine resource management, sustainable fishing, collective action
     """
     return {
-        "name": "Fishery Management Simulation",
-        "description": "Community manages shared fishery to prevent collapse (SDG 12/13)",
+        "name": "Fishery Management: Tragedy of the Commons",
+        "description": "Community manages shared fishery to prevent collapse (SDG 14: Life Below Water)",
         "prefab_type": "generic__GameMaster",
         "config": {
             "premise": """A coastal community depends on a local fishery for their livelihood.

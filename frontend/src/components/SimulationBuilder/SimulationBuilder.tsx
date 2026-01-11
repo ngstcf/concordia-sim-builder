@@ -17,7 +17,7 @@ import {
   getMarketplaceTemplate,
   getStateFormationTemplate,
   getLaborActionTemplate,
-  getCommonsDilemmaTemplate,
+  getFisheryManagementTemplate,
   getDisasterResponseTemplate,
   getInequalityMobilityTemplate,
   getContextAwareModeratorTemplate,
@@ -52,7 +52,7 @@ const TEMPLATES = [
   { id: 'marketplace', name: 'Marketplace', description: 'Farmers market trading', category: 'Prefab Types' },
   { id: 'state-formation', name: 'State Formation', description: 'Building institutions (SDG 16)', category: 'SDG Scenarios' },
   { id: 'labor-action', name: 'Labor Strike', description: 'Collective bargaining (SDG 8)', category: 'SDG Scenarios' },
-  { id: 'commons-dilemma', name: 'Fishery Management', description: 'Tragedy of commons (SDG 12/13)', category: 'SDG Scenarios' },
+  { id: 'fishery-management', name: 'Fishery Management', description: 'Tragedy of commons (SDG 14)', category: 'SDG Scenarios' },
   { id: 'disaster-response', name: 'Flood Evacuation', description: 'Emergency response (SDG 11/13)', category: 'SDG Scenarios' },
   { id: 'inequality-mobility', name: 'Educational Opportunity', description: 'Social mobility (SDG 10)', category: 'SDG Scenarios' },
 ];
@@ -75,7 +75,7 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   marketplace: getMarketplaceTemplate,
   'state-formation': getStateFormationTemplate,
   'labor-action': getLaborActionTemplate,
-  'commons-dilemma': getCommonsDilemmaTemplate,
+  'fishery-management': getFisheryManagementTemplate,
   'disaster-response': getDisasterResponseTemplate,
   'inequality-mobility': getInequalityMobilityTemplate,
 };

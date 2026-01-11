@@ -29,7 +29,7 @@
 9. Marketplace - Farmers market trading
 10. State Formation - SDG 16 simulation
 11. Labor Action - SDG 8 simulation
-12. Commons Dilemma - SDG 12/13 simulation
+12. Fishery Management - SDG 14 (Life Below Water) simulation
 13. Disaster Response - SDG 11/13 simulation
 14. Inequality Mobility - SDG 10 simulation
 

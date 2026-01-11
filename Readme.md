@@ -528,7 +528,7 @@ console.log(analysis.recommendations);
 | `/api/simulations/templates/marketplace` | GET | Marketplace trading template |
 | `/api/simulations/templates/state-formation` | GET | State formation simulation (SDG 16) |
 | `/api/simulations/templates/labor-action` | GET | Labor strike simulation (SDG 8) |
-| `/api/simulations/templates/commons-dilemma` | GET | Fishery management simulation (SDG 12/13) |
+| `/api/simulations/templates/fishery-management` | GET | Fishery management simulation (SDG 14: Life Below Water) |
 | `/api/simulations/templates/disaster-response` | GET | Flood evacuation simulation (SDG 11/13) |
 | `/api/simulations/templates/inequality-mobility` | GET | Educational opportunity simulation (SDG 10) |
 | `/api/simulations/templates/vaccine-hesitancy` | GET | Vaccine hesitancy research demo |
