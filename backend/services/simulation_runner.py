@@ -5,6 +5,7 @@ import asyncio
 import json
 import datetime
 import os
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -18,6 +19,10 @@ from backend.models.schemas import (
     EventType
 )
 from backend.services.simulation_builder import build_simulation
+
+# Import debug print utilities
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.debug_print import debug_print
 from backend.services.simulation_state import simulation_state
 
 # Apply global patches to handle verbose LLM responses in binary choice questions
@@ -105,7 +110,7 @@ async def run_simulation_stream(
         # Get the event loop BEFORE starting the thread
         # This is critical - we need to capture the loop from the async context
         event_loop = asyncio.get_running_loop()
-        print(f"[DEBUG] Captured event loop for thread-safe access: {event_loop}")
+        debug_print(f"[DEBUG] Captured event loop for thread-safe access: {event_loop}")
 
         def sync_progress_callback(checkpoint_data: dict):
             """Sync progress callback for Concordia - prints terminal progress and queues SSE events.
@@ -147,7 +152,7 @@ async def run_simulation_stream(
                         'est_remaining': est_remaining,
                         'est_time_str': est_time_str
                     }
-                    print(f"[DEBUG] Attempting to queue SSE progress event: {progress_data}")
+                    debug_print(f"[DEBUG] Attempting to queue SSE progress event: {progress_data}")
 
                     # Use the captured event_loop reference instead of get_running_loop()
                     # This works from any thread
@@ -155,7 +160,7 @@ async def run_simulation_stream(
                         progress_queue.put_nowait,
                         progress_data
                     )
-                    print(f"[DEBUG] Successfully queued SSE progress event")
+                    debug_print(f"[DEBUG] Successfully queued SSE progress event")
 
                     # Save partial checkpoint every N steps
                     if step % checkpoint_interval == 0 and step > last_checkpoint_step[0]:
@@ -225,7 +230,7 @@ async def run_simulation_stream(
                 try:
                     # Get progress with timeout to check if simulation is done
                     progress_data = await asyncio.wait_for(progress_queue.get(), timeout=5.0)
-                    print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
+                    debug_print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
                     yield _format_sse(EventType.STEP_PROGRESS, progress_data)
                     # Update last progress time
                     last_progress_time[0] = time.time()
@@ -274,10 +279,10 @@ async def run_simulation_stream(
 
             # Use a try-except to handle Concordia errors while still saving partial results
             try:
-                print(f"[DEBUG] Waiting for future.result() to get simulation results...")
+                debug_print(f"[DEBUG] Waiting for future.result() to get simulation results...")
                 results = future.result()
-                print(f"[DEBUG] Simulation completed successfully, got results (type: {type(results).__name__})")
-                print(f"[DEBUG] Results length: {len(str(results)) if results else 0} characters")
+                debug_print(f"[DEBUG] Simulation completed successfully, got results (type: {type(results).__name__})")
+                debug_print(f"[DEBUG] Results length: {len(str(results)) if results else 0} characters")
             except Exception as sim_error:
                 # Simulation failed, but try to save partial results
                 simulation_error = str(sim_error)
@@ -293,7 +298,7 @@ async def run_simulation_stream(
                 try:
                     from concordia.utils import html as html_lib
                     raw_log = sim.get_raw_log()
-                    print(f"[DEBUG] Retrieved raw_log with {len(raw_log)} entries")
+                    debug_print(f"[DEBUG] Retrieved raw_log with {len(raw_log)} entries")
                     results = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
                     print(f"[WARNING] Saved partial results due to simulation error ({len(results)} chars)")
                 except Exception as partial_error:
@@ -308,7 +313,7 @@ async def run_simulation_stream(
             while not progress_queue.empty():
                 try:
                     progress_data = progress_queue.get_nowait()
-                    print(f"[DEBUG] Draining remaining SSE progress event: {progress_data}")
+                    debug_print(f"[DEBUG] Draining remaining SSE progress event: {progress_data}")
                     yield _format_sse(EventType.STEP_PROGRESS, progress_data)
                 except asyncio.QueueEmpty:
                     break
@@ -349,57 +354,57 @@ async def run_simulation_stream(
         # Extract grounded variables history if present (for all game master types)
         grounded_variables_history = None
         if sim.game_masters and hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
-            print(f"[DEBUG] Grounded variables configured: {len(config.game_master.grounded_variables)} variables")
+            debug_print(f"[DEBUG] Grounded variables configured: {len(config.game_master.grounded_variables)} variables")
             try:
                 gm = sim.game_masters[0]
                 grounded_vars_component = None  # Initialize at the top level
 
                 # Debug: print the type and attributes of the game master
-                print(f"[DEBUG] Game master type: {type(gm).__name__}")
+                debug_print(f"[DEBUG] Game master type: {type(gm).__name__}")
 
                 # Try get_all_context_components first (EntityAgentWithLogging method)
                 if hasattr(gm, 'get_all_context_components'):
                     print("[DEBUG] Game master has get_all_context_components() method")
                     try:
                         all_components = gm.get_all_context_components()
-                        print(f"[DEBUG] All context components: {list(all_components.keys())}")
+                        debug_print(f"[DEBUG] All context components: {list(all_components.keys())}")
 
                         for comp_name, comp in all_components.items():
                             class_name = comp.__class__.__name__
-                            print(f"[DEBUG] Component '{comp_name}' is of type '{class_name}'")
+                            debug_print(f"[DEBUG] Component '{comp_name}' is of type '{class_name}'")
                             if class_name == 'GroundedVariablesComponent':
                                 grounded_vars_component = comp
-                                print(f"[DEBUG] Found grounded variables component: {comp_name}")
+                                debug_print(f"[DEBUG] Found grounded variables component: {comp_name}")
                                 break
                     except Exception as e:
-                        print(f"[DEBUG] Error calling get_all_context_components: {e}")
+                        debug_print(f"[DEBUG] Error calling get_all_context_components: {e}")
 
                 # Fallback 1: Try get_component_names() if it exists
                 if not grounded_vars_component and hasattr(gm, 'get_component_names'):
                     component_names = gm.get_component_names()
-                    print(f"[DEBUG] Game master has get_component_names(), found: {component_names}")
+                    debug_print(f"[DEBUG] Game master has get_component_names(), found: {component_names}")
 
                     for component_name in component_names:
                         try:
                             component = gm.get_component(component_name)
                             class_name = component.__class__.__name__
-                            print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
+                            debug_print(f"[DEBUG] Component '{component_name}' is of type '{class_name}'")
                             if class_name == 'GroundedVariablesComponent':
                                 grounded_vars_component = component
-                                print(f"[DEBUG] Found grounded variables component: {component_name}")
+                                debug_print(f"[DEBUG] Found grounded variables component: {component_name}")
                                 break
                         except Exception as e:
-                            print(f"[DEBUG] Error accessing component '{component_name}': {e}")
+                            debug_print(f"[DEBUG] Error accessing component '{component_name}': {e}")
 
                 # Fallback 2: Try context_components attribute directly
                 if not grounded_vars_component and hasattr(gm, 'context_components'):
-                    print(f"[DEBUG] Game master has context_components: {list(gm.context_components.keys())}")
+                    debug_print(f"[DEBUG] Game master has context_components: {list(gm.context_components.keys())}")
                     for comp_name, comp in gm.context_components.items():
                         class_name = comp.__class__.__name__
-                        print(f"[DEBUG] Context component '{comp_name}' is of type '{class_name}'")
+                        debug_print(f"[DEBUG] Context component '{comp_name}' is of type '{class_name}'")
                         if class_name == 'GroundedVariablesComponent':
                             grounded_vars_component = comp
-                            print(f"[DEBUG] Found grounded variables component in context_components: {comp_name}")
+                            debug_print(f"[DEBUG] Found grounded variables component in context_components: {comp_name}")
                             break
 
                 # Fallback 3: Try to get the component directly by name
@@ -409,29 +414,29 @@ async def run_simulation_stream(
                         component = gm.get_component('grounded_variables_component')
                         if component:
                             class_name = component.__class__.__name__
-                            print(f"[DEBUG] Direct component is of type '{class_name}'")
+                            debug_print(f"[DEBUG] Direct component is of type '{class_name}'")
                             if class_name == 'GroundedVariablesComponent':
                                 grounded_vars_component = component
-                                print(f"[DEBUG] Found grounded variables component via direct get_component call")
+                                debug_print(f"[DEBUG] Found grounded variables component via direct get_component call")
                     except Exception as e:
-                        print(f"[DEBUG] Error getting component directly: {e}")
+                        debug_print(f"[DEBUG] Error getting component directly: {e}")
 
                 # Fallback 4: Check act_component if it exists
                 if not grounded_vars_component and hasattr(gm, 'act_component'):
                     print("[DEBUG] Checking act_component for grounded variables...")
                     act_comp = gm.act_component
-                    print(f"[DEBUG] Act component type: {type(act_comp).__name__}")
+                    debug_print(f"[DEBUG] Act component type: {type(act_comp).__name__}")
                     if hasattr(act_comp, '_components'):
-                        print(f"[DEBUG] Act component has _components: {list(act_comp._components.keys())}")
+                        debug_print(f"[DEBUG] Act component has _components: {list(act_comp._components.keys())}")
                         for comp_name, comp in act_comp._components.items():
                             class_name = comp.__class__.__name__
                             if class_name == 'GroundedVariablesComponent':
                                 grounded_vars_component = comp
-                                print(f"[DEBUG] Found grounded variables component in act_component: {comp_name}")
+                                debug_print(f"[DEBUG] Found grounded variables component in act_component: {comp_name}")
                                 break
 
                 if grounded_vars_component:
-                    print(f"[DEBUG] Extracting history from grounded variables component")
+                    debug_print(f"[DEBUG] Extracting history from grounded variables component")
                     grounded_variables_history = {}
 
                     # Get history for each variable
@@ -447,9 +452,9 @@ async def run_simulation_stream(
                         ]
 
                         grounded_variables_history[var_name] = formatted_history
-                        print(f"[DEBUG] Variable '{var_name}' has {len(history)} history entries")
+                        debug_print(f"[DEBUG] Variable '{var_name}' has {len(history)} history entries")
 
-                    print(f"[DEBUG] Extracted history for {len(grounded_variables_history)} variables")
+                    debug_print(f"[DEBUG] Extracted history for {len(grounded_variables_history)} variables")
                 else:
                     print("[WARNING] Grounded variables component not found in game master after checking all locations")
                     print("[INFO] This means the component was not properly attached to the game master")
@@ -460,27 +465,27 @@ async def run_simulation_stream(
 
         # Special handling for interviewer prefab to extract questionnaire results
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
-            print(f"[DEBUG] Interviewer prefab detected, extracting questionnaire results")
+            debug_print(f"[DEBUG] Interviewer prefab detected, extracting questionnaire results")
             try:
                 gm = sim.game_masters[0]
-                print(f"[DEBUG] Game master name: {gm.name}")
+                debug_print(f"[DEBUG] Game master name: {gm.name}")
 
                 questionnaire_component = gm.get_component('questionnaire')
-                print(f"[DEBUG] Questionnaire component: {questionnaire_component}")
+                debug_print(f"[DEBUG] Questionnaire component: {questionnaire_component}")
 
                 if questionnaire_component:
                     import pandas as pd
 
                     # Debug: Check questionnaire state
-                    print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
-                    print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
+                    debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
+                    debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
                     results_df = questionnaire_component.get_questionnaires_results()
                     answers = questionnaire_component.get_answers()
 
-                    print(f"[DEBUG] Results DataFrame: {results_df}")
-                    print(f"[DEBUG] Answers dict: {answers}")
-                    print(f"[DEBUG] Number of players with answers: {len(answers)}")
+                    debug_print(f"[DEBUG] Results DataFrame: {results_df}")
+                    debug_print(f"[DEBUG] Answers dict: {answers}")
+                    debug_print(f"[DEBUG] Number of players with answers: {len(answers)}")
 
                     # Generate custom HTML for questionnaire results
                     questionnaire_html = f"""
@@ -539,7 +544,7 @@ async def run_simulation_stream(
 </html>
 """
                     results = questionnaire_html
-                    print(f"[DEBUG] Generated custom questionnaire HTML ({len(questionnaire_html)} chars)")
+                    debug_print(f"[DEBUG] Generated custom questionnaire HTML ({len(questionnaire_html)} chars)")
                 else:
                     print("[WARNING] No questionnaire component found in game master")
             except Exception as e:
@@ -549,11 +554,11 @@ async def run_simulation_stream(
 
         # Special handling for game-theoretic prefab to extract payoff matrix results
         elif config.game_master.prefab == 'game_theoretic_and_dramaturgic__GameMaster' and sim.game_masters:
-            print(f"[DEBUG] Game-theoretic prefab detected, extracting payoff matrix results")
+            debug_print(f"[DEBUG] Game-theoretic prefab detected, extracting payoff matrix results")
             # game_theoretic_data already declared at function scope
             try:
                 gm = sim.game_masters[0]
-                print(f"[DEBUG] Game master name: {gm.name}")
+                debug_print(f"[DEBUG] Game master name: {gm.name}")
 
                 # Try to get payoff_matrix component by iterating through all components
                 from concordia.components.game_master import payoff_matrix as payoff_matrix_lib
@@ -561,13 +566,13 @@ async def run_simulation_stream(
 
                 # Search for payoff matrix component using get_component_names
                 component_names = gm.get_component_names() if hasattr(gm, 'get_component_names') else []
-                print(f"[DEBUG] Game master has {len(component_names)} components")
+                debug_print(f"[DEBUG] Game master has {len(component_names)} components")
 
                 for component_name in component_names:
                     component = gm.get_component(component_name)
                     if isinstance(component, payoff_matrix_lib.PayoffMatrix):
                         payoff_component = component
-                        print(f"[DEBUG] Found payoff matrix component: {component_name}")
+                        debug_print(f"[DEBUG] Found payoff matrix component: {component_name}")
                         break
 
                 if payoff_component:
@@ -576,9 +581,9 @@ async def run_simulation_stream(
                     state = payoff_component.get_state()
                     history = state.get('history', [])
 
-                    print(f"[DEBUG] Player scores: {scores}")
-                    print(f"[DEBUG] History entries: {len(history)}")
-                    print(f"[DEBUG] Partial joint action: {state.get('partial_joint_action')}")
+                    debug_print(f"[DEBUG] Player scores: {scores}")
+                    debug_print(f"[DEBUG] History entries: {len(history)}")
+                    debug_print(f"[DEBUG] Partial joint action: {state.get('partial_joint_action')}")
 
                     # Initialize game_theoretic_data
                     game_theoretic_data = {}
@@ -740,7 +745,7 @@ async def run_simulation_stream(
 </html>
 """
                     results = game_theoretic_html
-                    print(f"[DEBUG] Generated custom game-theoretic HTML ({len(game_theoretic_html)} chars)")
+                    debug_print(f"[DEBUG] Generated custom game-theoretic HTML ({len(game_theoretic_html)} chars)")
                 else:
                     print("[WARNING] No payoff matrix component found in game master")
             except Exception as e:
@@ -750,7 +755,7 @@ async def run_simulation_stream(
 
         try:
             results_html = str(results)
-            print(f"[DEBUG] Results converted to HTML (length: {len(results_html)})")
+            debug_print(f"[DEBUG] Results converted to HTML (length: {len(results_html)})")
         except Exception as e:
             print(f"[ERROR] Failed to convert results to HTML: {e}")
             import traceback
@@ -811,10 +816,10 @@ async def run_simulation_stream(
                     var_name = var_data.get('name') if isinstance(var_data, dict) else var_data
                     if var_name in grounded_variables_history:
                         var_data['history'] = grounded_variables_history[var_name]
-                        print(f"[DEBUG] Added history for variable '{var_name}': {len(grounded_variables_history[var_name])} entries")
+                        debug_print(f"[DEBUG] Added history for variable '{var_name}': {len(grounded_variables_history[var_name])} entries")
 
             agent_metadata["game_master"]["grounded_variables"] = grounded_vars_data
-            print(f"[DEBUG] Added {len(grounded_vars_data)} grounded variables to metadata")
+            debug_print(f"[DEBUG] Added {len(grounded_vars_data)} grounded variables to metadata")
 
         for agent in config.agents:
             agent_info = {
@@ -853,7 +858,7 @@ async def run_simulation_stream(
                 "scores": game_theoretic_data.get('scores', {}),
                 "actions_by_player": game_theoretic_data.get('actions_by_player', {})
             }
-            print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
+            debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:
@@ -887,7 +892,7 @@ async def run_simulation_stream(
             'error_type': simulation_error_type
             # NOTE: 'results' field removed - frontend will load from log file
         })
-        print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
+        debug_print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
         yield completion_event
         print("[DEBUG] SIMULATION_COMPLETE event yielded")
 
@@ -903,7 +908,7 @@ async def run_simulation_stream(
 def _format_sse(event_type: EventType, data: dict) -> str:
     """Format data as Server-Sent Event."""
     formatted = f"event: {event_type.value}\ndata: {json.dumps(data)}\n\n"
-    print(f"[DEBUG] _format_sse: event_type={event_type.value}, data_length={len(json.dumps(data))}, total_length={len(formatted)}")
+    debug_print(f"[DEBUG] _format_sse: event_type={event_type.value}, data_length={len(json.dumps(data))}, total_length={len(formatted)}")
     return formatted
 
 
@@ -1009,21 +1014,21 @@ async def run_simulation_simple(
                 print(f"   ✓ Initializing simulation...")
 
         # Run simulation with progress callback
-        print(f"[DEBUG] Starting simulation play with max_steps={config.max_steps}")
-        print(f"[DEBUG] Game master prefab: {config.game_master.prefab}")
-        print(f"[DEBUG] Number of entities: {len(sim.entities)}")
-        print(f"[DEBUG] Number of game masters: {len(sim.game_masters)}")
+        debug_print(f"[DEBUG] Starting simulation play with max_steps={config.max_steps}")
+        debug_print(f"[DEBUG] Game master prefab: {config.game_master.prefab}")
+        debug_print(f"[DEBUG] Number of entities: {len(sim.entities)}")
+        debug_print(f"[DEBUG] Number of game masters: {len(sim.game_masters)}")
         for entity in sim.entities:
-            print(f"[DEBUG] Entity: {entity.name}, type: {type(entity).__name__}")
+            debug_print(f"[DEBUG] Entity: {entity.name}, type: {type(entity).__name__}")
         for gm in sim.game_masters:
-            print(f"[DEBUG] Game Master: {gm.name}, type: {type(gm).__name__}")
+            debug_print(f"[DEBUG] Game Master: {gm.name}, type: {type(gm).__name__}")
 
         results = sim.play(
             max_steps=config.max_steps,
             get_state_callback=progress_callback,
             verbose=True
         )
-        print(f"[DEBUG] Simulation play completed, results type: {type(results).__name__}")
+        debug_print(f"[DEBUG] Simulation play completed, results type: {type(results).__name__}")
 
         # Try to get step count from results
         # Use the step_count from our progress callback for accurate reporting
@@ -1071,25 +1076,25 @@ async def run_simulation_simple(
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
             try:
                 gm = sim.game_masters[0]
-                print(f"[DEBUG] Game master name: {gm.name}")
-                print(f"[DEBUG] Game master components: {list(gm.get_component_names()) if hasattr(gm, 'get_component_names') else 'N/A'}")
+                debug_print(f"[DEBUG] Game master name: {gm.name}")
+                debug_print(f"[DEBUG] Game master components: {list(gm.get_component_names()) if hasattr(gm, 'get_component_names') else 'N/A'}")
 
                 questionnaire_component = gm.get_component('questionnaire')
-                print(f"[DEBUG] Questionnaire component: {questionnaire_component}")
+                debug_print(f"[DEBUG] Questionnaire component: {questionnaire_component}")
 
                 if questionnaire_component:
                     import pandas as pd
 
                     # Debug: Check questionnaire state
-                    print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
-                    print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
+                    debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
+                    debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
                     results_df = questionnaire_component.get_questionnaires_results()
                     answers = questionnaire_component.get_answers()
 
-                    print(f"[DEBUG] Results DataFrame: {results_df}")
-                    print(f"[DEBUG] Answers dict: {answers}")
-                    print(f"[DEBUG] Number of players with answers: {len(answers)}")
+                    debug_print(f"[DEBUG] Results DataFrame: {results_df}")
+                    debug_print(f"[DEBUG] Answers dict: {answers}")
+                    debug_print(f"[DEBUG] Number of players with answers: {len(answers)}")
 
                     # Generate custom HTML for questionnaire results
                     questionnaire_html = f"""
@@ -1148,7 +1153,7 @@ async def run_simulation_simple(
 </html>
 """
                     results_html = questionnaire_html
-                    print(f"[DEBUG] Generated custom questionnaire HTML ({len(results_html)} chars)")
+                    debug_print(f"[DEBUG] Generated custom questionnaire HTML ({len(results_html)} chars)")
                 else:
                     print("[WARNING] No questionnaire component found in game master")
             except Exception as e:
@@ -1158,11 +1163,11 @@ async def run_simulation_simple(
 
         # Special handling for game-theoretic prefab to extract payoff matrix results
         elif config.game_master.prefab == 'game_theoretic_and_dramaturgic__GameMaster' and sim.game_masters:
-            print(f"[DEBUG] Game-theoretic prefab detected, extracting payoff matrix results")
+            debug_print(f"[DEBUG] Game-theoretic prefab detected, extracting payoff matrix results")
             # game_theoretic_data already declared at function scope
             try:
                 gm = sim.game_masters[0]
-                print(f"[DEBUG] Game master name: {gm.name}")
+                debug_print(f"[DEBUG] Game master name: {gm.name}")
 
                 # Try to get payoff_matrix component by iterating through all components
                 from concordia.components.game_master import payoff_matrix as payoff_matrix_lib
@@ -1170,13 +1175,13 @@ async def run_simulation_simple(
 
                 # Search for payoff matrix component using get_component_names
                 component_names = gm.get_component_names() if hasattr(gm, 'get_component_names') else []
-                print(f"[DEBUG] Game master has {len(component_names)} components")
+                debug_print(f"[DEBUG] Game master has {len(component_names)} components")
 
                 for component_name in component_names:
                     component = gm.get_component(component_name)
                     if isinstance(component, payoff_matrix_lib.PayoffMatrix):
                         payoff_component = component
-                        print(f"[DEBUG] Found payoff matrix component: {component_name}")
+                        debug_print(f"[DEBUG] Found payoff matrix component: {component_name}")
                         break
 
                 if payoff_component:
@@ -1185,9 +1190,9 @@ async def run_simulation_simple(
                     state = payoff_component.get_state()
                     history = state.get('history', [])
 
-                    print(f"[DEBUG] Player scores: {scores}")
-                    print(f"[DEBUG] History entries: {len(history)}")
-                    print(f"[DEBUG] Partial joint action: {state.get('partial_joint_action')}")
+                    debug_print(f"[DEBUG] Player scores: {scores}")
+                    debug_print(f"[DEBUG] History entries: {len(history)}")
+                    debug_print(f"[DEBUG] Partial joint action: {state.get('partial_joint_action')}")
 
                     # Initialize game_theoretic_data
                     game_theoretic_data = {}
@@ -1349,7 +1354,7 @@ async def run_simulation_simple(
 </html>
 """
                     results_html = game_theoretic_html
-                    print(f"[DEBUG] Generated custom game-theoretic HTML ({len(game_theoretic_html)} chars)")
+                    debug_print(f"[DEBUG] Generated custom game-theoretic HTML ({len(game_theoretic_html)} chars)")
                 else:
                     print("[WARNING] No payoff matrix component found in game master")
             except Exception as e:
@@ -1439,7 +1444,7 @@ async def run_simulation_simple(
                 "scores": game_theoretic_data.get('scores', {}),
                 "actions_by_player": game_theoretic_data.get('actions_by_player', {})
             }
-            print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
+            debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:

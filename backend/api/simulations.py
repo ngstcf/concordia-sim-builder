@@ -25,6 +25,7 @@ from backend.services.simulation_runner import (
 )
 from backend.services.llm_factory import get_available_providers
 from backend.services.simulation_state import simulation_state
+from backend.utils.debug_print import debug_print
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
@@ -424,12 +425,12 @@ async def execute_simulation(request: ExecutionRequest):
     llm_settings = request.llm_settings
 
     # Debug: Check if critical_decision_points are in the request
-    print(f"[DEBUG] execute_simulation: Checking for critical_decision_points in request...")
-    print(f"[DEBUG] hasattr(config, 'game_master'): {hasattr(config, 'game_master')}")
+    debug_print(f"[DEBUG] execute_simulation: Checking for critical_decision_points in request...")
+    debug_print(f"[DEBUG] hasattr(config, 'game_master'): {hasattr(config, 'game_master')}")
     if hasattr(config, 'game_master'):
-        print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
+        debug_print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
         if hasattr(config.game_master, 'critical_decision_points'):
-            print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
+            debug_print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
 
     # Validate first
     validation = await validate_config(config)
@@ -3200,20 +3201,20 @@ async def get_simulation_analytics(filename: str):
                             "result_summary": "",  # TODO: Extract from HTML if available
                             "found": True
                         }
-                        print(f"[DEBUG] Found nested simulation for agent {agent['name']}")
+                        debug_print(f"[DEBUG] Found nested simulation for agent {agent['name']}")
 
                 # NEW: Detect grounded variables
                 if metadata.get("game_master", {}).get("grounded_variables"):
                     has_grounded_variables = True
                     grounded_variables_data["variables"] = metadata["game_master"]["grounded_variables"]
-                    print(f"[DEBUG] Found {len(grounded_variables_data['variables'])} grounded variables")
+                    debug_print(f"[DEBUG] Found {len(grounded_variables_data['variables'])} grounded variables")
 
                 # NEW: Detect components
                 for agent in metadata.get("agents", []):
                     if agent.get("components"):
                         has_components = True
                         component_data[agent["name"]] = agent["components"]
-                        print(f"[DEBUG] Found components for agent {agent['name']}: {list(agent['components'].keys())}")
+                        debug_print(f"[DEBUG] Found components for agent {agent['name']}: {list(agent['components'].keys())}")
 
                 # Build a map of agent name -> metadata
                 for agent in metadata.get("agents", []):
@@ -3222,7 +3223,7 @@ async def get_simulation_analytics(filename: str):
                         "prefab": agent.get("prefab", ""),
                         "memories_count": agent.get("memories_count", 0)
                     }
-                print(f"[DEBUG] Loaded metadata for {len(agent_metadata)} agents")
+                debug_print(f"[DEBUG] Loaded metadata for {len(agent_metadata)} agents")
 
                 # Check for game-theoretic action data in metadata
                 if "game_theoretic" in metadata:
@@ -3232,9 +3233,9 @@ async def get_simulation_analytics(filename: str):
                     if actions_by_player:  # Only use if actually has data
                         for player_name, actions in actions_by_player.items():
                             game_theoretic_actions[player_name] = len(actions)
-                        print(f"[DEBUG] Loaded game-theoretic action data: {game_theoretic_actions}")
+                        debug_print(f"[DEBUG] Loaded game-theoretic action data: {game_theoretic_actions}")
                     else:
-                        print(f"[DEBUG] Game-theoretic metadata exists but empty, will use HTML extraction")
+                        debug_print(f"[DEBUG] Game-theoretic metadata exists but empty, will use HTML extraction")
         except Exception as e:
             print(f"[WARNING] Failed to load metadata: {e}")
 
@@ -3298,8 +3299,8 @@ async def get_simulation_analytics(filename: str):
             for player_name, action_count in game_theoretic_actions.items():
                 if player_name in analytics["agent_actions"]:
                     analytics["agent_actions"][player_name] = action_count
-                    print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
-            print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
+                    debug_print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
+            debug_print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
 
         # Count actions per agent by finding actual agent actions (with "Action:" label)
         # Actions are in the Game Master log tab, organized by agent entity
@@ -3406,10 +3407,10 @@ async def get_simulation_analytics(filename: str):
             # USE METADATA FOR GOAL - Much more reliable than HTML parsing!
             if agent in agent_metadata and agent_metadata[agent].get("goal"):
                 agent_details["goal"] = agent_metadata[agent]["goal"]
-                print(f"[DEBUG] Agent '{agent}': using goal from metadata: {agent_details['goal'][:100]}...")
+                debug_print(f"[DEBUG] Agent '{agent}': using goal from metadata: {agent_details['goal'][:100]}...")
             else:
                 # Fallback: Try to extract goal from HTML (old method)
-                print(f"[DEBUG] Agent '{agent}': no goal in metadata, trying HTML extraction")
+                debug_print(f"[DEBUG] Agent '{agent}': no goal in metadata, trying HTML extraction")
 
                 # Only try HTML extraction if we haven't found a goal yet
                 game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
@@ -3437,7 +3438,7 @@ async def get_simulation_analytics(filename: str):
                                 goal = goal_match.group(1).strip()
                                 if goal and len(goal) > 10:
                                     agent_details["goal"] = goal
-                                    print(f"[DEBUG] Agent '{agent}': found goal via regex: {goal[:100]}...")
+                                    debug_print(f"[DEBUG] Agent '{agent}': found goal via regex: {goal[:100]}...")
                                     break
 
             analytics["agent_details"][agent] = agent_details
@@ -3448,11 +3449,11 @@ async def get_simulation_analytics(filename: str):
             for agent in analytics["agents"]:
                 agent_details = analytics["agent_details"][agent]
 
-                print(f"[DEBUG] Agent '{agent}': extracting actions from Game Master log")
+                debug_print(f"[DEBUG] Agent '{agent}': extracting actions from Game Master log")
 
                 # PRIMARY METHOD: Extract actions from event descriptions
                 # This is more reliable than parsing complex HTML structures
-                print(f"[DEBUG] Agent '{agent}': extracting actions from event descriptions")
+                debug_print(f"[DEBUG] Agent '{agent}': extracting actions from event descriptions")
 
                 # Track seen (step, action) pairs to avoid true duplicates
                 # Same event may appear multiple times in nested sections
@@ -3473,10 +3474,10 @@ async def get_simulation_analytics(filename: str):
 
                 # SECONDARY METHOD: If no actions found in events, try entity tags
                 if len(agent_details["actions"]) == 0:
-                    print(f"[DEBUG] Agent '{agent}': no actions in events, trying entity tag extraction")
+                    debug_print(f"[DEBUG] Agent '{agent}': no actions in events, trying entity tag extraction")
                     entity_pattern_bs = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
                     entity_tags = game_master_log.find_all('b', string=entity_pattern_bs)
-                    print(f"[DEBUG] Agent '{agent}': found {len(entity_tags)} entity tags for action extraction")
+                    debug_print(f"[DEBUG] Agent '{agent}': found {len(entity_tags)} entity tags for action extraction")
 
                     # Track seen __act__ tags to avoid counting duplicates from nested <details>
                     seen_act_tags = set()
@@ -3510,7 +3511,7 @@ async def get_simulation_analytics(filename: str):
                                         # This __act__ is in a nested details, skip it
                                         continue
                                 act_b_tags.append(act_tag)
-                            print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in parent li (filtered)")
+                            debug_print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in parent li (filtered)")
 
                         # Fallback to original logic if no tags found in <li>
                         if not act_b_tags:
@@ -3544,7 +3545,7 @@ async def get_simulation_analytics(filename: str):
                                         act_b_tags.append(act_tag)
                                         seen_act_tags.add(tag_id)
 
-                                print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in details container (filtered)")
+                                debug_print(f"[DEBUG] Agent '{agent}': found {len(act_b_tags)} __act__ tags in details container (filtered)")
 
                         for act_tag in act_b_tags:
                             action_text = None  # Initialize for this iteration
@@ -3556,7 +3557,7 @@ async def get_simulation_analytics(filename: str):
                                 if action_spec_tag:
                                     action_spec_text = action_spec_tag.get_text(strip=True)
                                     if 'finished' in action_spec_text.lower() or 'simulation' in action_spec_text.lower():
-                                        print(f"[DEBUG] Agent '{agent}': skipping game master __act__ tag (Action Spec: {action_spec_text})")
+                                        debug_print(f"[DEBUG] Agent '{agent}': skipping game master __act__ tag (Action Spec: {action_spec_text})")
                                         continue
 
                                 # Look for action text in summary or in Value li
@@ -3579,7 +3580,7 @@ async def get_simulation_analytics(filename: str):
                                     action_text = target_summary.get_text(strip=True)
                                     # Remove "Action:" prefix if present
                                     action_text = re.sub(r'^Action:\s*', '', action_text, flags=re.IGNORECASE)
-                                    print(f"[DEBUG] Agent '{agent}': extracted action from summary, length={len(action_text)}")
+                                    debug_print(f"[DEBUG] Agent '{agent}': extracted action from summary, length={len(action_text)}")
                                 else:
                                     # Try to find a Value ul that contains the action text
                                     value_tags_in_act = act_section.find_all('b', string=re.compile(r'Value', re.IGNORECASE))
@@ -3604,7 +3605,7 @@ async def get_simulation_analytics(filename: str):
                                                             texts.append(text)
                                                 action_text = ' '.join(texts).strip()
                                                 if action_text:
-                                                    print(f"[DEBUG] Agent '{agent}': extracted action from value li, length={len(action_text)}")
+                                                    debug_print(f"[DEBUG] Agent '{agent}': extracted action from value li, length={len(action_text)}")
                                                     break
 
                                 # Extract step number if available
@@ -3623,25 +3624,25 @@ async def get_simulation_analytics(filename: str):
                                             "step": step_num,
                                             "text": action_text  # Full action text
                                         })
-                                        print(f"[DEBUG] Agent '{agent}': added action (step={step_num}), total actions={len(agent_details['actions'])}")
+                                        debug_print(f"[DEBUG] Agent '{agent}': added action (step={step_num}), total actions={len(agent_details['actions'])}")
                                     else:
-                                        print(f"[DEBUG] Agent '{agent}': skipping short response: '{action_text}'")
+                                        debug_print(f"[DEBUG] Agent '{agent}': skipping short response: '{action_text}'")
                                     action_text = None  # Reset for next iteration
 
                 # TERTIARY METHOD: Regex fallback for game-theoretic actions
                 # Looks for "Action: COOPERATE" pattern anywhere in game master log
                 # Works for ANY action type (COOPERATE/DEFECT, BUY/SELL/HOLD, etc.)
-                print(f"[DEBUG] Agent '{agent}': regex fallback check - actions count={len(agent_details['actions'])}, gm_prefab={gm_prefab}")
+                debug_print(f"[DEBUG] Agent '{agent}': regex fallback check - actions count={len(agent_details['actions'])}, gm_prefab={gm_prefab}")
 
                 # FUTURE: Detection for other game master types (interviewer, dialogic)
                 # These formats may use Q&A or dialogue turns instead of __act__ tags
                 # Current implementation will gracefully fall back to event extraction
                 # if gm_prefab in ['interviewer__GameMaster', 'dialogic__GameMaster']:
-                #     print(f"[DEBUG] Agent '{agent}': {gm_prefab} detected - using dialogue/Q&A extraction")
+                #     debug_print(f"[DEBUG] Agent '{agent}': {gm_prefab} detected - using dialogue/Q&A extraction")
                 #     # TODO: Add interviewer/dialogic-specific extraction logic here
 
                 if len(agent_details["actions"]) == 0 and gm_prefab == 'game_theoretic_and_dramaturgic__GameMaster':
-                    print(f"[DEBUG] Agent '{agent}': trying regex fallback for game-theoretic actions")
+                    debug_print(f"[DEBUG] Agent '{agent}': trying regex fallback for game-theoretic actions")
                     gm_log_html = str(game_master_log)
 
                     # Robust pattern: Entity [Agent] ... __act__ ... Action: ACTION
@@ -3662,12 +3663,12 @@ async def get_simulation_analytics(filename: str):
                                 "step": None,
                                 "text": action
                             })
-                    print(f"[DEBUG] Agent '{agent}': regex fallback found {len(entity_matches)} actions: {entity_matches}")
+                    debug_print(f"[DEBUG] Agent '{agent}': regex fallback found {len(entity_matches)} actions: {entity_matches}")
 
                 # FALLBACK: If no entity tags found, try extracting from event descriptions
                 # This handles cases like GLM-generated HTML where some agents don't have entity sections
                 if len(entity_tags) == 0 and len(agent_details["actions"]) == 0:
-                    print(f"[DEBUG] Agent '{agent}': no entity tags found, trying fallback extraction from events")
+                    debug_print(f"[DEBUG] Agent '{agent}': no entity tags found, trying fallback extraction from events")
 
                     # Track seen actions to avoid duplicates
                     seen_actions = set()
@@ -3725,12 +3726,12 @@ async def get_simulation_analytics(filename: str):
                                             "step": step_num,
                                             "text": action_text  # Full action text
                                         })
-                                        print(f"[DEBUG] Agent '{agent}': added fallback action (step={step_num}), total actions={len(agent_details['actions'])}")
+                                        debug_print(f"[DEBUG] Agent '{agent}': added fallback action (step={step_num}), total actions={len(agent_details['actions'])}")
                                         break  # Only take one action per event
 
                 # FALLBACK: If no entity tags found, also try to extract goal from events
                 if len(entity_tags) == 0 and not agent_details["goal"]:
-                    print(f"[DEBUG] Agent '{agent}': no entity tags found, trying fallback goal extraction from events")
+                    debug_print(f"[DEBUG] Agent '{agent}': no entity tags found, trying fallback goal extraction from events")
 
                     # Look for goal-like statements in event descriptions
                     event_summaries = game_master_log.find_all('summary')
@@ -3753,7 +3754,7 @@ async def get_simulation_analytics(filename: str):
                                     potential_goal = goal_match.group(1).strip()
                                     if len(potential_goal) > 10 and len(potential_goal) < 200:
                                         agent_details["goal"] = potential_goal
-                                        print(f"[DEBUG] Agent '{agent}': found fallback goal from event: {agent_details['goal'][:100]}...")
+                                        debug_print(f"[DEBUG] Agent '{agent}': found fallback goal from event: {agent_details['goal'][:100]}...")
                                         break
 
                             if agent_details["goal"]:
@@ -3762,17 +3763,17 @@ async def get_simulation_analytics(filename: str):
                     # If still no goal, set a placeholder based on agent name
                     if not agent_details["goal"]:
                         agent_details["goal"] = f"Goal not explicitly stated in simulation logs"
-                        print(f"[DEBUG] Agent '{agent}': using placeholder goal")
+                        debug_print(f"[DEBUG] Agent '{agent}': using placeholder goal")
 
                 # Only extract from agent tab if we didn't find goal in Game Master log
                 if not agent_details["goal"] or agent_details["goal"] == "Goal not explicitly stated in simulation logs":
                     agent_tab = soup.find('div', id=re.compile(re.escape(agent), re.IGNORECASE))
                     if agent_tab:
                         tab_text = agent_tab.get_text(strip=True)
-                        print(f"[DEBUG] Agent '{agent}': trying to extract goal from agent tab (tab_text_length={len(tab_text)})")
+                        debug_print(f"[DEBUG] Agent '{agent}': trying to extract goal from agent tab (tab_text_length={len(tab_text)})")
 
                         # Print first 500 chars of tab text for debugging
-                        print(f"[DEBUG] Agent '{agent}': tab text preview: {tab_text[:500]}...")
+                        debug_print(f"[DEBUG] Agent '{agent}': tab text preview: {tab_text[:500]}...")
 
                         # Try to extract goal (usually appears early in the tab)
                         # Look for patterns like "goal:", "objective:", "aim:"
@@ -3784,22 +3785,22 @@ async def get_simulation_analytics(filename: str):
                             goal_match = re.search(pattern, tab_text, re.IGNORECASE)
                             if goal_match:
                                 agent_details["goal"] = goal_match.group(1).strip()
-                                print(f"[DEBUG] Agent '{agent}': found goal using pattern {i+1}: {agent_details['goal'][:100]}...")
+                                debug_print(f"[DEBUG] Agent '{agent}': found goal using pattern {i+1}: {agent_details['goal'][:100]}...")
                                 break
                         if not agent_details["goal"] or agent_details["goal"] == "Goal not explicitly stated in simulation logs":
-                            print(f"[DEBUG] Agent '{agent}': no goal found in agent tab using patterns")
+                            debug_print(f"[DEBUG] Agent '{agent}': no goal found in agent tab using patterns")
                     else:
-                        print(f"[DEBUG] Agent '{agent}': no agent tab found")
+                        debug_print(f"[DEBUG] Agent '{agent}': no agent tab found")
 
                         # Try to find ANY tab that might contain this agent's information
                         all_tabs = soup.find_all('div', id=True)
-                        print(f"[DEBUG] Agent '{agent}': searching through {len(all_tabs)} total tabs")
+                        debug_print(f"[DEBUG] Agent '{agent}': searching through {len(all_tabs)} total tabs")
                         for tab in all_tabs[:5]:  # Check first 5 tabs
                             tab_id = tab.get('id', '')
-                            print(f"[DEBUG] Agent '{agent}': checking tab '{tab_id}'")
+                            debug_print(f"[DEBUG] Agent '{agent}': checking tab '{tab_id}'")
                             if agent.lower() in tab_id.lower() or 'entity' in tab_id.lower() or 'agent' in tab_id.lower():
                                 tab_preview = tab.get_text(strip=True)[:200]
-                                print(f"[DEBUG] Agent '{agent}': tab '{tab_id}' preview: {tab_preview}...")
+                                debug_print(f"[DEBUG] Agent '{agent}': tab '{tab_id}' preview: {tab_preview}...")
 
                 # Extract memories from agent's own tab (separate from goal extraction)
                 agent_tab = soup.find('div', id=re.compile(re.escape(agent), re.IGNORECASE))
@@ -3822,7 +3823,7 @@ async def get_simulation_analytics(filename: str):
 
                     agent_details["memories"] = memory_lines[:5]  # Keep top 5 memories
 
-                print(f"[DEBUG] Agent '{agent}': goal_found={bool(agent_details['goal'])}, goal_length={len(agent_details['goal'])}, actions_count={len(agent_details['actions'])}")
+                debug_print(f"[DEBUG] Agent '{agent}': goal_found={bool(agent_details['goal'])}, goal_length={len(agent_details['goal'])}, actions_count={len(agent_details['actions'])}")
                 analytics["agent_details"][agent] = agent_details
 
         # DISABLED: This was overwriting correct action counts with duplicates from agent_details
@@ -3833,7 +3834,7 @@ async def get_simulation_analytics(filename: str):
         #     if agent in analytics["agent_details"]:
         #         actual_count = len(analytics["agent_details"][agent].get("actions", []))
         #         analytics["agent_actions"][agent] = actual_count
-        #         print(f"[DEBUG] Updated agent_actions['{agent}'] = {actual_count}")
+        #         debug_print(f"[DEBUG] Updated agent_actions['{agent}'] = {actual_count}")
 
         # NEW: Extract nested simulation data from HTML
         if has_nested_sims:
@@ -3859,7 +3860,7 @@ async def get_simulation_analytics(filename: str):
                                     "result_summary": "\n".join(result_lines),
                                     "found": True
                                 }
-                                print(f"[DEBUG] Found nested sim result for {agent_name}")
+                                debug_print(f"[DEBUG] Found nested sim result for {agent_name}")
                                 break
 
                 # If not found in agent tab, check Game Master log
@@ -3878,7 +3879,7 @@ async def get_simulation_analytics(filename: str):
                                         "result_summary": context[:500],
                                         "found": True
                                     }
-                                    print(f"[DEBUG] Found nested sim mention for {agent_name} in GM log")
+                                    debug_print(f"[DEBUG] Found nested sim mention for {agent_name} in GM log")
                                     break
 
         # NEW: Extract grounded variables state changes from metadata or HTML
@@ -3909,7 +3910,7 @@ async def get_simulation_analytics(filename: str):
 
                     analytics["grounded_variables"].append(var_data)
 
-                print(f"[DEBUG] Loaded {len(analytics['grounded_variables'])} grounded variables from metadata with history")
+                debug_print(f"[DEBUG] Loaded {len(analytics['grounded_variables'])} grounded variables from metadata with history")
 
             else:
                 # Fallback: Parse HTML for variable state changes
@@ -3973,7 +3974,7 @@ async def get_simulation_analytics(filename: str):
 
                     # Convert to list format
                     analytics["grounded_variables"] = list(variable_history.values())
-                    print(f"[DEBUG] Parsed {len(analytics['grounded_variables'])} grounded variables from HTML")
+                    debug_print(f"[DEBUG] Parsed {len(analytics['grounded_variables'])} grounded variables from HTML")
 
         return analytics
 

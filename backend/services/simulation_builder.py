@@ -6,6 +6,10 @@ import sys
 import os
 from pathlib import Path
 
+# Import debug print utility
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.debug_print import debug_print
+
 # Add backend directory to path for custom prefab imports
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
@@ -131,7 +135,7 @@ def build_simulation(
     # Add player_names if provided (for interviewer GM) - simple list, no conversion needed
     if 'player_names' in config.game_master.parameters:
         gm_params['player_names'] = config.game_master.parameters['player_names']
-        print(f"[DEBUG] player_names: {config.game_master.parameters['player_names']}")
+        debug_print(f"[DEBUG] player_names: {config.game_master.parameters['player_names']}")
 
     # Add scenes if provided (for game-theoretic GM)
     # Convert dict scenes to SceneSpec objects for Concordia
@@ -140,14 +144,14 @@ def build_simulation(
         from concordia.typing import entity as entity_lib
 
         scenes_data = config.game_master.parameters['scenes']
-        print(f"[DEBUG] Scenes found: {type(scenes_data)}, length={len(scenes_data) if hasattr(scenes_data, '__len__') else 'N/A'}")
+        debug_print(f"[DEBUG] Scenes found: {type(scenes_data)}, length={len(scenes_data) if hasattr(scenes_data, '__len__') else 'N/A'}")
 
         # Convert dict scenes to SceneSpec objects
         scene_objects = []
         for scene_dict in scenes_data:
             if isinstance(scene_dict, dict):
                 # Convert dict to SceneSpec object
-                print(f"[DEBUG] Converting scene dict to SceneSpec: {scene_dict.get('scene_type')}")
+                debug_print(f"[DEBUG] Converting scene dict to SceneSpec: {scene_dict.get('scene_type')}")
                 scene_type = scene_dict['scene_type']
                 if isinstance(scene_type, dict):
                     # Convert scene_type dict to SceneTypeSpec
@@ -175,7 +179,7 @@ def build_simulation(
                         game_master_name=scene_type.get('game_master_name'),
                         action_spec=action_spec
                     )
-                    print(f"[DEBUG] SceneTypeSpec created with action_spec: {action_spec}")
+                    debug_print(f"[DEBUG] SceneTypeSpec created with action_spec: {action_spec}")
                 else:
                     scene_type_obj = scene_type
 
@@ -187,13 +191,13 @@ def build_simulation(
                     premise=scene_dict.get('premise')
                 )
                 scene_objects.append(scene_obj)
-                print(f"[DEBUG] Converted scene: {scene_obj}")
+                debug_print(f"[DEBUG] Converted scene: {scene_obj}")
             else:
                 # Already a SceneSpec object
                 scene_objects.append(scene_dict)
 
         gm_params['scenes'] = scene_objects
-        print(f"[DEBUG] Final scenes list: {len(scene_objects)} SceneSpec objects")
+        debug_print(f"[DEBUG] Final scenes list: {len(scene_objects)} SceneSpec objects")
 
     # Add questionnaires if provided (for interviewer GM)
     if 'questionnaires' in config.game_master.parameters:
@@ -202,7 +206,7 @@ def build_simulation(
         import pandas as pd
 
         questionnaires_data = config.game_master.parameters['questionnaires']
-        print(f"[DEBUG] Questionnaires found: {len(questionnaires_data)}")
+        debug_print(f"[DEBUG] Questionnaires found: {len(questionnaires_data)}")
 
         # Create a concrete Likert questionnaire class
         class LikertQuestionnaire(base_questionnaire.QuestionnaireBase):
@@ -227,7 +231,7 @@ def build_simulation(
         questionnaire_objects = []
         for qn_dict in questionnaires_data:
             if isinstance(qn_dict, dict):
-                print(f"[DEBUG] Converting questionnaire dict: {qn_dict.get('name')}")
+                debug_print(f"[DEBUG] Converting questionnaire dict: {qn_dict.get('name')}")
                 # Convert questions dict to Question objects
                 questions = []
                 for question_dict in qn_dict.get('questions', []):
@@ -251,19 +255,19 @@ def build_simulation(
                     dimensions=qn_dict.get('dimensions')
                 )
                 questionnaire_objects.append(questionnaire)
-                print(f"[DEBUG] Converted questionnaire: {questionnaire.name}")
+                debug_print(f"[DEBUG] Converted questionnaire: {questionnaire.name}")
             else:
                 # Already a QuestionnaireBase object
                 questionnaire_objects.append(qn_dict)
 
         gm_params['questionnaires'] = questionnaire_objects
-        print(f"[DEBUG] Final questionnaires list: {len(questionnaire_objects)} objects")
+        debug_print(f"[DEBUG] Final questionnaires list: {len(questionnaire_objects)} objects")
 
     # Add grounded_variables component if provided
     if config.game_master.grounded_variables:
         from backend.prefabs.grounded_variables import create_grounded_variables_component
 
-        print(f"[DEBUG] Grounded variables found: {len(config.game_master.grounded_variables)}")
+        debug_print(f"[DEBUG] Grounded variables found: {len(config.game_master.grounded_variables)}")
 
         # Convert VariableConfig objects to dicts for the component factory
         variable_configs = [
@@ -282,10 +286,10 @@ def build_simulation(
             gm_params['extra_components'] = {}
 
         gm_params['extra_components']['grounded_variables_component'] = grounded_vars_component
-        print(f"[DEBUG] Grounded variables component added to game master extra_components")
-        print(f"[DEBUG] Component type: {type(grounded_vars_component).__name__}")
-        print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
-        print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
+        debug_print(f"[DEBUG] Grounded variables component added to game master extra_components")
+        debug_print(f"[DEBUG] Component type: {type(grounded_vars_component).__name__}")
+        debug_print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
+        debug_print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
 
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
@@ -296,24 +300,24 @@ def build_simulation(
 
     # Process critical decision points and append to premise
     premise_text = config.premise
-    print(f"[DEBUG] Checking for critical decision points...")
-    print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
+    debug_print(f"[DEBUG] Checking for critical decision points...")
+    debug_print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
     if hasattr(config.game_master, 'critical_decision_points'):
-        print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
+        debug_print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
     if (hasattr(config.game_master, 'critical_decision_points') and
         config.game_master.critical_decision_points):
         decision_points = config.game_master.critical_decision_points
-        print(f"[DEBUG] Found {len(decision_points)} critical decision points")
+        debug_print(f"[DEBUG] Found {len(decision_points)} critical decision points")
         # Sort by step and append to premise
         decision_points_sorted = sorted(decision_points, key=lambda x: x['step'])
         decision_text = "\n\nCRITICAL DECISION POINTS:\n"
         for dp in decision_points_sorted:
             decision_text += f"- Step {dp['step']}: {dp['event']}\n"
         premise_text = premise_text + decision_text
-        print(f"[DEBUG] Appended critical decision points to premise")
-        print(f"[DEBUG] New premise length: {len(premise_text)}")
+        debug_print(f"[DEBUG] Appended critical decision points to premise")
+        debug_print(f"[DEBUG] New premise length: {len(premise_text)}")
     else:
-        print(f"[DEBUG] No critical decision points found")
+        debug_print(f"[DEBUG] No critical decision points found")
 
     # Create simulation configuration
     sim_config = prefab_lib.Config(
@@ -328,11 +332,11 @@ def build_simulation(
     if config.game_master.prefab == 'interviewer__GameMaster':
         from concordia.environment.engines import parallel
         engine = parallel.ParallelQuestionnaireEngine()
-        print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
+        debug_print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
     else:
         from concordia.environment.engines import sequential
         engine = sequential.Sequential()
-        print(f"[DEBUG] Using Sequential engine for {config.game_master.prefab}")
+        debug_print(f"[DEBUG] Using Sequential engine for {config.game_master.prefab}")
 
     # Build and return simulation using the Simulation class
     sim = simulation.Simulation(

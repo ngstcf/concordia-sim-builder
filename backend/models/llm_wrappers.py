@@ -19,7 +19,7 @@ import time
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from utils.logger import debug_print
+from utils.debug_print import debug_print as llm_print
 
 
 class CustomGPTModel:
@@ -219,7 +219,7 @@ class CustomGPTModel:
                 response = self._client.chat.completions.create(**request_params)
 
                 elapsed = time.time() - attempt_start
-                print(f"[LLM] Response received in {elapsed:.1f}s")
+                llm_print(f"[LLM] Response received in {elapsed:.1f}s")
 
                 # Check for empty response and log warning
                 content = response.choices[0].message.content
@@ -237,12 +237,12 @@ class CustomGPTModel:
                 if attempt < max_retries - 1:
                     # Reduced backoff: 3s, 6s (faster recovery)
                     wait_time = 3 * (2 ** attempt)
-                    print(f"[LLM] Timeout after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. "
+                    llm_print(f"[LLM] Timeout after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. "
                           f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    print(f"[LLM] Error: Timeout after {elapsed:.1f}s and {max_retries} retries")
-                    print(f"[LLM] Hint: Consider using a faster model or reducing simulation complexity")
+                    llm_print(f"[LLM] Error: Timeout after {elapsed:.1f}s and {max_retries} retries")
+                    llm_print(f"[LLM] Hint: Consider using a faster model or reducing simulation complexity")
                     raise TimeoutError(f"LLM request timed out after {elapsed:.1f}s") from e
 
             except RateLimitError as e:
@@ -250,22 +250,22 @@ class CustomGPTModel:
                 if attempt < max_retries - 1:
                     # Longer backoff for rate limits: 10s, 20s
                     wait_time = 10 * (2 ** attempt)
-                    print(f"[LLM] Rate limited after {elapsed:.1f}s. Retrying in {wait_time}s...")
+                    llm_print(f"[LLM] Rate limited after {elapsed:.1f}s. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    print(f"[LLM] Error: Rate limited after {elapsed:.1f}s and {max_retries} retries")
-                    print(f"[LLM] Hint: Consider using a different provider or reducing request frequency")
+                    llm_print(f"[LLM] Error: Rate limited after {elapsed:.1f}s and {max_retries} retries")
+                    llm_print(f"[LLM] Hint: Consider using a different provider or reducing request frequency")
                     raise
 
             except (AuthenticationError, APIError) as e:
                 elapsed = time.time() - attempt_start
-                print(f"[LLM] Error: {type(e).__name__} after {elapsed:.1f}s: {e}")
+                llm_print(f"[LLM] Error: {type(e).__name__} after {elapsed:.1f}s: {e}")
                 # Don't retry auth/config errors - these won't fix themselves
                 raise
 
             except Exception as e:
                 elapsed = time.time() - attempt_start
-                print(f"[LLM] Unexpected error after {elapsed:.1f}s: {type(e).__name__}: {e}")
+                llm_print(f"[LLM] Unexpected error after {elapsed:.1f}s: {type(e).__name__}: {e}")
                 raise
 
     def sample_choice(
