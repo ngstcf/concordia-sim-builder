@@ -572,7 +572,7 @@ VITE_SIMULATION_TIMEOUT=10800000
                     </div>
                 </div>
 
-                <h4 class="text-lg font-semibold text-gray-800 mb-3">Timeout Configuration</h4>
+                <h4 class="text-lg font-semibold text-gray-800 mb-3">Timeout & Logging Configuration</h4>
                 <div class="code-block mb-4">
                     <code>
 # Per-LLM-request timeout in seconds (default: 180 = 3 minutes)<br>
@@ -590,6 +590,11 @@ WATCHDOG_TIMEOUT_SECONDS=600<br>
 # Enable/disable watchdog monitoring (default: true)<br>
 # Set to 'false' to disable hang prevention if it interferes with simulations<br>
 WATCHDOG_ENABLED=true<br>
+<br>
+# Console logging controls (default: true for both)<br>
+# Set to 'false' to reduce console noise during simulations<br>
+DEBUG_ENABLED=true          # Control [DEBUG] configuration messages<br>
+LLM_LOGGING_ENABLED=true    # Control [LLM] API call details<br>
 <br>
 # Frontend simulation timeout in milliseconds (default: 10800000 = 3 hours)<br>
 VITE_SIMULATION_TIMEOUT=10800000
