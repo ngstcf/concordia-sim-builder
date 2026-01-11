@@ -256,6 +256,11 @@ WATCHDOG_TIMEOUT_SECONDS=600
 # Set to 'false' to disable hang prevention if it interferes with simulations
 WATCHDOG_ENABLED=true
 
+# Console logging controls (default: true for both)
+# Set to 'false' to reduce console noise during simulations
+DEBUG_ENABLED=true          # Control [DEBUG] configuration messages
+LLM_LOGGING_ENABLED=true    # Control [LLM] API call details
+
 # Frontend simulation timeout in milliseconds (default: 10800000 = 3 hours)
 VITE_SIMULATION_TIMEOUT=10800000
 ```
