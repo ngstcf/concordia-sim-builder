@@ -16,6 +16,10 @@ Supported providers:
 
 from typing import Sequence
 import time
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.logger import debug_print
 
 
 class CustomGPTModel:
@@ -41,11 +45,11 @@ class CustomGPTModel:
             # Azure OpenAI requires specific parameters
             if not base_url:
                 raise ValueError("Azure OpenAI requires base_url (azure_endpoint)")
-            print(f"[DEBUG] AzureOpenAI client initialization:")
-            print(f"[DEBUG]   azure_endpoint: {base_url}")
-            print(f"[DEBUG]   api_version: {api_version}")
-            print(f"[DEBUG]   api_key: {api_key[:20]}..." if api_key else "   api_key: None")
-            print(f"[DEBUG]   timeout: {timeout}")
+            debug_print("AzureOpenAI client initialization:", "DEBUG")
+            debug_print(f"  azure_endpoint: {base_url}", "DEBUG")
+            debug_print(f"  api_version: {api_version}", "DEBUG")
+            debug_print(f"  api_key: {api_key[:20]}..." if api_key else "  api_key: None", "DEBUG")
+            debug_print(f"  timeout: {timeout}", "DEBUG")
             self._client = AzureOpenAI(
                 api_key=api_key,
                 azure_endpoint=base_url,
@@ -143,18 +147,18 @@ class CustomGPTModel:
         if env_timeout:
             try:
                 timeout = float(env_timeout)
-                print(f"[LLM] Using timeout from LLM_TIMEOUT env var: {timeout}s")
+                debug_print(f"Using timeout from LLM_TIMEOUT env var: {timeout}s", "LLM")
             except ValueError:
-                print(f"[LLM] Warning: Invalid LLM_TIMEOUT value '{env_timeout}', using default {timeout}s")
+                debug_print(f"Warning: Invalid LLM_TIMEOUT value '{env_timeout}', using default {timeout}s", "LLM")
 
         # Allow environment variable override for retry count
         env_retries = os.getenv('LLM_MAX_RETRIES')
         if env_retries:
             try:
                 max_retries = max(1, int(env_retries))  # At least 1 retry
-                print(f"[LLM] Using max_retries from LLM_MAX_RETRIES env var: {max_retries}")
+                debug_print(f"Using max_retries from LLM_MAX_RETRIES env var: {max_retries}", "LLM")
             except ValueError:
-                print(f"[LLM] Warning: Invalid LLM_MAX_RETRIES value '{env_retries}', using default {max_retries}")
+                debug_print(f"Warning: Invalid LLM_MAX_RETRIES value '{env_retries}', using default {max_retries}", "LLM")
 
         # Determine appropriate timeout based on model type
         # Reasoning models (O1, O3, GPT-5) can take much longer
@@ -166,14 +170,14 @@ class CustomGPTModel:
             if reasoning_timeout:
                 try:
                     timeout = float(reasoning_timeout)
-                    print(f"[LLM] Using LLM_REASONING_TIMEOUT for reasoning model: {timeout}s")
+                    debug_print(f"Using LLM_REASONING_TIMEOUT for reasoning model: {timeout}s", "LLM")
                 except ValueError:
-                    print(f"[LLM] Warning: Invalid LLM_REASONING_TIMEOUT, using {timeout}s")
+                    debug_print(f"Warning: Invalid LLM_REASONING_TIMEOUT, using {timeout}s", "LLM")
             elif timeout < 300.0:
                 # Ensure minimum timeout for reasoning models
                 timeout = 300.0  # Default: 5 minutes for reasoning models
 
-        print(f"[LLM] Calling {self._model_name} with timeout={timeout}s, max_tokens={max_tokens}")
+        debug_print(f"Calling {self._model_name} with timeout={timeout}s, max_tokens={max_tokens}", "LLM")
 
         # Newer models (o3-*, gpt-5*) require max_completion_tokens instead of max_tokens
         use_max_completion_tokens = self._use_max_completion_tokens()
