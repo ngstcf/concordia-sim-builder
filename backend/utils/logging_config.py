@@ -5,7 +5,7 @@ Environment variables:
 - DEBUG_ENABLED: Enable/disable DEBUG messages (default: true)
 - LLM_LOGGING_ENABLED: Enable/disable LLM debug messages (default: true)
 
-Important messages are ALWAYS shown:
+Important messages are ALWAYS shown in BLUE:
 - Simulation start/end banners
 - Provider and model info
 - Step progress
@@ -15,12 +15,16 @@ Important messages are ALWAYS shown:
 import os
 import sys
 
+# ANSI color codes
+BLUE = '\033[94m'  # Blue text
+RESET = '\033[0m'  # Reset to default
+
 # Global logging flags
 DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "true").lower() == "true"
 LLM_LOGGING_ENABLED = os.getenv("LLM_LOGGING_ENABLED", "true").lower() == "true"
 
 
-# Messages that should ALWAYS be shown (not filtered)
+# Messages that should ALWAYS be shown in BLUE (not filtered)
 IMPORTANT_PATTERNS = [
     '============================================================',
     'Starting Simulation Execution',
@@ -34,13 +38,16 @@ IMPORTANT_PATTERNS = [
     '🔨',  # Hammer emoji
     '⚠️',  # Warning emoji
     '❌',  # Error emoji
-    'Step ',  # Progress updates
-    'of steps completed',
+    'Step ',  # Progress updates (e.g., "Step 1/20")
+    ' of steps completed',  # Progress completion
 ]
 
 
 def is_important_message(text):
     """Check if message contains important patterns that should always be shown."""
+    if not text or text.strip() in ['', '\n', '\r\n']:
+        return False
+
     text_lower = text.lower()
     for pattern in IMPORTANT_PATTERNS:
         if pattern.lower() in text_lower:
@@ -55,7 +62,7 @@ def suppress_print_statements():
     This works by replacing sys.stdout and sys.stderr with a custom
     stream that filters messages based on environment variables.
 
-    IMPORTANT: Always shows simulation headers, provider info, progress, and errors.
+    IMPORTANT: Always shows simulation headers, provider info, progress, and errors in BLUE.
     """
     class FilteredStream:
         """Wrapper around stdout/stderr that filters output."""
@@ -64,9 +71,14 @@ def suppress_print_statements():
             self.original_stream = original_stream
 
         def write(self, text):
-            # Always show important messages
+            # Skip empty strings
+            if not text:
+                return
+
+            # Always show important messages in BLUE
             if is_important_message(text):
-                self.original_stream.write(text)
+                # Add blue color for important messages
+                self.original_stream.write(BLUE + text + RESET)
                 return
 
             # Filter [DEBUG] messages
@@ -74,12 +86,12 @@ def suppress_print_statements():
                 if not DEBUG_ENABLED:
                     return
 
-            # Filter [LLM] messages (but not important LLM info)
+            # Filter [LLM] messages
             if '[LLM]' in text:
                 if not LLM_LOGGING_ENABLED:
                     return
 
-            # Pass through to original stream
+            # Pass through to original stream (no color)
             self.original_stream.write(text)
 
         def flush(self):
