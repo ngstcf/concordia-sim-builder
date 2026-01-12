@@ -302,13 +302,13 @@ export default function SimulationRunner() {
     fetchModels();
   }, [llmSettings.provider]);
 
-  const handleLoadSimulation = (htmlContent: string, filename: string) => {
+  const handleLoadSimulation = (htmlContent: string, filename: string, modified: number) => {
     setResults({
       results: htmlContent,
       log_filename: filename,
       log_path: `logs/${filename}`,
       completed: true,
-      timestamp: Date.now() / 1000
+      timestamp: modified
     });
     setError(null);
   };

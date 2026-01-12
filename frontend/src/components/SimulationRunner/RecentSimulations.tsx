@@ -14,7 +14,7 @@ interface SimulationLog {
 }
 
 interface RecentSimulationsProps {
-  onLoadSimulation: (htmlContent: string, filename: string) => void;
+  onLoadSimulation: (htmlContent: string, filename: string, modified: number) => void;
 }
 
 export default function RecentSimulations({ onLoadSimulation }: RecentSimulationsProps) {
@@ -99,7 +99,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const handleLoadSimulation = async (filename: string) => {
     try {
       const logData = await getSimulationLog(filename);
-      onLoadSimulation(logData.html_content, logData.filename);
+      onLoadSimulation(logData.html_content, logData.filename, logData.modified);
     } catch (err: any) {
       console.error('Error loading simulation:', err);
       alert(`Failed to load simulation: ${err.message}`);

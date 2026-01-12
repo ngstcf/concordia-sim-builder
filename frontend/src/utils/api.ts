@@ -181,7 +181,8 @@ export async function executeSimulationStream(
                           // Add the HTML content to the completion data
                           onComplete?.({
                             ...data,
-                            results: logData.html_content
+                            results: logData.html_content,
+                            timestamp: logData.modified
                           });
                         })
                         .catch(err => {
