@@ -1745,6 +1745,46 @@ async def cancel_simulation(task_id: str):
     }
 
 
+@router.post("/control/{task_id}/play")
+async def step_controller_play(task_id: str):
+    """Resume continuous execution of a step-controlled simulation."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.play()
+    return {"status": "playing", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/pause")
+async def step_controller_pause(task_id: str):
+    """Pause a step-controlled simulation after the current step completes."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.pause()
+    return {"status": "paused", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/step")
+async def step_controller_step(task_id: str):
+    """Execute a single step then pause."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.step()
+    return {"status": "stepping", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/stop")
+async def step_controller_stop(task_id: str):
+    """Stop a step-controlled simulation completely."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.stop()
+    return {"status": "stopped", "task_id": task_id}
+
+
 @router.get("/status")
 async def get_simulations_status():
     """Get status of all tracked simulations."""

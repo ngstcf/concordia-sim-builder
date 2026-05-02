@@ -238,11 +238,43 @@ async def run_simulation_stream(
         # Run simulation in a thread to not block async loop
         import concurrent.futures
 
+        # Step controller for interactive step-by-step execution
+        step_ctrl = None
+        if config.engine_type == EngineType.STEP_CONTROLLER:
+            from concordia.environment.step_controller import StepController, StepData
+
+            step_ctrl = StepController(start_paused=True)
+            sim_record = simulation_state.get_simulation(task_id)
+            if sim_record:
+                sim_record.step_controller = step_ctrl
+
+            def step_data_callback(data: StepData):
+                event_loop.call_soon_threadsafe(
+                    progress_queue.put_nowait,
+                    {
+                        'type': 'step_data',
+                        'step': data.step,
+                        'acting_entity': data.acting_entity,
+                        'action': data.action,
+                        'entity_actions': dict(data.entity_actions) if data.entity_actions else {},
+                    }
+                )
+
+            yield _format_sse(EventType.CONTROLLER_STATE, {
+                'state': 'paused',
+                'message': 'Simulation ready. Use Play/Step/Pause/Stop to control execution.',
+                'task_id': task_id,
+            })
+
         def run_simulation_blocking():
-            return sim.play(
+            kwargs = dict(
                 max_steps=max_steps,
-                get_state_callback=sync_progress_callback
+                get_state_callback=sync_progress_callback,
             )
+            if step_ctrl is not None:
+                kwargs['step_controller'] = step_ctrl
+                kwargs['step_callback'] = step_data_callback
+            return sim.play(**kwargs)
 
         # Watchdog settings - detect when simulation hangs
         # Can be overridden via WATCHDOG_TIMEOUT_SECONDS environment variable
@@ -260,8 +292,13 @@ async def run_simulation_stream(
                 try:
                     # Get progress with timeout to check if simulation is done
                     progress_data = await asyncio.wait_for(progress_queue.get(), timeout=5.0)
-                    debug_print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
-                    yield _format_sse(EventType.STEP_PROGRESS, progress_data)
+                    if progress_data.get('type') == 'step_data':
+                        debug_print(f"[DEBUG] Yielding SSE step_data event: step {progress_data.get('step')}")
+                        yield _format_sse(EventType.STEP_DATA, progress_data)
+                        yield _format_sse(EventType.CONTROLLER_STATE, {'state': 'paused', 'task_id': task_id})
+                    else:
+                        debug_print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
+                        yield _format_sse(EventType.STEP_PROGRESS, progress_data)
                     # Update last progress time
                     last_progress_time[0] = time.time()
                 except asyncio.TimeoutError:

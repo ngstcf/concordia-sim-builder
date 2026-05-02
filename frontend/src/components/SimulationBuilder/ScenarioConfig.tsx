@@ -116,6 +116,7 @@ export default function ScenarioConfig() {
             <option value="sequential">Sequential (Turn-based)</option>
             <option value="simultaneous">Simultaneous (All at once)</option>
             <option value="asynchronous">Asynchronous (Parallel with ordering)</option>
+            <option value="step_controller">Step Controller (Manual control)</option>
             <option value="interview">Interview (Q&A)</option>
             <option value="survey">Survey (No memory updates)</option>
           </select>

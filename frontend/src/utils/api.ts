@@ -93,7 +93,9 @@ export async function executeSimulationStream(
   llmSettings: LLMSettings,
   onProgress?: (progress: { step: number; max_steps: number; elapsed: number; est_remaining: number; est_time_str: string }) => void,
   onComplete?: (result: any) => void,
-  onError?: (error: string) => void
+  onError?: (error: string) => void,
+  onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
+  onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
 ): Promise<void> {
   // Remove player_specific_context for execution
   const { player_specific_context, ...configToUse } = config as any;
@@ -196,6 +198,16 @@ export async function executeSimulationStream(
                     } else {
                       onComplete?.(data);
                     }
+                    eventCount++;
+                    break;
+                  case 'step_data':
+                    console.log('[executeSimulationStream] Step data:', data);
+                    onStepData?.(data);
+                    eventCount++;
+                    break;
+                  case 'controller_state':
+                    console.log('[executeSimulationStream] Controller state:', data);
+                    onControllerState?.(data);
                     eventCount++;
                     break;
                   case 'error':
@@ -667,6 +679,26 @@ export async function cancelSimulation(taskId: string): Promise<{
   message: string;
 }> {
   const response = await api.post(`/api/simulations/cancel/${taskId}`);
+  return response.data;
+}
+
+export async function simulationPlay(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/play`);
+  return response.data;
+}
+
+export async function simulationPause(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/pause`);
+  return response.data;
+}
+
+export async function simulationStep(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/step`);
+  return response.data;
+}
+
+export async function simulationStop(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/stop`);
   return response.data;
 }
 

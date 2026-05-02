@@ -18,6 +18,7 @@ class RunningSimulation:
     should_cancel: bool = False
     steps_completed: int = 0
     error: Optional[str] = None
+    step_controller: Optional[Any] = None
 
 
 class SimulationStateManager:

@@ -265,6 +265,8 @@ class EventType(str, Enum):
     OBSERVATION = "observation"
     STEP_END = "step_end"
     SIMULATION_COMPLETE = "simulation_complete"
+    STEP_DATA = "step_data"
+    CONTROLLER_STATE = "controller_state"
     ERROR = "error"
 
 
