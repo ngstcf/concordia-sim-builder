@@ -21,6 +21,7 @@ from backend.models.schemas import (
     PersonaGenerationRequest,
     GeneratedPersona,
     PersonaGenerationResponse,
+    FormativeMemoryRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -72,6 +73,24 @@ async def get_component_templates():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get component templates: {str(e)}")
+
+
+@router.get("/contrib-components")
+async def get_contrib_components():
+    """Get registry of available contrib GM components."""
+    from backend.prefabs.contrib_gm_components import CONTRIB_GM_REGISTRY
+    return {
+        "components": [
+            {
+                "id": comp_id,
+                "name": entry["name"],
+                "description": entry["description"],
+                "category": entry["category"],
+                "params": entry["params"],
+            }
+            for comp_id, entry in CONTRIB_GM_REGISTRY.items()
+        ]
+    }
 
 
 @router.post("/components/validate")
@@ -782,9 +801,11 @@ async def get_simulation_analytics(filename: str):
     has_nested_sims = False
     has_grounded_variables = False
     has_components = False
+    has_measurements = False
     nested_sim_data = {}
     grounded_variables_data = {}
     component_data = {}
+    measurements_data = {}
 
     if metadata_path.exists():
         try:
@@ -817,6 +838,12 @@ async def get_simulation_analytics(filename: str):
                         has_components = True
                         component_data[agent["name"]] = agent["components"]
                         debug_print(f"[DEBUG] Found components for agent {agent['name']}: {list(agent['components'].keys())}")
+
+                # NEW: Detect measurements
+                if metadata.get("measurements"):
+                    has_measurements = True
+                    measurements_data = metadata["measurements"]
+                    debug_print(f"[DEBUG] Found measurements: {len(measurements_data)} channels")
 
                 # Build a map of agent name -> metadata
                 for agent in metadata.get("agents", []):
@@ -870,10 +897,12 @@ async def get_simulation_analytics(filename: str):
             "has_nested_sims": has_nested_sims,
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
+            "has_measurements": has_measurements,
             # NEW: Feature-specific data (populated from metadata)
             "nested_simulations": nested_sim_data,
             "grounded_variables": grounded_variables_data.get("variables", []),
-            "components": component_data
+            "components": component_data,
+            "measurements": measurements_data
         }
 
         # Detect v2.4+ structured log format (content is in embedded JSON, not static HTML)
@@ -2138,6 +2167,36 @@ async def analyze_simulation_endpoint(request: dict):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze simulation: {str(e)}"
+        )
+
+
+@router.post("/generate-formative-memories")
+async def generate_formative_memories(request: FormativeMemoryRequest):
+    """Generate formative backstory memories for an agent."""
+    from backend.models.schemas import FormativeMemoryResponse
+    from backend.services.llm_factory import get_model_and_embedder
+    from concordia.components.game_master.formative_memories_initializer import FormativeMemoriesInitializer
+
+    try:
+        model, _ = get_model_and_embedder(request.llm_settings)
+        initializer = FormativeMemoriesInitializer(
+            model=model,
+            next_game_master_name='backstory_generator',
+            player_names=[request.agent_name],
+            shared_memories=request.shared_memories,
+            player_specific_context=(
+                {request.agent_name: request.agent_context} if request.agent_context else {}
+            ),
+            sentences_per_episode=request.sentences_per_episode,
+        )
+        episodes = initializer.generate_backstory_episodes(request.agent_name)
+        return FormativeMemoryResponse(memories=list(episodes))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Formative memory generation failed: {str(e)}"
         )
 
 

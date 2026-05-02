@@ -96,6 +96,12 @@ class VariableConfig(BaseModel):
     update_rule: Optional[str] = Field(None, description="Description of how variable updates")
 
 
+class ContribComponentConfig(BaseModel):
+    """Configuration for a contrib GM component."""
+    component_id: str = Field(..., description="Registry ID (e.g. 'death', 'npc_event_generator')")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Component-specific parameters")
+
+
 class GameMasterConfig(BaseModel):
     """Configuration for the game master."""
     prefab: str = Field(..., description="Game master prefab type")
@@ -115,6 +121,10 @@ class GameMasterConfig(BaseModel):
     critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
         None,
         description="Optional critical decision points that trigger variable changes at specific steps"
+    )
+    contrib_components: Optional[List[ContribComponentConfig]] = Field(
+        None,
+        description="Optional contrib GM components to add (Death, GMWorkingMemory, etc.)"
     )
 
     class Config:
@@ -322,6 +332,20 @@ class GroundedVariablesExtractionRequest(BaseModel):
                 }
             }
         }
+
+
+class FormativeMemoryRequest(BaseModel):
+    """Request to generate formative memories for an agent."""
+    agent_name: str = Field(..., description="Name of the agent")
+    agent_context: str = Field("", description="Character-specific context")
+    shared_memories: List[str] = Field(default_factory=list, description="Shared world knowledge")
+    sentences_per_episode: int = Field(5, ge=1, le=20, description="Sentences per memory episode")
+    llm_settings: LLMSettings
+
+
+class FormativeMemoryResponse(BaseModel):
+    """Response containing generated formative memories."""
+    memories: List[str]
 
 
 class PersonaGenerationRequest(BaseModel):

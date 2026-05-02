@@ -150,6 +150,40 @@ def build_simulation(
 
             entity_params.update(components_copy)
 
+        # Wire nested simulation component if configured
+        if agent_config.nested_simulation:
+            from backend.prefabs.nested_simulation import NestedSimulationComponent
+            from backend.models.schemas import SimulationConfig as SC, AgentConfig as AC, GameMasterConfig as GMC
+
+            nested_agents = [
+                AC(id=f'nested-{i}', name=a.name if hasattr(a, 'name') else a.get('name', f'Agent{i}'),
+                   prefab=a.prefab if hasattr(a, 'prefab') else a.get('prefab', 'basic__Entity'),
+                   goal=a.goal if hasattr(a, 'goal') else a.get('goal'),
+                   memories=a.memories if hasattr(a, 'memories') else a.get('memories', []))
+                for i, a in enumerate(agent_config.nested_simulation.agents)
+            ] if agent_config.nested_simulation.agents else []
+
+            nested_sc = SC(
+                premise=agent_config.nested_simulation.premise,
+                max_steps=min(agent_config.nested_simulation.max_steps or 5, 10),
+                agents=nested_agents if nested_agents else [AC(id='n-1', name='Observer', prefab='basic__Entity')],
+                game_master=GMC(prefab='generic__GameMaster', name='nested rules'),
+                shared_memories=agent_config.nested_simulation.shared_memories or [],
+            )
+
+            nested_component = NestedSimulationComponent(
+                model=model,
+                parent_context=config.premise,
+                nested_config=nested_sc,
+                max_steps=min(agent_config.nested_simulation.max_steps or 5, 10),
+                extraction_prompt=agent_config.nested_simulation.extraction_prompt or 'What were the key observations from this simulation?',
+                embedder=embedder,
+            )
+            extra = entity_params.get('extra_components', {})
+            extra['nested_simulation'] = nested_component
+            entity_params['extra_components'] = extra
+            debug_print(f"[DEBUG] Added nested simulation component to agent: {agent_config.name}")
+
         instance_config = prefab_lib.InstanceConfig(
             prefab=agent_config.prefab,
             role=prefab_lib.Role.ENTITY,
@@ -325,6 +359,24 @@ def build_simulation(
         debug_print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
         debug_print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
 
+    # Add contrib GM components if provided
+    if config.game_master.contrib_components:
+        from backend.prefabs.contrib_gm_components import create_contrib_gm_component
+
+        agent_names = [a.name for a in config.agents]
+        if 'extra_components' not in gm_params:
+            gm_params['extra_components'] = {}
+
+        for cc in config.game_master.contrib_components:
+            component = create_contrib_gm_component(
+                component_id=cc.component_id,
+                model=model,
+                config=cc.params,
+                agent_names=agent_names,
+            )
+            gm_params['extra_components'][f'contrib_{cc.component_id}'] = component
+            debug_print(f"[DEBUG] Added contrib GM component: {cc.component_id}")
+
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
         role=prefab_lib.Role.GAME_MASTER,
@@ -353,14 +405,19 @@ def build_simulation(
     else:
         debug_print(f"[DEBUG] No critical decision points found")
 
-    # Inject ReactiveMeasurements for async engine (required by Concordia)
+    # Inject Measurements into all instances for data capture
     if config.engine_type == EngineType.ASYNCHRONOUS:
         from concordia.utils import async_measurements
-        reactive = async_measurements.ReactiveMeasurements()
-        for inst in instances:
-            if 'measurements' not in inst.params:
-                inst.params['measurements'] = reactive
-        debug_print(f"[DEBUG] Injected ReactiveMeasurements into {len(instances)} instances for async engine")
+        measurements = async_measurements.ReactiveMeasurements()
+        debug_print(f"[DEBUG] Injected ReactiveMeasurements into instances for async engine")
+    else:
+        from concordia.utils.measurements import Measurements
+        measurements = Measurements()
+        debug_print(f"[DEBUG] Injected Measurements into instances for {config.engine_type.value} engine")
+
+    for inst in instances:
+        if 'measurements' not in inst.params:
+            inst.params['measurements'] = measurements
 
     # Create simulation configuration
     sim_config = prefab_lib.Config(
@@ -395,6 +452,8 @@ def build_simulation(
         embedder=embedder,
         engine=engine
     )
+
+    sim._measurements = measurements
 
     return sim
 

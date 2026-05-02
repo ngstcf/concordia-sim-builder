@@ -952,6 +952,27 @@ async def run_simulation_stream(
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
+        # Extract measurements channel data if available
+        if hasattr(sim, '_measurements') and sim._measurements:
+            try:
+                all_channels = sim._measurements.get_all_channels()
+                if all_channels:
+                    measurements_data = {}
+                    for ch_name, ch_data in all_channels.items():
+                        serialized = []
+                        for datum in ch_data:
+                            if hasattr(datum, '__dict__'):
+                                serialized.append({k: str(v) for k, v in datum.__dict__.items()})
+                            elif isinstance(datum, dict):
+                                serialized.append({k: str(v) for k, v in datum.items()})
+                            else:
+                                serialized.append(str(datum))
+                        measurements_data[ch_name] = serialized
+                    agent_metadata["measurements"] = measurements_data
+                    debug_print(f"[DEBUG] Added measurements: {len(all_channels)} channels")
+            except Exception as meas_err:
+                debug_print(f"[WARNING] Failed to extract measurements: {meas_err}")
+
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(agent_metadata, f, indent=2)
@@ -1567,6 +1588,27 @@ async def run_simulation_simple(
                 "actions_by_player": game_theoretic_data.get('actions_by_player', {})
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
+
+        # Extract measurements channel data if available
+        if hasattr(sim, '_measurements') and sim._measurements:
+            try:
+                all_channels = sim._measurements.get_all_channels()
+                if all_channels:
+                    measurements_data = {}
+                    for ch_name, ch_data in all_channels.items():
+                        serialized = []
+                        for datum in ch_data:
+                            if hasattr(datum, '__dict__'):
+                                serialized.append({k: str(v) for k, v in datum.__dict__.items()})
+                            elif isinstance(datum, dict):
+                                serialized.append({k: str(v) for k, v in datum.items()})
+                            else:
+                                serialized.append(str(datum))
+                        measurements_data[ch_name] = serialized
+                    agent_metadata["measurements"] = measurements_data
+                    debug_print(f"[DEBUG] Added measurements: {len(all_channels)} channels")
+            except Exception as meas_err:
+                debug_print(f"[WARNING] Failed to extract measurements: {meas_err}")
 
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:

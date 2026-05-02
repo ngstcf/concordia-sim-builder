@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { getComponentTemplates, getPrefabs } from '../../utils/api';
+import { getComponentTemplates, getPrefabs, generateFormativeMemories } from '../../utils/api';
 import type { ScriptLine } from '../../types/simulation';
 
 interface PrefabInfo {
@@ -31,7 +31,7 @@ interface ComponentConfig {
 }
 
 export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
-  const { config, updateAgent } = useSimulation();
+  const { config, updateAgent, llmSettings } = useSimulation();
   const agent = config.agents.find(a => a.id === agentId);
 
   const [name, setName] = useState(agent?.name || '');
@@ -58,6 +58,9 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const [customInstructions, setCustomInstructions] = useState('');
   const [fixedResponses, setFixedResponses] = useState<Array<{ key: string; value: string }>>([]);
   const [reasoningSteps, setReasoningSteps] = useState<Array<{ question: string; answer_prefix: string; num_memories: number; add_to_memory: boolean }>>([]);
+  const [generatingBackstory, setGeneratingBackstory] = useState(false);
+  const [backstoryContext, setBackstoryContext] = useState('');
+  const [showBackstoryDialog, setShowBackstoryDialog] = useState(false);
 
   useEffect(() => {
     getComponentTemplates().then(data => {
@@ -226,6 +229,28 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     setComponentConfigs(componentConfigs.filter((_, i) => i !== index));
   };
 
+  const handleGenerateBackstory = async () => {
+    setGeneratingBackstory(true);
+    try {
+      const result = await generateFormativeMemories({
+        agent_name: name,
+        agent_context: backstoryContext,
+        shared_memories: config.shared_memories,
+        sentences_per_episode: 5,
+        llm_settings: llmSettings,
+      });
+      const existing = memories.trim();
+      const newMemories = result.memories.filter(m => m.trim());
+      setMemories(existing ? existing + '\n' + newMemories.join('\n') : newMemories.join('\n'));
+      setShowBackstoryDialog(false);
+      setBackstoryContext('');
+    } catch (err: any) {
+      alert('Backstory generation failed: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setGeneratingBackstory(false);
+    }
+  };
+
   const isScripted = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
 
   return (
@@ -310,7 +335,50 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
 
           {/* Memories */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Pre-loaded Memories</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">Pre-loaded Memories</label>
+              <button
+                type="button"
+                onClick={() => setShowBackstoryDialog(!showBackstoryDialog)}
+                disabled={generatingBackstory || !name.trim()}
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingBackstory ? 'Generating...' : 'Generate Backstory'}
+              </button>
+            </div>
+
+            {showBackstoryDialog && (
+              <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-md">
+                <p className="text-xs text-gray-600 mb-2">
+                  Generate formative memories using LLM. Shared memories from the scenario will be included automatically.
+                </p>
+                <textarea
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm mb-2"
+                  value={backstoryContext}
+                  onChange={(e) => setBackstoryContext(e.target.value)}
+                  placeholder="Optional: Describe this character's background, role, or personality..."
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowBackstoryDialog(false); setBackstoryContext(''); }}
+                    className="text-xs px-3 py-1 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateBackstory}
+                    disabled={generatingBackstory}
+                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {generatingBackstory ? 'Generating...' : 'Generate'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <textarea
               rows={6}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 font-mono text-sm"

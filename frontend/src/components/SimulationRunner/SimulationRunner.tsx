@@ -246,7 +246,7 @@ export default function SimulationRunner() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stopped' | null>(null);
@@ -952,6 +952,16 @@ export default function SimulationRunner() {
                     >
                       Analysis
                     </button>
+                    <button
+                      onClick={() => setActiveTab('measurements')}
+                      className={`${
+                        activeTab === 'measurements'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
+                    >
+                      Component Logs
+                    </button>
                   </nav>
                 </div>
               </div>
@@ -1013,6 +1023,10 @@ export default function SimulationRunner() {
                     llmSettings={llmSettings}
                   />
                 )}
+
+                {activeTab === 'measurements' && (
+                  <MeasurementsView filename={results.log_filename || null} />
+                )}
               </div>
 
               {/* Raw JSON (collapsible) */}
@@ -1041,6 +1055,74 @@ export default function SimulationRunner() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MeasurementsView({ filename }: { filename: string | null }) {
+  const [data, setData] = useState<Record<string, any[]> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!filename) return;
+    setLoading(true);
+    import('../../utils/api').then(({ getSimulationAnalytics }) => {
+      getSimulationAnalytics(filename).then(analytics => {
+        setData((analytics as any).measurements || {});
+      }).catch(() => setData({})).finally(() => setLoading(false));
+    });
+  }, [filename]);
+
+  const toggleChannel = (ch: string) => {
+    setExpandedChannels(prev => {
+      const next = new Set(prev);
+      next.has(ch) ? next.delete(ch) : next.add(ch);
+      return next;
+    });
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Loading measurements...</p>;
+  if (!data || Object.keys(data).length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-gray-500">No component measurement data available for this simulation.</p>
+        <p className="text-xs text-gray-400 mt-1">Measurements are captured when components publish data during execution.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500 mb-2">{Object.keys(data).length} measurement channel{Object.keys(data).length !== 1 ? 's' : ''} captured during simulation.</p>
+      {Object.entries(data).map(([channelName, entries]) => (
+        <div key={channelName} className="border border-gray-200 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleChannel(channelName)}
+            className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+          >
+            <span className="text-sm font-medium text-gray-700">{channelName}</span>
+            <span className="text-xs text-gray-400">{entries.length} entries {expandedChannels.has(channelName) ? '▲' : '▼'}</span>
+          </button>
+          {expandedChannels.has(channelName) && (
+            <div className="max-h-80 overflow-y-auto">
+              {entries.map((entry, idx) => (
+                <div key={idx} className={`px-4 py-2 text-xs font-mono ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-t border-gray-100`}>
+                  {typeof entry === 'object' ? (
+                    <div className="space-y-0.5">
+                      {Object.entries(entry).map(([k, v]) => (
+                        <div key={k}><span className="text-gray-500">{k}:</span> <span className="text-gray-800">{String(v)}</span></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-800">{String(entry)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -72,6 +72,22 @@ export async function validateComponentParameters(
 }
 
 /**
+ * Get available contrib GM components
+ */
+export async function getContribComponents(): Promise<{
+  components: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    params: Record<string, { type: string; default?: any; min?: number; max?: number; description?: string }>;
+  }>;
+}> {
+  const response = await api.get('/api/simulations/contrib-components');
+  return response.data;
+}
+
+/**
  * Validate a simulation configuration
  */
 export async function validateConfig(config: SimulationConfig): Promise<ValidationResult> {
@@ -588,10 +604,12 @@ export interface SimulationAnalytics {
   has_nested_sims: boolean;
   has_grounded_variables: boolean;
   has_components: boolean;
+  has_measurements: boolean;
   // NEW: Feature-specific data
   nested_simulations: Record<string, NestedSimulationData>;
   grounded_variables: GroundedVariableData[];
   components: ComponentAnalysisData;
+  measurements: Record<string, any[]>;
 }
 
 export async function getSimulationAnalytics(filename: string): Promise<SimulationAnalytics> {
@@ -811,6 +829,17 @@ export async function analyzeSimulation(simulationId: string, llmSettings?: {
     simulation_id: simulationId,
     llm_settings: llmSettings
   });
+  return response.data;
+}
+
+export async function generateFormativeMemories(request: {
+  agent_name: string;
+  agent_context?: string;
+  shared_memories?: string[];
+  sentences_per_episode?: number;
+  llm_settings: any;
+}): Promise<{ memories: string[] }> {
+  const response = await api.post('/api/simulations/generate-formative-memories', request);
   return response.data;
 }
 

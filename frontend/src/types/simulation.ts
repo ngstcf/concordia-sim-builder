@@ -85,6 +85,12 @@ export interface AgentConfig {
   nested_simulation?: NestedSimulationConfig;
 }
 
+// Contrib GM Component Configuration
+export interface ContribComponentConfig {
+  component_id: string;
+  params: Record<string, any>;
+}
+
 // Game Master Configuration
 export interface GameMasterConfig {
   prefab: string;
@@ -93,6 +99,7 @@ export interface GameMasterConfig {
   parameters: Record<string, any>;
   grounded_variables?: VariableConfig[];
   critical_decision_points?: CriticalDecisionPoint[];
+  contrib_components?: ContribComponentConfig[];
 }
 
 // Critical Decision Point
