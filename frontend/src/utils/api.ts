@@ -497,6 +497,46 @@ export async function getSimultaneousAuctionTemplate(): Promise<SimulationTempla
 }
 
 /**
+ * Get the step controller demo template
+ */
+export async function getStepControllerDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/step-controller-demo');
+  return response.data;
+}
+
+/**
+ * Get the contrib GM components demo template
+ */
+export async function getContribGmComponentsDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/contrib-gm-components-demo');
+  return response.data;
+}
+
+/**
+ * Get the formative memories demo template
+ */
+export async function getFormativeMemoriesDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/formative-memories-demo');
+  return response.data;
+}
+
+/**
+ * Get the measurements demo template
+ */
+export async function getMeasurementsDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/measurements-demo');
+  return response.data;
+}
+
+/**
+ * Get the nested simulation strategy template
+ */
+export async function getNestedSimStrategyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/nested-sim-strategy');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication

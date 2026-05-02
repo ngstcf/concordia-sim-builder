@@ -4,7 +4,7 @@ This guide explains every pre-built template in the Concordia Simulation Builder
 
 You can run templates as-is or modify them to fit your needs. All parameters are editable after loading.
 
-**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 26 templates include research-grade agent configurations with 7-10 memories per agent, psychological components, player-specific context, and measurable goals.
+**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 31 templates include research-grade agent configurations with 7-10 memories per agent, psychological components, player-specific context, and measurable goals.
 
 ---
 
@@ -38,6 +38,11 @@ You can run templates as-is or modify them to fit your needs. All parameters are
 | Fishery Management | SDG Scenarios | Sequential | 4 | values, cognitive_bias, TPB | ✓ | Common-pool resources (SDG 14) |
 | Flood Evacuation | SDG Scenarios | Sequential | 5 | TPB, cognitive_bias, emotion, values | ✓ | Emergency response (SDG 11/13) |
 | Educational Opportunity | SDG Scenarios | Sequential | 4 | social_identity, emotion | ✓ | Social mobility (SDG 10) |
+| Hostage Negotiation (Step Control) | Advanced | Step Controller | 3 | personality_traits, emotion | ✓ | Step controller engine, play/pause/step controls |
+| Colony Survival (Contrib GM) | Advanced | Sequential | 4 | personality_traits | ✓ | All 5 contrib GM components working together |
+| Bookstore Reunion (Formative Mem) | Advanced | Sequential | 3 | personality_traits | ✓ | Formative memories generation (Generate Backstory) |
+| Ethics Board (Measurements) | Advanced | Sequential | 4 | personality_traits, values | ✓ | Measurements/metrics channels, Component Logs |
+| Diplomatic Crisis (Nested Sim) | Advanced | Sequential | 3 | personality_traits | ✓ | Nested sim with back-channel strategy extraction |
 
 **Legend:** Components = psychological components on agents. PSC = player-specific context (private information per agent). TPB = theory of planned behavior.
 
@@ -81,8 +86,9 @@ Tips:
 | **Asynchronous** | Agents act independently on their own timelines. No fixed turn order — an agent may act multiple times before another acts. | Social media simulations, forum discussions, scenarios where agents don't need to wait for each other. |
 | **Interview** | A structured Q&A format. The interviewer (Game Master) presents questions and each respondent answers in turn. Agents remember previous answers and may change behavior. | Surveys, structured interviews, focus groups. |
 | **Survey** | Like Interview, but agents do NOT update their memory between questions. Each question is answered independently from a "blank slate." | Psychological surveys where question-order effects should be minimized. |
+| **Step Controller** | Like Sequential, but the simulation starts paused and you control execution manually. Use the toolbar to **Play** (run continuously), **Pause** (stop after current step), **Step** (advance exactly one action), or **Stop** (terminate early). Each step shows which entity acted and what action was taken. | Debugging, close analysis of individual agent decisions, teaching demonstrations, any scenario where you want to observe and discuss each step before proceeding. |
 
-**Choosing an engine:** Ask yourself: "Should agents see each other's actions before deciding?" If yes, use Sequential. If no, use Simultaneous. If the scenario is social-media-like, use Asynchronous. If you're running a questionnaire, choose Interview (if order matters) or Survey (if not).
+**Choosing an engine:** Ask yourself: "Should agents see each other's actions before deciding?" If yes, use Sequential. If no, use Simultaneous. If the scenario is social-media-like, use Asynchronous. If you're running a questionnaire, choose Interview (if order matters) or Survey (if not). If you want manual control over each step, use Step Controller.
 
 ### Agent Parameters
 
@@ -315,6 +321,56 @@ Each nested simulation has:
 
 **Cost consideration:** Nested simulations multiply LLM calls. An outer simulation with 15 steps and 3 agents each running 8-step inner simulations will make far more API calls than a flat 15-step simulation. Start with short inner simulations (3-5 steps).
 
+### Contrib GM Components
+
+Add-on components that extend the Game Master with specialized mechanics. Configured under **Game Master > GM Components** (click "+ Show"). Unlike GM prefabs (which replace the GM's entire behavior), contrib components are additive — you can stack multiple on any GM prefab.
+
+| Component | Category | Parameters | What It Does |
+|---|---|---|---|
+| **Death Mechanics** | Narrative | death_message (string) | Removes agents who die during the simulation. The GM uses the LLM to detect death events from the narrative and permanently removes the deceased agent from future steps. Use `{actor_name}` as a placeholder in the death message. |
+| **GM Working Memory** | Narrative | num_memories_to_retrieve (10-500, default 100) | The GM maintains a 500-700 word running narrative summary of the simulation state, updated each step. This gives the GM better long-term coherence — without it, the GM can "forget" earlier events as the context window fills up. |
+| **NPC Event Generator** | World | scenario_context (string), event_probability (0.0-1.0, default 0.15) | Generates random ambient events from NPCs and the environment at a configurable probability per step. The scenario_context describes what kinds of events are plausible (e.g., "a medieval village with bandits, weather, and market fluctuations"). |
+| **Location-Based Filter** | World | (none) | Enforces partial observability — agents can only observe events that happen at their current location. Without this, all agents see all events regardless of where they are. Requires location-aware premises and memories. |
+| **Spaceship System** | World | system_name, system_max_health (1-1000), system_failure_probability (0.0-1.0), warning_message | Tracks a named system with health points that can degrade probabilistically each step. When health drops below thresholds, the GM issues warnings. Use `{system_name}` as a placeholder in the warning message. Multiple instances can track different systems. |
+
+**Stacking components:** You can add multiple contrib components to a single GM. The Colony Survival template demonstrates all 5 working together. Order does not matter — each component runs independently.
+
+**Relationship to GM prefabs:** Contrib components work with any GM prefab. They add mechanics on top of whatever the prefab provides. For example, you can add Death Mechanics to a dialogic GM or NPC Event Generator to a game-theoretic GM.
+
+### Formative Memories (Generate Backstory)
+
+A standalone feature that uses the LLM to generate rich character backstories from an agent's name and context, without requiring a full simulation. Available in the **Agent Editor** — click the **Generate Backstory** button next to the memories section header.
+
+**How it works:**
+1. Click **Generate Backstory** on any agent
+2. Optionally enter context (e.g., "grew up in rural poverty", "was a child prodigy", "experienced loss early in life")
+3. Click **Generate** — the system sends the agent's name, context, and the simulation's shared memories to Concordia's `FormativeMemoriesInitializer`
+4. Generated backstory episodes are appended to the agent's existing memories
+
+**When to use it:**
+- When you want agents with rich, varied backgrounds without writing every memory by hand
+- When studying how different backstories shape agent behavior in the same scenario
+- When creating large simulations where manually writing 7-10 memories per agent is impractical
+
+**Tips:**
+- The context prompt strongly shapes the backstory. Compare "was bullied in high school" vs. "was class president" on the same agent to see how different histories produce different behavior.
+- Generated memories are additive — they are appended to any memories the agent already has. You can generate, review, and edit before running.
+- The `sentences_per_episode` parameter (in the dialog) controls how detailed each generated memory is. Default is 5.
+
+### Measurements / Component Logs
+
+Concordia's internal measurement system captures per-component channel data during simulation execution — observation logs, situation assessments, reasoning traces, and other signals from each agent's cognitive components. This data is captured automatically for all simulations.
+
+**Viewing measurements:** After a simulation completes, navigate to the results page and open the **Component Logs** tab. You will see expandable sections for each measurement channel (e.g., "observation", "PersonBySituation", "SelfPerception"). Each entry shows what data that component produced at each step.
+
+**What gets captured:** The exact channels depend on which components are active on each agent. Common channels include:
+- **observation** — what the agent perceived each step
+- **PersonBySituation** — the agent's assessment of other agents' likely behavior
+- **SelfPerception** — the agent's self-assessment and emotional state
+- **ActComponent** — the agent's action selection reasoning
+
+**Relationship to grounded variables:** Grounded variables are explicit metrics you define and the GM tracks. Measurements are implicit — they capture the internal workings of agent components automatically. Use grounded variables for the metrics you care about; use measurements for debugging and deep analysis of agent cognition.
+
 ### Scene Editor (Game-Theoretic GMs)
 
 When you select `game_theoretic_and_dramaturgic`, `physically_situated_and_dramaturgic`, or `scripted` as the GM prefab, a **Scene Editor** appears below the GM configuration. Scenes define structured interactions.
@@ -349,7 +405,7 @@ Each questionnaire has:
 
 Private information or instructions given to individual agents that other agents cannot see. Unlike shared memories (which every agent receives), player-specific context is delivered only to the named agent. This creates information asymmetry — agents know things that others don't, producing realistic hidden agendas, private knowledge, and strategic advantage.
 
-**22 of 26 built-in templates use player-specific context.** It is one of the most important tools for creating realistic simulations.
+**27 of 31 built-in templates use player-specific context.** It is one of the most important tools for creating realistic simulations.
 
 Edit player-specific context directly in the **Player-Specific Context** panel in the right column of the Simulation Builder (below the Memory Editor). The panel auto-populates a textarea for each agent in your configuration. A badge shows how many agents have private context set.
 
@@ -1241,6 +1297,327 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ---
 
+#### Hostage Negotiation (Step Controller Demo)
+
+**Learning objectives:** Demonstrate the step controller engine, which gives users manual play/pause/step/stop control over simulation execution. Each step reveals which entity acted and what action was taken, enabling close observation and real-time discussion of agent decision-making in a high-stakes crisis scenario.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Step Controller | Manual execution control — the defining feature of this template |
+| Max Steps | 20 | Extended crisis timeline with room for escalation and de-escalation |
+| Agents | 3 | Negotiator + 2 suspects with divergent motivations |
+| GM Prefab | `generic__GameMaster` | Standard narration with grounded variable tracking |
+| Acting Order | Game Master Choice | GM determines who speaks based on crisis dynamics |
+| GM Name | incident commander | Establishes the GM as the tactical authority managing the scene |
+| Special | 3 grounded variables (tension_level, hostages_released, situation_status) | Quantitative crisis tracking alongside step control |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Memories | Components |
+|---|---|---|---|---|---|
+| Negotiator Chen | Veteran crisis negotiator, 18 years experience | `basic_with_plan__Entity` | "Secure the release of all hostages without violence within 90 minutes. Build rapport with Red, identify Blue as a potential ally, and create conditions for a peaceful surrender" | 8 | personality_traits |
+| Red | Lead suspect, desperate but not violent by nature | `basic__Entity` | "Escape the bank with the money and your freedom. Keep the hostages as leverage but avoid harming anyone" | 7 | emotion (desperate_fear, high) |
+| Blue | Reluctant accomplice looking for a way out | `basic__Entity` | "Get out of this situation alive. If the negotiator offers a credible path to surrender without Red turning on you, take it" | 7 | emotion (regret_and_fear, very_high) |
+
+**Psychological components:** Chen has balanced personality traits (high conscientiousness, low neuroticism) modeling professional composure. Red and Blue have distinct emotion components reflecting their divergent psychological states — Red is desperate but functional, Blue is overwhelmed and ready to break.
+
+**Player-specific context:**
+- **Negotiator Chen:** The tactical team will breach in 60 minutes, not 90 — the public timeline is a bluff. Chen has less time than the suspects believe.
+- **Red:** Has a burner phone Blue does not know about. Closer to giving up than he lets on — his daughter is in the hospital.
+- **Blue:** Slipped a note to a hostage saying "I will not hurt anyone" — this may reach the negotiator.
+
+**Grounded variables (3 tracked metrics):**
+
+| Variable | Type | Initial | Update Rule |
+|---|---|---|---|
+| tension_level | Numerical (0-100) | 75 | Rises with threats/demands, drops with rapport/concessions |
+| hostages_released | Numerical (0-6) | 0 | Increases when suspects release hostages as goodwill gestures |
+| situation_status | Categorical | active_negotiation | Values: initial_contact, active_negotiation, progress, stalemate, resolution, tactical_breach |
+
+**Shared memories (6 items):** Establish the hostage situation (6 civilians, 2 armed suspects), the police perimeter and tactical team, the negotiator's direct phone line, the 90-minute breach deadline, and a pregnant hostage who needs medication (creating urgency for both sides).
+
+**What to observe when running:**
+1. Use **Step** to advance one action at a time — observe how each exchange shifts tension_level
+2. Use **Pause** after a critical moment (e.g., first hostage demand) to discuss with students before continuing
+3. Watch whether Blue's internal conflict manifests in behavior the negotiator can exploit
+4. Observe whether Chen's planning prefab produces a multi-phase negotiation strategy
+5. Track hostages_released — does the negotiator successfully trade concessions for releases?
+6. Compare **Play** (continuous) vs. **Step** (manual) — does the pacing feel different?
+7. Use **Stop** if the simulation reaches resolution before max_steps
+
+**Suggested experiments for students:**
+- Run the same scenario in Sequential engine (without step control) and compare the experience
+- Change Red's emotion from desperate_fear to cold_calculation and observe how negotiation dynamics shift
+- Remove Blue's emotion component entirely and see if the negotiator still identifies Blue as the weaker link
+- Add a 4th agent (tactical team commander) who communicates with Chen via radio, creating a two-front negotiation
+- Reduce max_steps to 10 and observe how time pressure changes the negotiator's strategy
+
+**Academic connections:** Crisis negotiation theory (Noesner 1999), behavioral change stairway model (FBI), game theory in asymmetric information settings, time pressure effects on decision-making (Maule & Edland 1997), split-loyalty dynamics in multi-actor crises.
+
+**Platform features demonstrated:** Step controller engine (play/pause/step/stop), per-step entity and action detail in the UI, step control toolbar, grounded variables alongside step control, planning prefab in crisis management, emotion components at varying intensities.
+
+---
+
+#### Colony Survival (Contrib GM Components Demo)
+
+**Learning objectives:** Demonstrate all 5 contrib GM components working together in a single scenario: Death Mechanics for agent mortality, GM Working Memory for narrative continuity, NPC Event Generator for environmental randomness, Location-Based Filter for partial observability, and Spaceship System for infrastructure health tracking.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Sequential | Standard turn-based colony management |
+| Max Steps | 20 | Extended survival timeline with room for crises |
+| Agents | 4 | Commander, engineer, biologist, pilot — each at different colony locations |
+| GM Prefab | `generic__GameMaster` | Standard narration augmented by 5 contrib components |
+| Acting Order | Game Master Choice | GM allocates attention based on crisis priority |
+| GM Name | colony overseer | Establishes the GM as an omniscient narrator tracking all colony systems |
+| Special | 5 contrib GM components + 3 grounded variables | Full contrib component showcase |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Memories | Components |
+|---|---|---|---|---|---|
+| Commander Yara Osei | Colony leader, former naval officer | `basic_with_plan__Entity` | "Keep all colonists alive through the first year. Prioritize life support stability, equitable workload, and early warning systems" | 6 | personality_traits |
+| Engineer Tomás Reyes | Infrastructure specialist | `basic__Entity` | "Keep colony infrastructure operational. Repair failing systems before they cascade, build redundancy, scavenge the ship wreckage" | 6 | personality_traits |
+| Dr. Aisha Nkomo | Xenobiologist and medical doctor | `basic__Entity` | "Ensure food and medical security. Expand hydroponic output, study local microbes for threats, maintain the medical bay" | 6 | personality_traits |
+| Pilot Jin-ho Park | Scout and rover operator | `basic__Entity` | "Scout surrounding terrain for resources, maintain the rover, establish weather monitoring stations" | 6 | personality_traits |
+
+**Contrib GM components (5):**
+
+| Component | Config | Effect on This Scenario |
+|---|---|---|
+| Death Mechanics | death_message: "{actor_name} has perished in the colony..." | If conditions become lethal (e.g., life support fails while an agent is outside), the agent is permanently removed |
+| GM Working Memory | 150 memories retrieved | The GM maintains a narrative summary across 20 steps, preventing "forgetting" earlier colony events |
+| NPC Event Generator | probability 0.25, context: exoplanet hazards | Random dust storms, equipment malfunctions, wildlife encounters, seismic tremors at ~25% chance per step |
+| Location-Based Filter | (default) | Agents at the habitat don't see events at the river site; the pilot on expedition doesn't see habitat events |
+| Spaceship System | Life Support, 100 HP, 8% failure probability | Life support health degrades probabilistically each step, creating ongoing infrastructure pressure |
+
+**Grounded variables (3 tracked metrics):**
+
+| Variable | Type | Initial | Update Rule |
+|---|---|---|---|
+| colonists_alive | Numerical (0-4) | 4 | Decreases if a colonist dies from hazard, equipment failure, or biological threat |
+| food_supply_days | Numerical (0-365) | 45 | Decreases daily, increases with harvests or new food sources |
+| colony_status | Categorical | surviving | Values: thriving, stable, surviving, struggling, critical, collapsed |
+
+**Player-specific context:**
+- **Commander Osei:** Life support efficiency has dropped 15% faster than projected — not shared with the crew.
+- **Engineer Reyes:** Found a hairline crack in the habitat pressure seal — needs 48 hours to fix, dangerous in dust storms.
+- **Dr. Nkomo:** A soil microbe sample shows rapid mutation when exposed to human biological waste — possibly pathogenic.
+- **Pilot Park:** Discovered a geothermal vent 12km north — potential energy source, but seismic readings are concerning.
+
+**What to observe when running:**
+1. Whether the NPC Event Generator creates events that meaningfully disrupt colonist plans
+2. Whether Location-Based Filter prevents agents from reacting to events they shouldn't know about
+3. Whether Life Support health degrades and triggers warning messages from the Spaceship System component
+4. Whether GM Working Memory produces coherent narrative across 20 steps (compare with a run without it)
+5. Whether Death Mechanics triggers if conditions become lethal — and how remaining colonists respond
+6. How the interaction between random events and system degradation creates emergent crises
+
+**Suggested experiments for students:**
+- Remove one contrib component at a time and observe which produces the most noticeable change
+- Increase NPC event probability to 0.5 and observe whether the colony becomes overwhelmed
+- Remove Location-Based Filter and observe whether agents unrealistically react to distant events
+- Reduce Life Support starting health to 50 and observe whether the colony pivots to pure survival mode
+- Add a second Spaceship System component tracking a different system (e.g., Communications Array)
+
+**Academic connections:** Common-pool resource management (Ostrom 1990), partial observability in multi-agent systems, emergent complexity from component interaction, resilience engineering (Hollnagel 2006), isolated-team dynamics (Palinkas 2003), agent mortality in simulation design.
+
+**Platform features demonstrated:** All 5 contrib GM components (death, gm_working_memory, npc_event_generator, location_based_filter, spaceship_system), contrib component stacking, grounded variables alongside contrib components, planning prefab for leadership, personality_traits on all agents.
+
+---
+
+#### Bookstore Reunion (Formative Memories Demo)
+
+**Learning objectives:** Demonstrate the formative memories standalone feature — using the **Generate Backstory** button in the Agent Editor to create rich character histories from minimal starting information. Observe how LLM-generated backstories shape agent behavior differently than hand-written memories.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Sequential | Standard conversation flow |
+| Max Steps | 15 | Extended social encounter with room for rapport and tension |
+| Agents | 3 | Three former classmates with minimal starting memories |
+| GM Prefab | `generic__GameMaster` | Basic narration for a social scenario |
+| Acting Order | Game Master Choice | GM selects speakers based on conversational dynamics |
+| GM Name | bookstore café | Environmental framing rather than narrative authority |
+| Special | Agents start with only 3 memories each — designed for backstory generation | Formative memories showcase |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Memories | Components |
+|---|---|---|---|---|---|
+| Sam Torres | Tech worker who moved back to town | `basic__Entity` | "Reconnect with old classmates and find out what happened to everyone. Quietly comparing your own path to theirs" | 3 (minimal) | personality_traits |
+| Maya Johansson | Nomadic artist | `basic__Entity` | "Catch up with Sam and Jordan, but protect yourself emotionally. High school was complicated" | 3 (minimal) | personality_traits |
+| Jordan Achebe | High school teacher and coach | `basic__Entity` | "Use this encounter to make amends for how you treated people in high school — but don't force an apology nobody asked for" | 3 (minimal) | personality_traits |
+
+**Psychological components:** All three agents have personality_traits reflecting their different dispositions — Maya is high-openness/low-conscientiousness (creative, spontaneous), Jordan is high-agreeableness/high-conscientiousness (reformed, responsible), Sam is balanced with moderate neuroticism (reflective, slightly anxious about comparison).
+
+**Player-specific context:**
+- **Sam Torres:** Had a crush on Maya in high school. Remembers Jordan being dismissive.
+- **Maya Johansson:** Had a falling out with Jordan senior year. Remembers Sam as the quiet kind kid.
+- **Jordan Achebe:** Was part of an unkind clique that included Sam as a target. Owes Sam an apology.
+
+**How to use the formative memories feature:**
+1. Load the template — note that each agent starts with only 3 bare-minimum memories
+2. Click **Generate Backstory** on Sam Torres
+3. Enter a context like "was a shy, academically focused kid who used coding as an escape" — click Generate
+4. Review the generated memories appended to Sam's existing ones
+5. Repeat for Maya and Jordan with different contexts
+6. Run the simulation and observe how the generated backstories shape the reunion dynamics
+
+**What to observe when running:**
+1. How generated backstories create conversation hooks that emerge naturally in the reunion
+2. Whether different context prompts for the same agent produce meaningfully different interactions
+3. How the interplay between generated memories and player-specific context (hidden feelings, old grudges) creates tension
+4. Whether Jordan's redemption arc feels authentic when shaped by generated formative experiences
+5. Compare a run with generated backstories vs. the bare 3-memory default — which produces richer conversation?
+
+**Suggested experiments for students:**
+- Generate backstories for all three agents twice with different contexts and compare simulation outcomes
+- Give one agent a traumatic backstory context and the others positive ones — observe power dynamics
+- Generate backstories, then delete all but 3 favorites per agent — study the effect of curated vs. bulk memories
+- Run without generating backstories at all (3 memories each) and observe how sparse characterization affects dialogue
+- Add a 4th agent (a barista who also went to Lincoln High) with a generated backstory
+
+**Academic connections:** Narrative identity theory (McAdams 2001), formative experience and personality development, social identity and reunion dynamics, nostalgia and selective memory, redemption narratives in personal storytelling.
+
+**Platform features demonstrated:** Formative memories standalone generation (Generate Backstory button), context-driven backstory customization, memory appending workflow, minimal starting configuration designed for generation, personality_traits on all agents.
+
+---
+
+#### Clinical Trial Ethics Board (Measurements Demo)
+
+**Learning objectives:** Demonstrate the measurements/metrics system — Concordia's internal per-component channel logging that captures observation, reasoning, and assessment data during simulation execution. After running, the Component Logs tab reveals how each agent's cognitive components processed information at each step, enabling deep analysis of agent cognition beyond surface-level dialogue.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Sequential | Structured board deliberation with clear turns |
+| Max Steps | 15 | Extended deliberation allowing full argument cycles |
+| Agents | 4 | Board chair + neurologist + patient advocate + pharma researcher |
+| GM Prefab | `generic__GameMaster` | Standard narration tracking grounded variables |
+| Acting Order | Game Master Choice | GM allocates speaking time based on deliberation dynamics |
+| GM Name | ethics board proceedings | Formal institutional framing |
+| Special | 4 grounded variables + measurements channels | Dual tracking: explicit variables + implicit component logs |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Memories | Components |
+|---|---|---|---|---|---|
+| Dr. Elaine Marsh | Board chair, bioethicist | `basic_with_plan__Entity` | "Guide the board to a well-reasoned decision by ensuring every perspective is heard. Reach a formal vote by end of meeting" | 6 | personality_traits, values |
+| Dr. Raj Patel | Clinical neurologist | `basic__Entity` | "Provide expert neurological assessment. Advocate for the trial if the science supports it, but only with enhanced safety monitoring" | 6 | personality_traits |
+| Maria Santos | Patient rights advocate | `basic__Entity` | "Represent the patient perspective. Ensure consent is truly informed and vulnerable populations are protected" | 6 | personality_traits |
+| Dr. Kevin Liu | Pharmaceutical researcher (non-voting) | `basic__Entity` | "Secure board approval. Answer all questions transparently. Offer protocol modifications if they help secure approval" | 6 | personality_traits |
+
+**Grounded variables (4 tracked metrics):**
+
+| Variable | Type | Initial | Update Rule |
+|---|---|---|---|
+| approval_likelihood | Percentage (0-100%) | 50 | Changes based on arguments, concerns raised, and modifications offered |
+| board_consensus | Categorical | divided | Values: strongly_opposed, leaning_against, divided, leaning_toward, strong_consensus |
+| key_concerns_addressed | Numerical (0-5) | 0 | Increases when a concern (side effects, consent, monitoring, dosing, vulnerable populations) is resolved |
+| decision_reached | Boolean | false | Becomes true when the chair calls a vote |
+
+**Player-specific context:**
+- **Dr. Marsh:** Heard informally that another institution rejected this same protocol — unconfirmed.
+- **Dr. Patel:** Has a patient who would be eligible and whose family asked him to advocate for the trial.
+- **Maria Santos:** Has a letter from a Phase II participant's family describing a neurological episode in visceral (not clinical) terms.
+- **Dr. Liu:** If the protocol is rejected, Nexagen will discontinue the entire program — he cannot share this as it would appear coercive.
+
+**How to use the measurements feature:**
+1. Run the simulation to completion
+2. Navigate to the results page
+3. Open the **Component Logs** tab
+4. Expand individual channel sections to see per-step data
+5. Compare what agents said (in the transcript) with what their components logged internally (in measurements)
+
+**What to observe when running:**
+1. In Component Logs: how each agent's observation component captured what they perceived vs. what was actually said
+2. Whether personality_traits and values components produce visible reasoning traces in the measurements
+3. How approval_likelihood shifts step by step as arguments land or fall flat
+4. Whether Maria's patient letter (player-specific context) shifts the board's emotional tenor
+5. Whether Dr. Liu's pharmaceutical background creates a credibility asymmetry with the patient advocate
+6. Compare the grounded variables timeline with the measurements channel data — do they tell the same story?
+
+**Suggested experiments for students:**
+- Run the same scenario twice and compare Component Logs — do agents reason differently with the same inputs?
+- Add cognitive_bias (sunk_cost_fallacy) to Dr. Liu and check whether the bias appears in his reasoning traces
+- Remove grounded variables and rely solely on measurements to understand the deliberation — what do you lose?
+- Add a 5th agent (a second patient advocate) and observe how group composition affects consensus dynamics
+- Change Dr. Marsh's values from patient_safety priority to scientific_progress and compare measurement channels
+
+**Academic connections:** Institutional review board dynamics, bioethics of clinical trials (Beauchamp & Childress 2019), informed consent and health literacy, pharmaceutical regulatory science, epistemic authority in expert panels, group decision-making under uncertainty.
+
+**Platform features demonstrated:** Measurements/component logging (Component Logs tab), measurements alongside grounded variables, planning prefab for procedural leadership, values component, player-specific context with moral dilemmas, 4-agent deliberative scenario.
+
+---
+
+#### Diplomatic Crisis (Nested Simulation Strategy)
+
+**Learning objectives:** Demonstrate nested simulation execution for strategic intelligence gathering — an ambassador runs an internal mini-simulation of a private back-channel conversation to probe an adversary's likely positions before committing to a public strategy in a formal UN session.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Sequential | Formal diplomatic exchange with structured turns |
+| Max Steps | 15 | Extended session allowing opening statements through resolution |
+| Agents | 3 (outer) + 2 (inner) | 3 ambassadors in the formal session; 2 diplomats in the back-channel |
+| GM Prefab | `generic__GameMaster` | Standard narration for formal proceedings |
+| Acting Order | Game Master Choice | GM manages diplomatic protocol |
+| GM Name | UN Security Council session | Institutional authority framing |
+| Special | Nested simulation on Ambassador Nakamura (5 steps, 2 inner agents) | Back-channel intelligence gathering before formal session |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Memories | Components |
+|---|---|---|---|---|---|
+| Ambassador Nakamura | Japanese diplomat, 25 years experience | `basic_with_plan__Entity` | "Achieve a 90-day cooling-off period with mutual withdrawal. Use back-channel insights to anticipate China's red lines" | 7 | personality_traits (has nested simulation) |
+| Ambassador Chen | Chinese diplomat, reports to Foreign Minister | `basic__Entity` | "Defend territorial claims while avoiding military confrontation. Need a resolution Beijing can present as a win domestically" | 6 | personality_traits |
+| Ambassador Reyes | Philippine diplomat, representing the most vulnerable party | `basic__Entity` | "Protect fishing rights and EEZ. Push for UNCLOS arbitration references in any resolution" | 6 | personality_traits |
+
+**Nested simulation (on Nakamura):**
+- **Premise:** Nakamura has a private back-channel conversation with Deputy Ambassador Wei of China in the delegates' lounge before the formal session.
+- **Inner agents:** Nakamura (3 memories, goal: probe China's actual red lines) and Deputy Ambassador Wei (4 memories, goal: assess Japan's flexibility without revealing China's).
+- **Max steps:** 5
+- **Shared memories:** 4 items — informal conversation, professional relationship, nothing binding, session starts in 30 minutes.
+- **Extraction prompt:** "What did Nakamura learn about China's actual position? What are their real red lines vs. public posturing? Is a cooling-off period feasible? What conditions or face-saving gestures would China likely require?"
+
+**Grounded variables (3 tracked metrics):**
+
+| Variable | Type | Initial | Update Rule |
+|---|---|---|---|
+| escalation_risk | Percentage (0-100%) | 65 | Decreases with constructive proposals, increases with ultimatums |
+| negotiation_phase | Categorical | opening_statements | Values: opening_statements, position_exchange, probing, proposal_phase, bargaining, drafting, vote, breakdown |
+| consensus_points | Numerical (0-4) | 0 | Increases when all three parties agree on a point (ceasefire, patrols, arbitration, timeline) |
+
+**Player-specific context:**
+- **Nakamura:** The back-channel suggested China may accept a "repositioning for confidence-building" framing instead of "withdrawal." Revealing the back-channel would close that door permanently.
+- **Chen:** Beijing has authorized a unilateral 50% coast guard reduction if an agreement is reached — but it must not be in the written resolution.
+- **Reyes:** The US has privately assured the Philippines of carrier group deployment within 30 days if the dispute is unresolved. Using this card too early could provoke China.
+
+**What to observe when running:**
+1. Whether Nakamura's behavior in the formal session reflects intelligence gathered in the nested back-channel simulation
+2. How the extraction prompt distills a 5-step diplomatic conversation into actionable strategy
+3. Whether Nakamura avoids revealing the back-channel while still using its intelligence
+4. How the three-way dynamic differs from a bilateral negotiation — does Reyes get marginalized?
+5. Whether consensus_points increase or whether the session breaks down into positional bargaining
+6. Compare escalation_risk trajectory — does it decrease steadily or oscillate?
+7. The LLM cost: the nested simulation adds ~10 API calls (5 steps x 2 agents) before the main simulation begins
+
+**Suggested experiments for students:**
+- Remove the nested simulation and compare whether Nakamura's opening strategy is less informed
+- Change the extraction prompt to ask only about "tone" rather than "red lines" and observe how vaguer intelligence changes strategy
+- Add a nested simulation to Ambassador Chen (e.g., an internal party meeting) to model multi-sided intelligence gathering
+- Increase the back-channel to 10 steps and observe whether richer intelligence changes the formal session outcome
+- Add a 4th agent (UN Secretary-General) with a mediation mandate and observe how institutional authority affects three-party dynamics
+
+**Academic connections:** Back-channel diplomacy (Wanis-St. John 2006), anticipatory social cognition, game theory with asymmetric information, UNCLOS and international maritime law, face-saving in East Asian diplomatic culture, three-party negotiation dynamics, nested simulation architectures in multi-agent systems.
+
+**Platform features demonstrated:** Nested simulation with extraction prompt, back-channel intelligence gathering pattern, planning prefab for strategy-informed negotiation, grounded variables tracking multi-party consensus, player-specific context with diplomatic intelligence, 3-agent formal + 2-agent nested architecture.
+
+---
+
 ### New in v2.4
 
 #### Rational Budget Negotiation
@@ -1898,7 +2275,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ## Tips for Creating Your Own Simulations
 
-1. **Start from a template.** Click **Browse Templates** and use the search and filter tools to find the closest template, then modify it rather than building from scratch.
+1. **Start from a template.** Click **Browse Templates** and use the search and filter tools to find the closest of the 31 templates, then modify it rather than building from scratch.
 
 2. **Write measurable goals.** "Secure at least $1.2M for Engineering while maintaining a collaborative relationship" produces more interesting behavior than "Do well in the negotiation." Include quantitative targets, secondary objectives, and priority ordering.
 

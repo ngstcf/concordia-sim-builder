@@ -25,6 +25,11 @@ import {
   getConversationalDebateTemplate,
   getSpaceshipCrisisTemplate,
   getSimultaneousAuctionTemplate,
+  getStepControllerDemoTemplate,
+  getContribGmComponentsDemoTemplate,
+  getFormativeMemoriesDemoTemplate,
+  getMeasurementsDemoTemplate,
+  getNestedSimStrategyTemplate,
 } from '../../utils/api';
 
 export interface TemplateMetadata {
@@ -56,6 +61,10 @@ export const TAG_COLORS: Record<string, { bg: string; text: string }> = {
   questionnaire:    { bg: 'bg-cyan-100',    text: 'text-cyan-700' },
   'critical-decisions': { bg: 'bg-pink-100', text: 'text-pink-700' },
   sdg:              { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  'step-controller': { bg: 'bg-sky-100',    text: 'text-sky-700' },
+  'contrib-gm':     { bg: 'bg-fuchsia-100', text: 'text-fuchsia-700' },
+  'formative-mem':   { bg: 'bg-lime-100',   text: 'text-lime-700' },
+  measurements:     { bg: 'bg-yellow-100',  text: 'text-yellow-700' },
 };
 
 export const TAG_LABELS: Record<string, string> = {
@@ -73,6 +82,10 @@ export const TAG_LABELS: Record<string, string> = {
   questionnaire:    'Questionnaire',
   'critical-decisions': 'Critical Decisions',
   sdg:              'SDG',
+  'step-controller': 'Step Controller',
+  'contrib-gm':     'Contrib GM',
+  'formative-mem':   'Formative Mem',
+  measurements:     'Measurements',
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
@@ -111,6 +124,11 @@ export const TEMPLATES: TemplateMetadata[] = [
   { id: 'fishery-management', name: 'Fishery Management', description: 'Tragedy of the commons resource management (SDG 14)', category: 'SDG Scenarios', tags: ['sequential', 'components', 'player-context', 'sdg'], agentCount: 4, stepCount: 20, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
   { id: 'disaster-response', name: 'Flood Evacuation', description: 'Emergency response coordination (SDG 11/13)', category: 'SDG Scenarios', tags: ['sequential', 'components', 'player-context', 'sdg'], agentCount: 5, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
   { id: 'inequality-mobility', name: 'Educational Opportunity', description: 'Social mobility and educational access (SDG 10)', category: 'SDG Scenarios', tags: ['sequential', 'components', 'player-context', 'sdg'], agentCount: 4, stepCount: 25, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
+  { id: 'step-controller-demo', name: 'Hostage Negotiation (Step Control)', description: 'Play/pause/step through a crisis negotiation one action at a time', category: 'Advanced', tags: ['step-controller', 'grounded-vars', 'player-context', 'components'], agentCount: 3, stepCount: 20, engineType: 'step_controller', gmPrefab: 'generic__GameMaster' },
+  { id: 'contrib-gm-demo', name: 'Colony Survival (Contrib GM)', description: 'All 5 contrib GM components: death, working memory, NPC events, location filter, system health', category: 'Advanced', tags: ['sequential', 'contrib-gm', 'grounded-vars', 'player-context', 'components'], agentCount: 4, stepCount: 20, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
+  { id: 'formative-memories-demo', name: 'Bookstore Reunion (Formative Mem)', description: 'Generate backstories with the Generate Backstory button before running', category: 'Advanced', tags: ['sequential', 'formative-mem', 'player-context', 'components'], agentCount: 3, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
+  { id: 'measurements-demo', name: 'Ethics Board (Measurements)', description: 'Run and check Component Logs tab for per-component measurement channels', category: 'Advanced', tags: ['sequential', 'measurements', 'grounded-vars', 'player-context', 'components'], agentCount: 4, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
+  { id: 'nested-sim-strategy', name: 'Diplomatic Crisis (Nested Sim)', description: 'Ambassador runs a back-channel mini-simulation before the formal UN session', category: 'Advanced', tags: ['sequential', 'nested-sim', 'grounded-vars', 'player-context', 'components'], agentCount: 3, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster' },
 ];
 
 export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
@@ -140,9 +158,14 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = 
   'fishery-management': getFisheryManagementTemplate,
   'disaster-response': getDisasterResponseTemplate,
   'inequality-mobility': getInequalityMobilityTemplate,
+  'step-controller-demo': getStepControllerDemoTemplate,
+  'contrib-gm-demo': getContribGmComponentsDemoTemplate,
+  'formative-memories-demo': getFormativeMemoriesDemoTemplate,
+  'measurements-demo': getMeasurementsDemoTemplate,
+  'nested-sim-strategy': getNestedSimStrategyTemplate,
 };
 
 export const ALL_CATEGORIES: TemplateCategory[] = ['Basic', 'Prefab Types', 'Research', 'Advanced', 'New in v2.4', 'SDG Scenarios'];
 
-export const FEATURE_TAGS = ['components', 'player-context', 'grounded-vars', 'nested-sim', 'scenes', 'questionnaire', 'scripted', 'game-theory', 'critical-decisions', 'sdg'] as const;
-export const ENGINE_TAGS = ['sequential', 'simultaneous', 'async', 'interview'] as const;
+export const FEATURE_TAGS = ['components', 'player-context', 'grounded-vars', 'nested-sim', 'scenes', 'questionnaire', 'scripted', 'game-theory', 'critical-decisions', 'sdg', 'step-controller', 'contrib-gm', 'formative-mem', 'measurements'] as const;
+export const ENGINE_TAGS = ['sequential', 'simultaneous', 'async', 'interview', 'step-controller'] as const;

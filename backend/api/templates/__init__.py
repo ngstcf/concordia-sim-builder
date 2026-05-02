@@ -30,6 +30,11 @@ from .puppet_wizard_of_oz import TEMPLATE as _puppet_wizard_of_oz
 from .conversational_debate import TEMPLATE as _conversational_debate
 from .spaceship_crisis import TEMPLATE as _spaceship_crisis
 from .simultaneous_auction import TEMPLATE as _simultaneous_auction
+from .step_controller_demo import TEMPLATE as _step_controller_demo
+from .contrib_gm_components_demo import TEMPLATE as _contrib_gm_components_demo
+from .formative_memories_demo import TEMPLATE as _formative_memories_demo
+from .measurements_demo import TEMPLATE as _measurements_demo
+from .nested_sim_strategy import TEMPLATE as _nested_sim_strategy
 
 TEMPLATES: dict[str, dict] = {
     "peace-negotiation": _peace_negotiation,
@@ -58,4 +63,9 @@ TEMPLATES: dict[str, dict] = {
     "conversational-debate": _conversational_debate,
     "spaceship-crisis": _spaceship_crisis,
     "simultaneous-auction": _simultaneous_auction,
+    "step-controller-demo": _step_controller_demo,
+    "contrib-gm-components-demo": _contrib_gm_components_demo,
+    "formative-memories-demo": _formative_memories_demo,
+    "measurements-demo": _measurements_demo,
+    "nested-sim-strategy": _nested_sim_strategy,
 }
