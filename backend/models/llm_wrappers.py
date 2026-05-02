@@ -126,16 +126,12 @@ class CustomGPTModel:
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
         timeout: float = 180.0,  # Per-request timeout (can be overridden via LLM_TIMEOUT env var)
-        max_retries: int = 2  # Retry attempts (can be overridden via LLM_MAX_RETRIES env var)
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 2,  # Retry attempts (can be overridden via LLM_MAX_RETRIES env var)
+        **kwargs,
     ) -> str:
-        """Sample text from the model with retry logic for transient errors and enforced timeout.
-
-        Timeout Behavior:
-        - Waits the FULL timeout duration before flagging an error
-        - Does NOT prematurely interrupt long-running requests
-        - If request completes at 179s (of 180s timeout) → SUCCESS
-        - If request completes at 181s (of 180s timeout) → RETRY
-        """
+        """Sample text from the model with retry logic for transient errors and enforced timeout."""
         import os
         from openai import APITimeoutError, AuthenticationError, RateLimitError, APIError
         from httpcore import ConnectTimeout, ConnectError
@@ -313,9 +309,12 @@ class GeminiModel:
         *,
         max_tokens: int = 2000,  # Match Concordia's DEFAULT_MAX_TOKENS
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
-        terminators: list[str] | None = None,  # Accept but ignore for compatibility
-        timeout: float = 60.0,  # Accept but ignore for compatibility
-        seed: int | None = None
+        terminators: list[str] | None = None,
+        timeout: float = 60.0,
+        seed: int | None = None,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        **kwargs,
     ) -> str:
         """Sample text from Gemini using the new google.genai package."""
         try:
@@ -434,8 +433,11 @@ class GLMModel:
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
-        timeout: float = 60.0,  # Accept for compatibility with Concordia API; timeout is set at client level
-        max_retries: int = 3
+        timeout: float = 60.0,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 3,
+        **kwargs,
     ) -> str:
         """Sample text from GLM model with retry logic."""
         from openai import APITimeoutError
@@ -548,8 +550,11 @@ class AnthropicModel:
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
-        timeout: float = 60.0,  # Accept for compatibility with Concordia API
-        max_retries: int = 3
+        timeout: float = 60.0,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 3,
+        **kwargs,
     ) -> str:
         """Sample text from Anthropic Claude with retry logic."""
         # Claude models have large context windows (200k tokens)

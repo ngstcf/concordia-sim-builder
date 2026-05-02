@@ -418,6 +418,54 @@ export async function getUrbanGentrificationTemplate(): Promise<SimulationTempla
 }
 
 /**
+ * Get the rational negotiators template (rational__Entity demo)
+ */
+export async function getRationalNegotiatorsTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/rational-negotiators');
+  return response.data;
+}
+
+/**
+ * Get the social media discourse template (asynchronous engine demo)
+ */
+export async function getSocialMediaDiscourseTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/social-media-discourse');
+  return response.data;
+}
+
+/**
+ * Get the puppet wizard-of-oz template (puppet__Entity + simultaneous engine)
+ */
+export async function getPuppetWizardOfOzTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/puppet-wizard-of-oz');
+  return response.data;
+}
+
+/**
+ * Get the conversational debate template (conversational__Entity demo)
+ */
+export async function getConversationalDebateTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/conversational-debate');
+  return response.data;
+}
+
+/**
+ * Get the spaceship crisis template (space_ship GM from contrib)
+ */
+export async function getSpaceshipCrisisTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/spaceship-crisis');
+  return response.data;
+}
+
+/**
+ * Get the simultaneous auction template (simultaneous engine demo)
+ */
+export async function getSimultaneousAuctionTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/simultaneous-auction');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication

@@ -87,6 +87,7 @@ GLM_SETUP.md
 
 # Custom documentation (keep untracked)
 docs/
+!docs/SIMULATION_TEMPLATES_GUIDE.md
 
 # Test scripts
 test_glm.py
@@ -109,3 +110,6 @@ reports/
 # Research use cases
 research-use-cases/
 documentation.html
+
+# Upstream Concordia clone (installed as editable dependency)
+concordia-upstream/

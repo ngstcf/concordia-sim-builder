@@ -59,11 +59,19 @@ export default function ScenarioConfig() {
           >
             <option value="sequential">Sequential (Turn-based)</option>
             <option value="simultaneous">Simultaneous (All at once)</option>
+            <option value="asynchronous">Asynchronous (Parallel with ordering)</option>
             <option value="interview">Interview (Q&A)</option>
             <option value="survey">Survey (No memory updates)</option>
           </select>
           <p className="mt-1 text-xs text-gray-500">
-            Sequential: Turn-based interactions (most common)
+            {{
+              sequential: 'Agents take turns one at a time. Best for dialogue and negotiations.',
+              simultaneous: 'All agents act at once. Best for voting, auctions, and coordination games.',
+              asynchronous: 'Agents act in parallel with ordering constraints. Best for social media simulations.',
+              step_controller: 'Manual control: pause, play, step-by-step. Best for research and debugging.',
+              interview: 'Q&A format with interviewer and respondents.',
+              survey: 'Like interview but without memory updates between questions.',
+            }[config.engine_type] || 'Select an engine type'}
           </p>
         </div>
       </div>

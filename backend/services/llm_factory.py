@@ -38,31 +38,33 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
         temperature: Optional[float] = None,
         timeout: float = language_model.DEFAULT_TIMEOUT_SECONDS,
         seed: int | None = None,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        **kwargs,
     ) -> str:
         """
         Sample text from the model, using configured temperature if not provided.
         """
-        # Use our configured temperature if caller doesn't specify one
         if temperature is None:
             temperature = self._temperature
 
-        # Override timeout with LLM_TIMEOUT environment variable if set
-        # This allows global timeout configuration without code changes
         env_timeout = os.getenv('LLM_TIMEOUT')
         if env_timeout:
             try:
                 timeout = float(env_timeout)
             except ValueError:
-                pass  # Use the provided timeout
+                pass
 
-        # Call the underlying model's sample_text with the temperature
         return self._model.sample_text(
             prompt,
             max_tokens=max_tokens,
             terminators=terminators,
             temperature=temperature,
             timeout=timeout,
-            seed=seed
+            seed=seed,
+            top_p=top_p,
+            top_k=top_k,
+            **kwargs,
         )
 
     def sample_choice(

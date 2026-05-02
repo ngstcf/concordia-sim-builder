@@ -20,7 +20,6 @@ from concordia.prefabs import game_master as game_master_prefabs
 from concordia.prefabs.simulation import generic as simulation
 from concordia.typing import prefab as prefab_lib
 from concordia.associative_memory import basic_associative_memory
-from concordia.clocks import game_clock
 from concordia.language_model import language_model
 
 from backend.models.schemas import (
@@ -36,13 +35,18 @@ from backend.prefabs import context_aware_scripted
 
 
 def load_available_prefabs() -> dict:
-    """Load all available prefabs from Concordia and custom prefabs."""
+    """Load all available prefabs from Concordia (core + contrib) and custom prefabs."""
+    from concordia.contrib.prefabs import entity as contrib_entity_prefabs
+    from concordia.contrib.prefabs import game_master as contrib_gm_prefabs
+
     prefabs = {
         **helper_functions.get_package_classes(entity_prefabs),
         **helper_functions.get_package_classes(game_master_prefabs),
+        **helper_functions.get_package_classes(contrib_entity_prefabs),
+        **helper_functions.get_package_classes(contrib_gm_prefabs),
     }
 
-    # Add custom context-aware scripted prefab - instantiate with default params
+    # Add custom context-aware scripted prefab
     prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity()
 
     return prefabs
@@ -327,16 +331,23 @@ def build_simulation(
         instances=instances
     )
 
-    # Select the appropriate engine based on game master prefab
-    # Interviewer prefab requires ParallelQuestionnaireEngine
+    # Select engine based on config or GM prefab
     if config.game_master.prefab == 'interviewer__GameMaster':
         from concordia.environment.engines import parallel
         engine = parallel.ParallelQuestionnaireEngine()
         debug_print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
+    elif config.engine_type == EngineType.SIMULTANEOUS:
+        from concordia.environment.engines import simultaneous
+        engine = simultaneous.Simultaneous()
+        debug_print(f"[DEBUG] Using Simultaneous engine")
+    elif config.engine_type == EngineType.ASYNCHRONOUS:
+        from concordia.environment.engines import asynchronous
+        engine = asynchronous.Asynchronous()
+        debug_print(f"[DEBUG] Using Asynchronous engine")
     else:
         from concordia.environment.engines import sequential
         engine = sequential.Sequential()
-        debug_print(f"[DEBUG] Using Sequential engine for {config.game_master.prefab}")
+        debug_print(f"[DEBUG] Using Sequential engine")
 
     # Build and return simulation using the Simulation class
     sim = simulation.Simulation(
@@ -358,28 +369,42 @@ def get_available_prefabs_info() -> list[dict]:
     initializer_prefabs_info = []
 
     prefab_descriptions = {
-        # Entity prefabs
-        'basic__Entity': 'Standard agent with decision-making components',
-        'basic_with_plan__Entity': 'Entity with planning capabilities',
-        'basic_scripted__Entity': 'Scripted behavior agent (exact responses)',
-        'context_aware_scripted__Entity': 'Scripted agent that adapts to conversation context',
-        'minimal__Entity': 'Simplest entity implementation',
-        'fake_assistant_with_configurable_system_prompt__Entity': 'Customizable system prompt',
+        # Entity prefabs — core
+        'basic__Entity': 'Standard agent with "three key questions" decision framework (situation, self-perception, action)',
+        'basic_with_plan__Entity': 'Agent with strategic planning and time horizons for complex coordination',
+        'basic_scripted__Entity': 'Follows predefined scripts exactly; goes silent when script is exhausted',
+        'context_aware_scripted__Entity': 'Adapts script to conversation context; auto-closes when script ends',
+        'minimal__Entity': 'Bare-minimum agent for lightweight simulations',
+        'fake_assistant_with_configurable_system_prompt__Entity': 'AI assistant persona with custom system prompt',
+        'conversational__Entity': 'Dialogue-focused agent optimized for conversation simulations',
+        'rational__Entity': 'Expected utility maximizer for game-theoretic scenarios',
+        'puppet__Entity': 'Externally controlled agent for wizard-of-oz or human-in-the-loop experiments',
 
-        # Game master prefabs
-        'generic__GameMaster': 'General-purpose narrative GM',
-        'dialogic__GameMaster': 'Conversation-focused GM',
-        'dialogic_and_dramaturgic__GameMaster': 'Enhanced dialogue GM',
-        'game_theoretic_and_dramaturgic__GameMaster': 'Structured games with payoffs',
-        'interviewer__GameMaster': 'Interview scenarios',
-        'marketplace__GameMaster': 'Economic simulations',
-        'psychology_experiment__GameMaster': 'Experimental setups',
-        'scripted__GameMaster': 'Predefined narrative',
-        'situated__GameMaster': 'Context-specific GM',
-        'situated_in_time_and_place__GameMaster': 'Temporal context GM',
+        # Entity prefabs — contrib
+        'basic_with_image__Entity': 'Multimodal agent that generates images alongside text responses',
+        'conversations_with_ai_companions__AICompanionEntity': 'AI companion for tutoring and conversational scenarios',
+        'conversations_with_ai_companions__HumanUserEntity': 'Human user entity for AI companion conversations',
+
+        # Game master prefabs — core
+        'generic__GameMaster': 'General-purpose narrative GM for most simulation types',
+        'dialogic__GameMaster': 'Conversation-focused GM with auto-termination for dialogue-heavy scenarios',
+        'dialogic_and_dramaturgic__GameMaster': 'Enhanced dialogue GM with dramatic scene structure',
+        'game_theoretic_and_dramaturgic__GameMaster': 'Matrix games with payoffs, scores, and strategic decisions',
+        'interviewer__GameMaster': 'Structured questionnaire administration for surveys and interviews',
+        'open_ended_interviewer__GameMaster': 'Unstructured interview format with free-form questioning',
+        'marketplace__GameMaster': 'Economic trading simulation with buy/sell/hold dynamics',
+        'psychology_experiment__GameMaster': 'Experimental protocol management for research scenarios',
+        'scripted__GameMaster': 'Follows predetermined narrative sequences',
+        'situated__GameMaster': 'Location-aware GM for spatially grounded scenarios',
+        'situated_in_time_and_place__GameMaster': 'Temporal and spatial context with time progression',
+        'physically_situated_and_dramaturgic__GameMaster': 'Physical environment with dramatic scene structure',
+        'async_social_media__GameMaster': 'Social media simulation with forums, posts, and asynchronous interaction',
+
+        # Game master prefabs — contrib
+        'space_ship__GameMaster': 'Spaceship simulation with location tracking and system health/failure states',
 
         # Initializer
-        'formative_memories_initializer__GameMaster': 'Setup initializer with formative memories',
+        'formative_memories_initializer__GameMaster': 'Creates character backgrounds from player-specific context before main simulation',
     }
 
     for prefab_name, prefab_class in prefabs.items():

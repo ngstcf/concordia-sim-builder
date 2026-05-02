@@ -4,8 +4,14 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { getComponentTemplates } from '../../utils/api';
+import { getComponentTemplates, getPrefabs } from '../../utils/api';
 import type { ScriptLine } from '../../types/simulation';
+
+interface PrefabInfo {
+  name: string;
+  description: string;
+  type: string;
+}
 
 interface AgentEditorProps {
   agentId: string;
@@ -42,13 +48,19 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     parameters: Record<string, any>;
     category: string;
   }>>([]);
+  const [entityPrefabs, setEntityPrefabs] = useState<PrefabInfo[]>([]);
 
   useEffect(() => {
-    // Load component templates
     getComponentTemplates().then(data => {
       setAvailableComponents(data.templates);
     }).catch(err => {
       console.error('Failed to load component templates:', err);
+    });
+
+    getPrefabs().then(data => {
+      setEntityPrefabs(data.entities);
+    }).catch(err => {
+      console.error('Failed to load prefabs:', err);
     });
   }, []);
 
@@ -199,19 +211,45 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               value={prefab}
               onChange={(e) => setPrefab(e.target.value)}
             >
-              <option value="basic__Entity">Basic Entity</option>
-              <option value="basic_with_plan__Entity">Entity with Plan</option>
-              <option value="basic_scripted__Entity">Scripted Entity (Exact Responses)</option>
-              <option value="context_aware_scripted__Entity">Scripted Entity (Context-Aware)</option>
-              <option value="minimal__Entity">Minimal Entity</option>
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              {isScripted && (
-                prefab === 'basic_scripted__Entity'
-                  ? 'Forces exact scripted responses regardless of context'
-                  : 'Adapts scripted prompts based on conversation context'
+              {entityPrefabs.length > 0 ? (
+                <>
+                  <optgroup label="Standard">
+                    {entityPrefabs.filter(p => ['basic__Entity', 'basic_with_plan__Entity', 'minimal__Entity'].includes(p.name)).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Scripted">
+                    {entityPrefabs.filter(p => p.name.includes('scripted')).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Specialized">
+                    {entityPrefabs.filter(p => ['conversational__Entity', 'rational__Entity', 'puppet__Entity', 'fake_assistant_with_configurable_system_prompt__Entity'].includes(p.name)).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Experimental">
+                    {entityPrefabs.filter(p => p.name.includes('image') || p.name.includes('companion')).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '').replace('__AICompanionEntity', ' (AI)').replace('__HumanUserEntity', ' (Human)')}</option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                <>
+                  <option value="basic__Entity">basic</option>
+                  <option value="basic_with_plan__Entity">basic_with_plan</option>
+                  <option value="basic_scripted__Entity">basic_scripted</option>
+                  <option value="context_aware_scripted__Entity">context_aware_scripted</option>
+                  <option value="minimal__Entity">minimal</option>
+                </>
               )}
-            </p>
+            </select>
+            {(() => {
+              const selected = entityPrefabs.find(p => p.name === prefab);
+              return selected ? (
+                <p className="mt-1 text-xs text-gray-500">{selected.description}</p>
+              ) : null;
+            })()}
           </div>
 
           {/* Goal */}
@@ -368,13 +406,23 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
                 }}
               >
                 <option value="">+ Add Component...</option>
-                {availableComponents
-                  .filter(template => !componentConfigs.some(c => c.templateId === template.id))
-                  .map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
+                {(() => {
+                  const unused = availableComponents.filter(
+                    t => !componentConfigs.some(c => c.templateId === t.id)
+                  );
+                  const groups: Record<string, typeof unused> = {};
+                  unused.forEach(t => {
+                    const cat = t.category || 'General';
+                    (groups[cat] = groups[cat] || []).push(t);
+                  });
+                  return Object.entries(groups).map(([cat, templates]) => (
+                    <optgroup key={cat} label={cat}>
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  ));
+                })()}
               </select>
             </div>
 

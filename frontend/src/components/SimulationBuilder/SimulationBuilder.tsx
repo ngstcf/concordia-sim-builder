@@ -26,6 +26,12 @@ import {
   getGroundedVariablesTemplate,
   getPhishingAttackSimulationTemplate,
   getUrbanGentrificationTemplate,
+  getRationalNegotiatorsTemplate,
+  getSocialMediaDiscourseTemplate,
+  getPuppetWizardOfOzTemplate,
+  getConversationalDebateTemplate,
+  getSpaceshipCrisisTemplate,
+  getSimultaneousAuctionTemplate,
 } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
@@ -50,6 +56,12 @@ const TEMPLATES = [
   { id: 'interviewer', name: 'Interviewer', description: 'Employee survey', category: 'Prefab Types' },
   { id: 'formative', name: 'Formative Memories', description: 'High school reunion', category: 'Prefab Types' },
   { id: 'marketplace', name: 'Marketplace', description: 'Farmers market trading', category: 'Prefab Types' },
+  { id: 'rational-negotiators', name: 'Rational Negotiators', description: 'Budget negotiation (rational prefab)', category: 'New in v2.4' },
+  { id: 'conversational-debate', name: 'Philosophy Roundtable', description: 'AI ethics debate (conversational prefab)', category: 'New in v2.4' },
+  { id: 'social-media-discourse', name: 'Social Media Debate', description: 'Policy debate (async engine)', category: 'New in v2.4' },
+  { id: 'simultaneous-auction', name: 'Sealed-Bid Auction', description: 'Art auction (simultaneous engine)', category: 'New in v2.4' },
+  { id: 'puppet-wizard-of-oz', name: 'Wizard-of-Oz CS Training', description: 'Human-in-the-loop (puppet prefab)', category: 'New in v2.4' },
+  { id: 'spaceship-crisis', name: 'Spaceship Crisis', description: 'Ship emergency (contrib GM)', category: 'New in v2.4' },
   { id: 'state-formation', name: 'State Formation', description: 'Building institutions (SDG 16)', category: 'SDG Scenarios' },
   { id: 'labor-action', name: 'Labor Strike', description: 'Collective bargaining (SDG 8)', category: 'SDG Scenarios' },
   { id: 'fishery-management', name: 'Fishery Management', description: 'Tragedy of commons (SDG 14)', category: 'SDG Scenarios' },
@@ -73,6 +85,12 @@ const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
   interviewer: getInterviewerTemplate,
   formative: getFormativeMemoriesTemplate,
   marketplace: getMarketplaceTemplate,
+  'rational-negotiators': getRationalNegotiatorsTemplate,
+  'conversational-debate': getConversationalDebateTemplate,
+  'social-media-discourse': getSocialMediaDiscourseTemplate,
+  'simultaneous-auction': getSimultaneousAuctionTemplate,
+  'puppet-wizard-of-oz': getPuppetWizardOfOzTemplate,
+  'spaceship-crisis': getSpaceshipCrisisTemplate,
   'state-formation': getStateFormationTemplate,
   'labor-action': getLaborActionTemplate,
   'fishery-management': getFisheryManagementTemplate,
@@ -127,6 +145,7 @@ export default function SimulationBuilder() {
 
   // Group templates by category
   const basicTemplates = TEMPLATES.filter(t => t.category === 'Basic');
+  const newTemplates = TEMPLATES.filter(t => t.category === 'New in v2.4');
   const prefabTemplates = TEMPLATES.filter(t => t.category === 'Prefab Types');
   const researchTemplates = TEMPLATES.filter(t => t.category === 'Research');
   const advancedTemplates = TEMPLATES.filter(t => t.category === 'Advanced');
@@ -154,6 +173,13 @@ export default function SimulationBuilder() {
               <option value="">Load a template...</option>
               <optgroup label="Basic Templates">
                 {basicTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.description}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="New in v2.4 (Engines & Prefabs)">
+                {newTemplates.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.name} - {t.description}
                   </option>

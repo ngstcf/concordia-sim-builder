@@ -10,6 +10,8 @@ class EngineType(str, Enum):
     """Available simulation engine types."""
     SEQUENTIAL = "sequential"
     SIMULTANEOUS = "simultaneous"
+    ASYNCHRONOUS = "asynchronous"
+    STEP_CONTROLLER = "step_controller"
     INTERVIEW = "interview"
     SURVEY = "survey"
 

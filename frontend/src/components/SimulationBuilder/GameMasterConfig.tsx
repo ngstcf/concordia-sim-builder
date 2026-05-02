@@ -4,8 +4,17 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { getPrefabs } from '../../utils/api';
 import Editor from '@monaco-editor/react';
 import type { VariableConfig } from '../../types/simulation';
+import SceneEditor from './SceneEditor';
+import QuestionnaireBuilder from './QuestionnaireBuilder';
+
+interface PrefabInfo {
+  name: string;
+  description: string;
+  type: string;
+}
 
 interface VariableConfigWithId extends VariableConfig {
   id: string;
@@ -21,6 +30,15 @@ export default function GameMasterConfig() {
   const [showExample, setShowExample] = useState(false);
   const [showCriticalDecisions, setShowCriticalDecisions] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [gmPrefabs, setGmPrefabs] = useState<PrefabInfo[]>([]);
+
+  useEffect(() => {
+    getPrefabs().then(data => {
+      setGmPrefabs(data.game_masters);
+    }).catch(err => {
+      console.error('Failed to load GM prefabs:', err);
+    });
+  }, []);
 
   // Sync variables with config when config changes externally
   useEffect(() => {
@@ -226,11 +244,44 @@ export default function GameMasterConfig() {
             value={config.game_master.prefab}
             onChange={(e) => setGameMaster({ ...config.game_master, prefab: e.target.value })}
           >
-            <option value="generic__GameMaster">Generic (Narrative)</option>
-            <option value="dialogic__GameMaster">Dialogic (Conversation)</option>
-            <option value="game_theoretic_and_dramaturgic__GameMaster">Game-Theoretic</option>
-            <option value="interviewer__GameMaster">Interviewer</option>
+            {gmPrefabs.length > 0 ? (
+              <>
+                <optgroup label="Narrative">
+                  {gmPrefabs.filter(p => ['generic__GameMaster', 'dialogic__GameMaster', 'dialogic_and_dramaturgic__GameMaster', 'scripted__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Structured">
+                  {gmPrefabs.filter(p => ['game_theoretic_and_dramaturgic__GameMaster', 'interviewer__GameMaster', 'open_ended_interviewer__GameMaster', 'marketplace__GameMaster', 'psychology_experiment__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Situated">
+                  {gmPrefabs.filter(p => ['situated__GameMaster', 'situated_in_time_and_place__GameMaster', 'physically_situated_and_dramaturgic__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Simulation">
+                  {gmPrefabs.filter(p => ['async_social_media__GameMaster', 'space_ship__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              <>
+                <option value="generic__GameMaster">generic</option>
+                <option value="dialogic__GameMaster">dialogic</option>
+                <option value="game_theoretic_and_dramaturgic__GameMaster">game_theoretic_and_dramaturgic</option>
+                <option value="interviewer__GameMaster">interviewer</option>
+              </>
+            )}
           </select>
+          {(() => {
+            const selected = gmPrefabs.find(p => p.name === config.game_master.prefab);
+            return selected ? (
+              <p className="mt-1 text-xs text-gray-500">{selected.description}</p>
+            ) : null;
+          })()}
         </div>
 
         {/* Acting Order */}
@@ -271,6 +322,16 @@ export default function GameMasterConfig() {
             </label>
           </div>
         </div>
+
+        {/* Scene Editor - for game-theoretic and situated GMs */}
+        {['game_theoretic_and_dramaturgic__GameMaster', 'physically_situated_and_dramaturgic__GameMaster', 'scripted__GameMaster'].includes(config.game_master.prefab) && (
+          <SceneEditor />
+        )}
+
+        {/* Questionnaire Builder - for interviewer GMs */}
+        {['interviewer__GameMaster', 'open_ended_interviewer__GameMaster'].includes(config.game_master.prefab) && (
+          <QuestionnaireBuilder />
+        )}
 
         {/* Grounded Variables - optional advanced feature */}
         <div>

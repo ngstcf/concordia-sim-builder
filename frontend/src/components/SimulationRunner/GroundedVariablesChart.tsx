@@ -3,8 +3,9 @@
  * Displays time-series charts for grounded variables
  */
 import { useState, useEffect } from 'react';
-import { getSimulationAnalytics, extractGroundedVariables, getGroundedVariables } from '../../utils/api';
-import type { SimulationAnalytics, LLMSettings } from '../../utils/api';
+import { getSimulationAnalytics, extractGroundedVariables } from '../../utils/api';
+import type { SimulationAnalytics } from '../../utils/api';
+import type { LLMSettings } from '../../types/simulation';
 
 interface VariableValue {
   step: number;

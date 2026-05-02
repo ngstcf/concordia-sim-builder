@@ -2964,6 +2964,502 @@ async def get_urban_gentrification_template():
     }
 
 
+# ============================================================================
+# NEW PREFAB TEMPLATES (v2.4.0) - Showcasing new entity/GM/engine types
+# ============================================================================
+
+@router.get("/templates/rational-negotiators")
+async def get_rational_negotiators_template():
+    """
+    Template: Rational Negotiators (rational__Entity)
+    Showcases the rational prefab which uses expected-utility maximization.
+    """
+    return {
+        "name": "Rational Budget Negotiation",
+        "description": "Two rational agents negotiate a departmental budget split",
+        "config": {
+            "premise": """The annual budget review at Apex Corp. The CEO has allocated $2 million
+to be split between the Engineering and Marketing departments. Department heads
+must negotiate and agree on a split. If they cannot agree within the allotted time,
+both departments receive a flat $800K (20% penalty for indecision).""",
+            "max_steps": 8,
+            "engine_type": "sequential",
+            "agents": [
+                {
+                    "id": "priya",
+                    "name": "Priya",
+                    "prefab": "rational__Entity",
+                    "goal": "Secure at least $1.2M for Engineering while maintaining a good working relationship with Jordan",
+                    "memories": [
+                        "Priya is the VP of Engineering at Apex Corp.",
+                        "Engineering shipped 3 major products last year, generating 70% of revenue.",
+                        "The team needs $1M minimum to maintain current projects and $200K for R&D.",
+                        "Priya values data-driven arguments over emotional appeals.",
+                        "Last year Engineering received $1.1M and Marketing received $900K.",
+                        "Priya believes in finding mutually beneficial outcomes when possible."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "jordan",
+                    "name": "Jordan",
+                    "prefab": "rational__Entity",
+                    "goal": "Secure at least $1M for Marketing to fund the new brand campaign",
+                    "memories": [
+                        "Jordan is the VP of Marketing at Apex Corp.",
+                        "Marketing's brand campaign drove a 40% increase in leads last quarter.",
+                        "The new campaign requires $800K minimum, plus $200K for analytics tools.",
+                        "Jordan knows Engineering had a strong year but believes Marketing enabled those sales.",
+                        "Jordan prefers win-win solutions and is willing to trade concessions.",
+                        "A failed negotiation ($800K each) would be worse than a reasonable compromise."
+                    ],
+                    "randomize_choices": False
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Board Mediator",
+                "acting_order": "fixed",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "The total budget is $2 million, non-negotiable.",
+                "If no agreement is reached, both departments receive $800K each.",
+                "The CEO expects a decision by end of the meeting.",
+                "Both departments contributed to last year's record revenue.",
+                "The board values collaboration between departments."
+            ]
+        }
+    }
+
+
+@router.get("/templates/social-media-discourse")
+async def get_social_media_discourse_template():
+    """
+    Template: Social Media Discourse (async_social_media__GameMaster + asynchronous engine)
+    Showcases async engine and social media GM for studying online discourse dynamics.
+    """
+    return {
+        "name": "Social Media Policy Debate",
+        "description": "Asynchronous social media discussion about a local policy proposal",
+        "config": {
+            "premise": """A city council has proposed banning single-use plastics in all restaurants
+and cafes, effective in 6 months. The proposal has sparked a heated discussion
+on the local community social media platform "TownSquare". Residents, business
+owners, and activists are sharing their views.""",
+            "max_steps": 12,
+            "engine_type": "asynchronous",
+            "agents": [
+                {
+                    "id": "maya",
+                    "name": "Maya_GreenFuture",
+                    "prefab": "basic__Entity",
+                    "goal": "Build public support for the plastic ban by sharing facts and rallying the community",
+                    "memories": [
+                        "Maya is an environmental activist who founded the local GreenFuture group.",
+                        "She has data showing the city generates 500 tons of plastic waste from restaurants annually.",
+                        "She's organized beach cleanups and seen the impact of plastic pollution firsthand.",
+                        "Maya is passionate but tries to stay respectful in debates.",
+                        "She knows some small businesses are worried about costs."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "tony",
+                    "name": "Tony_PizzaKing",
+                    "prefab": "basic__Entity",
+                    "goal": "Oppose the ban or push for a longer transition period to protect small businesses",
+                    "memories": [
+                        "Tony owns three pizza restaurants and has been in business for 20 years.",
+                        "Switching to biodegradable containers would cost him an extra $30K per year.",
+                        "He's not against the environment but thinks 6 months is too fast.",
+                        "Tony is well-known and liked in the community.",
+                        "He's calculated that a 2-year phase-in with city subsidies would be workable."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "lisa",
+                    "name": "Lisa_DataNerd",
+                    "prefab": "basic__Entity",
+                    "goal": "Provide balanced analysis and fact-check claims from both sides",
+                    "memories": [
+                        "Lisa is a data scientist who works remotely and follows local politics.",
+                        "She's analyzed plastic ban outcomes in 12 other cities.",
+                        "Her research shows bans reduce plastic waste 40-60% but increase costs 5-15% for businesses.",
+                        "Lisa values evidence over emotion and corrects misinformation from any side.",
+                        "She thinks a phased approach with subsidies has the best track record."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "councilmember",
+                    "name": "CM_Rodriguez",
+                    "prefab": "basic__Entity",
+                    "goal": "Gauge public sentiment and build consensus for a version of the ban that can pass the full council vote",
+                    "memories": [
+                        "Council Member Rodriguez authored the plastic ban proposal.",
+                        "She needs 5 of 9 council votes to pass it.",
+                        "She's open to amendments if they maintain the core environmental goals.",
+                        "Rodriguez knows the business community has legitimate concerns.",
+                        "She sees the social media discussion as a way to find common ground."
+                    ],
+                    "randomize_choices": True
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "TownSquare Moderator",
+                "acting_order": "random",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "This discussion is taking place on TownSquare, the city's community social media platform.",
+                "The plastic ban proposal will go to a full council vote in 3 weeks.",
+                "The platform has community guidelines requiring civil discourse.",
+                "Posts can include text, replies, and reactions.",
+                "The discussion is public and local news reporters are watching."
+            ]
+        }
+    }
+
+
+@router.get("/templates/puppet-wizard-of-oz")
+async def get_puppet_wizard_of_oz_template():
+    """
+    Template: Puppet Entity (puppet__Entity + simultaneous engine)
+    Showcases externally-controlled agents mixed with autonomous agents.
+    Great for Wizard-of-Oz experiments and human-in-the-loop studies.
+    """
+    return {
+        "name": "Wizard-of-Oz Customer Service",
+        "description": "A human-controlled agent interacts with AI customers (puppet__Entity demo)",
+        "config": {
+            "premise": """A customer service training simulation at TechGadgets Inc.
+A trainee customer service representative (controlled externally) handles
+two customer interactions simultaneously. The customers have different
+issues and temperaments. The trainee must resolve both issues effectively.""",
+            "max_steps": 10,
+            "engine_type": "simultaneous",
+            "agents": [
+                {
+                    "id": "trainee",
+                    "name": "CS_Trainee",
+                    "prefab": "puppet__Entity",
+                    "goal": "Resolve customer issues with high satisfaction scores",
+                    "memories": [
+                        "You are a customer service trainee at TechGadgets Inc.",
+                        "Company policy: offer refund for defective items within 30 days.",
+                        "Company policy: offer replacement for items within warranty (1 year).",
+                        "Company policy: escalate to manager if customer threatens legal action.",
+                        "You have authority to offer 10% discount coupons for future purchases.",
+                        "Your performance is evaluated on resolution time and customer satisfaction."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "angry-customer",
+                    "name": "Karen",
+                    "prefab": "basic__Entity",
+                    "goal": "Get a full refund for a laptop that broke after 2 months",
+                    "memories": [
+                        "Karen bought a $1200 laptop from TechGadgets 2 months ago.",
+                        "The screen started flickering after 6 weeks and now won't turn on.",
+                        "She already called once and was put on hold for 45 minutes.",
+                        "Karen is frustrated and considering leaving a negative review.",
+                        "She has the receipt and the laptop is within the 1-year warranty."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "confused-customer",
+                    "name": "Grandpa_Joe",
+                    "prefab": "basic__Entity",
+                    "goal": "Figure out how to set up the smart speaker he received as a gift",
+                    "memories": [
+                        "Joe received a TechGadgets SmartSpeaker as a birthday gift from his grandchildren.",
+                        "He's not very tech-savvy and finds the setup instructions confusing.",
+                        "He doesn't know what WiFi is but has internet at home (his grandkids set it up).",
+                        "Joe is patient and polite but easily confused by technical jargon.",
+                        "He just wants the speaker to play his favorite radio station."
+                    ],
+                    "randomize_choices": True
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Training Supervisor",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "This is a customer service training simulation at TechGadgets Inc.",
+                "The trainee is handling multiple customers simultaneously.",
+                "All interactions are being recorded for training evaluation.",
+                "TechGadgets values customer satisfaction above all else."
+            ]
+        }
+    }
+
+
+@router.get("/templates/conversational-debate")
+async def get_conversational_debate_template():
+    """
+    Template: Conversational Debate (conversational__Entity + dialogic GM)
+    Showcases the conversational prefab designed for natural dialogue.
+    """
+    return {
+        "name": "Philosophy Roundtable",
+        "description": "Three conversational agents debate the ethics of AI in education",
+        "config": {
+            "premise": """A university roundtable discussion on "Should AI tutors replace human
+teachers in K-12 education?" Three panelists with different perspectives
+debate the issue in front of a live audience. The moderator ensures each
+panelist gets equal speaking time and asks probing follow-up questions.""",
+            "max_steps": 12,
+            "engine_type": "sequential",
+            "agents": [
+                {
+                    "id": "dr-chen",
+                    "name": "Dr. Chen",
+                    "prefab": "conversational__Entity",
+                    "goal": "Argue that AI tutors should supplement but never replace human teachers",
+                    "memories": [
+                        "Dr. Chen is a professor of Education at Stanford with 20 years of teaching experience.",
+                        "She's studied the impact of AI tools on student learning outcomes.",
+                        "Her research shows AI helps with drills but human teachers are essential for critical thinking.",
+                        "She believes education is fundamentally a human relationship.",
+                        "She acknowledges AI can help with personalized learning at scale.",
+                        "She worries about the emotional development of children without human mentors."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "mr-patel",
+                    "name": "Mr. Patel",
+                    "prefab": "conversational__Entity",
+                    "goal": "Advocate for AI-first education as a way to democratize quality education globally",
+                    "memories": [
+                        "Raj Patel is the CEO of EduAI, a startup building AI tutoring systems.",
+                        "He grew up in rural India where good teachers were scarce.",
+                        "His platform serves 2 million students in developing countries.",
+                        "He has data showing AI tutors improved test scores by 35% in underserved communities.",
+                        "He believes AI can provide personalized education that most human teachers cannot.",
+                        "He argues the choice isn't AI vs. good teachers — it's AI vs. no teacher at all."
+                    ],
+                    "randomize_choices": True
+                },
+                {
+                    "id": "ms-jackson",
+                    "name": "Ms. Jackson",
+                    "prefab": "conversational__Entity",
+                    "goal": "Raise ethical concerns about AI in education including bias, privacy, and corporate control",
+                    "memories": [
+                        "Tamara Jackson is a civil rights attorney specializing in education equity.",
+                        "She's documented cases of AI grading systems showing racial bias.",
+                        "She's concerned about student data being used for commercial purposes.",
+                        "She argues that AI in education could widen the digital divide.",
+                        "She supports technology in classrooms but with strong regulations and oversight.",
+                        "She believes marginalized communities should have a say in how AI is deployed in their schools."
+                    ],
+                    "randomize_choices": True
+                }
+            ],
+            "game_master": {
+                "prefab": "dialogic__GameMaster",
+                "name": "Moderator",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "This is a university roundtable discussion open to the public.",
+                "The topic is: Should AI tutors replace human teachers in K-12 education?",
+                "Each panelist represents a different perspective on AI in education.",
+                "The discussion should be respectful and evidence-based.",
+                "The audience includes teachers, parents, students, and tech professionals."
+            ]
+        }
+    }
+
+
+@router.get("/templates/spaceship-crisis")
+async def get_spaceship_crisis_template():
+    """
+    Template: Spaceship Crisis (space_ship__GameMaster from contrib)
+    Showcases the contrib spaceship GM for system-management simulations.
+    """
+    return {
+        "name": "Spaceship Systems Crisis",
+        "description": "Crew manages a spaceship emergency with failing systems (contrib GM)",
+        "config": {
+            "premise": """The research vessel "Horizon" is on day 247 of a 300-day mission to
+Europa. An unexpected micrometeorite strike has damaged the hull and caused
+cascading system failures. The three-person crew must work together to
+stabilize the ship, repair critical systems, and decide whether to continue
+the mission or abort. Resources are limited and every decision matters.""",
+            "max_steps": 15,
+            "engine_type": "sequential",
+            "agents": [
+                {
+                    "id": "commander",
+                    "name": "Commander Hayes",
+                    "prefab": "basic_with_plan__Entity",
+                    "goal": "Keep the crew alive and make the final call on whether to continue or abort the mission",
+                    "memories": [
+                        "Commander Hayes is a veteran astronaut on their third deep-space mission.",
+                        "They are ultimately responsible for all mission decisions.",
+                        "The mission to Europa cost $4.2 billion and is humanity's best chance to find life.",
+                        "Hayes knows that aborting means a 5-year delay before another attempt.",
+                        "They trust their crew but know tough calls fall on them alone.",
+                        "Hull integrity is at 78% — below 60% makes return dangerous."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "engineer",
+                    "name": "Dr. Kovac",
+                    "prefab": "basic__Entity",
+                    "goal": "Repair the critical systems and give the Commander accurate damage assessments",
+                    "memories": [
+                        "Dr. Kovac is the ship's chief engineer and systems specialist.",
+                        "The meteorite damaged the primary oxygen recycler and backup power.",
+                        "Spare parts are limited — they can fully fix either O2 or power, but not both.",
+                        "A partial fix on both systems gives 72 hours of margin.",
+                        "Kovac has an experimental repair idea that's risky but could fix everything.",
+                        "The experimental fix has roughly a 40% chance of working."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "scientist",
+                    "name": "Dr. Okafor",
+                    "prefab": "basic__Entity",
+                    "goal": "Advocate for continuing the mission while helping with emergency procedures",
+                    "memories": [
+                        "Dr. Okafor is a planetary scientist who has dedicated 12 years to this Europa mission.",
+                        "They've already detected promising biosignatures from orbital scans.",
+                        "Aborting would mean losing all the data collection opportunities.",
+                        "Okafor is trained in emergency medical procedures as secondary medic.",
+                        "They know the science is important but crew safety comes first.",
+                        "Okafor has calculated they need at least 85% hull integrity for safe Europa orbit insertion."
+                    ],
+                    "randomize_choices": False
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Mission Control",
+                "acting_order": "game_master_choice",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "The Horizon is 247 days into a 300-day mission to Europa.",
+                "A micrometeorite strike has caused hull damage and system failures.",
+                "Communication with Earth has a 45-minute delay each way.",
+                "The crew has 96 hours of emergency life support reserves.",
+                "Europa orbit insertion is in 53 days — they must decide soon whether to continue."
+            ]
+        }
+    }
+
+
+@router.get("/templates/simultaneous-auction")
+async def get_simultaneous_auction_template():
+    """
+    Template: Simultaneous Auction (simultaneous engine)
+    Showcases the simultaneous engine where all agents act at once.
+    """
+    return {
+        "name": "Sealed-Bid Art Auction",
+        "description": "Agents bid simultaneously in a sealed-bid auction (simultaneous engine)",
+        "config": {
+            "premise": """A prestigious art auction house is holding a sealed-bid auction for
+a rare Impressionist painting. Four collectors submit their bids simultaneously
+without knowing what others bid. Each round represents a new lot. The highest
+bidder wins but pays their bid price (first-price sealed-bid auction).
+Each collector has a private valuation and a limited budget.""",
+            "max_steps": 6,
+            "engine_type": "simultaneous",
+            "agents": [
+                {
+                    "id": "collector1",
+                    "name": "Victoria",
+                    "prefab": "basic__Entity",
+                    "goal": "Win the paintings you value most while staying within your $5M budget",
+                    "memories": [
+                        "Victoria is a museum curator acquiring pieces for the National Gallery.",
+                        "She has a $5 million acquisition budget for this auction season.",
+                        "She particularly values Monet and Renoir — willing to pay up to $2M for exceptional pieces.",
+                        "She knows the other bidders from previous auctions.",
+                        "Victoria prefers to win 2-3 good pieces rather than overpay for one.",
+                        "She suspects Marcus will bid aggressively on Impressionists."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "collector2",
+                    "name": "Marcus",
+                    "prefab": "basic__Entity",
+                    "goal": "Build your private collection by winning at least 2 paintings",
+                    "memories": [
+                        "Marcus is a tech billionaire and passionate art collector.",
+                        "He has a $8 million budget and isn't afraid to spend it.",
+                        "He wants Impressionist paintings specifically for his new gallery wing.",
+                        "Marcus tends to bid high early to intimidate other bidders.",
+                        "He knows Victoria represents a museum with a smaller budget.",
+                        "He's willing to overpay for a piece he really wants."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "collector3",
+                    "name": "Yuki",
+                    "prefab": "basic__Entity",
+                    "goal": "Find undervalued pieces as investment opportunities — buy low, profit later",
+                    "memories": [
+                        "Yuki is an art investment fund manager from Tokyo.",
+                        "She has a $4 million budget and treats art purely as investment.",
+                        "She'll only bid if she estimates the painting will appreciate 30%+ in 5 years.",
+                        "She has detailed market analytics on art price trends.",
+                        "Yuki prefers to let emotional bidders overpay and pick up bargains.",
+                        "She knows the market value of every piece in the catalog."
+                    ],
+                    "randomize_choices": False
+                },
+                {
+                    "id": "collector4",
+                    "name": "Henri",
+                    "prefab": "basic__Entity",
+                    "goal": "Acquire one masterpiece for your family collection, regardless of cost",
+                    "memories": [
+                        "Henri is from a European aristocratic family with a centuries-old art collection.",
+                        "He has a $3 million budget — modest by auction standards.",
+                        "He only wants one painting: the Monet water lily study that his grandmother once owned.",
+                        "Henri will bid everything on that one piece if necessary.",
+                        "He's sentimental about art, not strategic.",
+                        "He'll drop out of bidding on pieces he doesn't emotionally connect with."
+                    ],
+                    "randomize_choices": False
+                }
+            ],
+            "game_master": {
+                "prefab": "generic__GameMaster",
+                "name": "Auctioneer",
+                "acting_order": "fixed",
+                "parameters": {}
+            },
+            "shared_memories": [
+                "This is a first-price sealed-bid auction at Christie's.",
+                "All bids are submitted simultaneously and sealed — no one sees others' bids.",
+                "The highest bidder wins each lot and pays their bid price.",
+                "Today's lots include works by Monet, Renoir, Degas, and Cézanne.",
+                "Each collector has a private budget and personal valuations.",
+                "There are 6 lots to be auctioned today."
+            ]
+        }
+    }
+
+
 @router.get("/recent")
 async def get_recent_simulations(limit: int = 20):
     """Get list of recent simulation logs, excluding checkpoint files."""
@@ -3274,125 +3770,220 @@ async def get_simulation_analytics(filename: str):
             "components": component_data
         }
 
-        # Find all step indicators (they typically contain "Step X")
-        step_pattern = re.compile(r'Step\s+(\d+)', re.IGNORECASE)
-        for element in soup.find_all(string=step_pattern):
-            match = step_pattern.search(str(element))
-            if match:
-                step_num = int(match.group(1))
-                analytics["total_steps"] = max(analytics["total_steps"], step_num)
+        # Detect v2.4+ structured log format (content is in embedded JSON, not static HTML)
+        # In this format, ENTRIES and CONTENT_STORE are JavaScript variables in a <script> tag
+        entries_match = re.search(r'const ENTRIES = (\[.*?\]);\s*$', html_content, re.DOTALL | re.MULTILINE)
+        content_store_match = re.search(r'const CONTENT_STORE = (\{.*?\});\s*$', html_content, re.DOTALL | re.MULTILINE)
 
-        # Extract agent names from tab buttons
-        # Exclude non-agent tabs like Game Master logs and memories
-        excluded_tabs = {'Game Master log', 'Game Master Memories', 'Simulation Log'}
-        tab_buttons = soup.find_all(['button', 'div'], class_=re.compile(r'tablink|tablinks'))
-        for btn in tab_buttons:
-            text = btn.get_text(strip=True)
-            # Only include actual agent tabs (exclude Game Master tabs)
-            if text and text not in excluded_tabs and not text.startswith('Game Master'):
-                if text not in analytics["agents"]:
-                    analytics["agents"].append(text)
-                    analytics["agent_actions"][text] = 0
+        if entries_match:
+            # === V2.4+ STRUCTURED LOG FORMAT ===
+            debug_print("[DEBUG] Detected v2.4+ structured log format — parsing embedded JSON")
+            try:
+                structured_entries = json.loads(entries_match.group(1))
+                content_store = json.loads(content_store_match.group(1)) if content_store_match else {}
 
-        # If game-theoretic data was loaded from metadata, use it for action counts
-        if game_theoretic_actions and gm_prefab == 'game_theoretic_and_dramaturgic__GameMaster':
-            for player_name, action_count in game_theoretic_actions.items():
-                if player_name in analytics["agent_actions"]:
-                    analytics["agent_actions"][player_name] = action_count
-                    debug_print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
-            debug_print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
+                def _resolve_ref(value):
+                    """Resolve content store references in deduplicated data."""
+                    if isinstance(value, dict):
+                        if '_ref' in value:
+                            return content_store.get(value['_ref'], str(value))
+                        return {k: _resolve_ref(v) for k, v in value.items()}
+                    if isinstance(value, list):
+                        return [_resolve_ref(v) for v in value]
+                    return value
 
-        # Count actions per agent by finding actual agent actions (with "Action:" label)
-        # Actions are in the Game Master log tab, organized by agent entity
-        game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
-        if game_master_log:
-            # Find all sections with entity information (e.g., "Entity [Agent R]")
-            for agent in analytics["agents"]:
-                # Find all <b> tags containing "Entity [agent_name]"
-                entity_pattern = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
-                entity_tags = game_master_log.find_all('b', string=entity_pattern)
+                excluded_entities = {'Game Master', 'game_master'}
+                agent_names_set = set()
+                agent_action_counts = {}
+                max_step = 0
+                observation_count = 0
+                timeline_entries = {}
+                all_text_parts = []
 
-                # Use a set to track unique action texts and avoid counting duplicates
-                seen_actions = set()
+                for entry in structured_entries:
+                    step = entry.get('step', 0)
+                    entity = entry.get('entity_name', '')
+                    entry_type = entry.get('entry_type', '')
+                    summary = entry.get('summary', '')
+                    dedup_data = entry.get('deduplicated_data', {})
 
-                # For each entity tag, find the associated action
-                # Structure: <details><b>Entity [name]</b><li>...<b>__act__</b><li><details><summary>Action: ...</summary>
-                for entity_tag in entity_tags:
-                    # The entity <b> tag and the agent <li> are siblings in a <details>
-                    # Find the parent <details>
-                    parent_details = entity_tag.find_parent('details')
-                    if parent_details:
-                        # Find all <li> children of this <details>
-                        all_li = parent_details.find_all('li', recursive=False)
+                    max_step = max(max_step, step)
 
-                        # The first <li> after Entity should contain the agent info
-                        # Look for <li> that contains <summary>Action:
-                        for li in all_li:
-                            summaries = li.find_all('summary')
-                            for summary in summaries:
-                                summary_text = summary.get_text(strip=True)
-                                if summary_text.startswith('Action:'):
-                                    # Skip workflow examples
-                                    if any(keyword in summary_text.lower() for keyword in ['workflow examples', 'exercise 1', 'exercise 2']):
-                                        continue
-                                    # Skip game master termination actions
-                                    if 'terminate' in summary_text.lower() or 'game.*finished' in summary_text.lower():
-                                        continue
-                                    # Use first 100 chars as unique identifier
-                                    action_id = summary_text[:100]
-                                    if action_id not in seen_actions:
-                                        seen_actions.add(action_id)
+                    # Collect all text for word count
+                    all_text_parts.append(summary)
 
-                analytics["agent_actions"][agent] = len(seen_actions)
-        else:
-            # Fallback: Search in entire document for actions with "Action:" label
-            for agent in analytics["agents"]:
-                # Find Entity tag followed by __act__ with Action: label
-                entity_pattern = re.compile(
-                    rf'Entity\s+\[{re.escape(agent)}\].*?__act__.*?Action:',
-                    re.IGNORECASE | re.DOTALL
-                )
-                matches = soup.find_all(string=entity_pattern)
-                analytics["agent_actions"][agent] = len(matches)
+                    # Collect agent names (exclude GM)
+                    if entity and entity not in excluded_entities:
+                        agent_names_set.add(entity)
 
-        # Extract observations (typically in [observation] tags)
-        observations = soup.find_all(string=re.compile(r'\[observation\]', re.IGNORECASE))
-        analytics["total_observations"] = len(observations)
+                    # Count actions: entity entries with __act__ in their data
+                    if entry_type == 'entity' and entity not in excluded_entities:
+                        resolved = _resolve_ref(dedup_data)
+                        value_data = resolved.get('value', {})
+                        if isinstance(value_data, dict):
+                            has_action = '__act__' in value_data or value_data.get('Key') == '__act__'
+                        else:
+                            has_action = '__act__' in str(value_data) if value_data else False
+                        if has_action:
+                            agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
 
-        # Build timeline from step events
-        # Use a set to track seen steps and avoid duplicates from nested <details> elements
-        seen_steps = set()
-        details_elements = soup.find_all('details')
-        for detail in details_elements:
-            # Skip nested <details> elements (those that are descendants of another <details>)
-            if detail.find_parent('details'):
-                continue
+                    # Count observations
+                    if 'observation' in entry_type.lower() or '[observation]' in summary.lower():
+                        observation_count += 1
 
-            summary = detail.find('summary')
-            if summary:
-                summary_text = summary.get_text(strip=True)
-                # Check if this is a step event
-                step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
-                if step_match:
-                    step_num = int(step_match.group(1))
-                    # Only add if we haven't seen this step number yet
-                    if step_num not in seen_steps:
-                        seen_steps.add(step_num)
-
-                        # Remove redundant prefix like "Step 1 City Council Moderator --- Event: "
-                        # to save space and avoid repetition
-                        description = summary_text
+                    # Build timeline (one entry per step)
+                    if step > 0 and step not in timeline_entries:
+                        description = summary
                         prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
                         description = prefix_pattern.sub('', description).strip()
+                        if description:
+                            timeline_entries[step] = {
+                                "step": step,
+                                "description": description,
+                                "type": "step"
+                            }
 
-                        analytics["timeline"].append({
-                            "step": step_num,
-                            "description": description,  # Full description without redundant prefix
-                            "type": "step"
-                        })
+                analytics["total_steps"] = max_step
+                analytics["agents"] = sorted(agent_names_set)
+                analytics["agent_actions"] = {a: agent_action_counts.get(a, 0) for a in analytics["agents"]}
+                analytics["total_observations"] = observation_count
+                analytics["timeline"] = sorted(timeline_entries.values(), key=lambda x: x["step"])
 
-        # Sort timeline by step number
-        analytics["timeline"].sort(key=lambda x: x["step"])
+                # Update word/character counts from structured data
+                full_text = ' '.join(all_text_parts)
+                if len(full_text) > len(soup_text):
+                    analytics["word_count"] = len(full_text.split())
+                    analytics["character_count"] = len(full_text)
+
+                debug_print(f"[DEBUG] Structured log: {max_step} steps, {len(analytics['agents'])} agents, "
+                           f"{sum(agent_action_counts.values())} actions")
+
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[WARNING] Failed to parse structured log JSON, falling back to HTML parsing: {e}")
+                entries_match = None  # Fall through to legacy parsing
+
+        if not entries_match:
+            # === LEGACY HTML FORMAT (pre-v2.4) ===
+
+            # Find all step indicators (they typically contain "Step X")
+            step_pattern = re.compile(r'Step\s+(\d+)', re.IGNORECASE)
+            for element in soup.find_all(string=step_pattern):
+                match = step_pattern.search(str(element))
+                if match:
+                    step_num = int(match.group(1))
+                    analytics["total_steps"] = max(analytics["total_steps"], step_num)
+
+            # Extract agent names from tab buttons
+            # Exclude non-agent tabs like Game Master logs and memories
+            excluded_tabs = {'Game Master log', 'Game Master Memories', 'Simulation Log'}
+            tab_buttons = soup.find_all(['button', 'div'], class_=re.compile(r'tablink|tablinks'))
+            for btn in tab_buttons:
+                text = btn.get_text(strip=True)
+                # Only include actual agent tabs (exclude Game Master tabs)
+                if text and text not in excluded_tabs and not text.startswith('Game Master'):
+                    if text not in analytics["agents"]:
+                        analytics["agents"].append(text)
+                        analytics["agent_actions"][text] = 0
+
+            # If game-theoretic data was loaded from metadata, use it for action counts
+            if game_theoretic_actions and gm_prefab == 'game_theoretic_and_dramaturgic__GameMaster':
+                for player_name, action_count in game_theoretic_actions.items():
+                    if player_name in analytics["agent_actions"]:
+                        analytics["agent_actions"][player_name] = action_count
+                        debug_print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
+                debug_print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
+
+            # Count actions per agent by finding actual agent actions (with "Action:" label)
+            # Actions are in the Game Master log tab, organized by agent entity
+            game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
+            if game_master_log:
+                # Find all sections with entity information (e.g., "Entity [Agent R]")
+                for agent in analytics["agents"]:
+                    # Find all <b> tags containing "Entity [agent_name]"
+                    entity_pattern = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
+                    entity_tags = game_master_log.find_all('b', string=entity_pattern)
+
+                    # Use a set to track unique action texts and avoid counting duplicates
+                    seen_actions = set()
+
+                    # For each entity tag, find the associated action
+                    # Structure: <details><b>Entity [name]</b><li>...<b>__act__</b><li><details><summary>Action: ...</summary>
+                    for entity_tag in entity_tags:
+                        # The entity <b> tag and the agent <li> are siblings in a <details>
+                        # Find the parent <details>
+                        parent_details = entity_tag.find_parent('details')
+                        if parent_details:
+                            # Find all <li> children of this <details>
+                            all_li = parent_details.find_all('li', recursive=False)
+
+                            # The first <li> after Entity should contain the agent info
+                            # Look for <li> that contains <summary>Action:
+                            for li in all_li:
+                                summaries = li.find_all('summary')
+                                for summary in summaries:
+                                    summary_text = summary.get_text(strip=True)
+                                    if summary_text.startswith('Action:'):
+                                        # Skip workflow examples
+                                        if any(keyword in summary_text.lower() for keyword in ['workflow examples', 'exercise 1', 'exercise 2']):
+                                            continue
+                                        # Skip game master termination actions
+                                        if 'terminate' in summary_text.lower() or 'game.*finished' in summary_text.lower():
+                                            continue
+                                        # Use first 100 chars as unique identifier
+                                        action_id = summary_text[:100]
+                                        if action_id not in seen_actions:
+                                            seen_actions.add(action_id)
+
+                    analytics["agent_actions"][agent] = len(seen_actions)
+            else:
+                # Fallback: Search in entire document for actions with "Action:" label
+                for agent in analytics["agents"]:
+                    # Find Entity tag followed by __act__ with Action: label
+                    entity_pattern = re.compile(
+                        rf'Entity\s+\[{re.escape(agent)}\].*?__act__.*?Action:',
+                        re.IGNORECASE | re.DOTALL
+                    )
+                    matches = soup.find_all(string=entity_pattern)
+                    analytics["agent_actions"][agent] = len(matches)
+
+            # Extract observations (typically in [observation] tags)
+            observations = soup.find_all(string=re.compile(r'\[observation\]', re.IGNORECASE))
+            analytics["total_observations"] = len(observations)
+
+            # Build timeline from step events
+            # Use a set to track seen steps and avoid duplicates from nested <details> elements
+            seen_steps = set()
+            details_elements = soup.find_all('details')
+            for detail in details_elements:
+                # Skip nested <details> elements (those that are descendants of another <details>)
+                if detail.find_parent('details'):
+                    continue
+
+                summary = detail.find('summary')
+                if summary:
+                    summary_text = summary.get_text(strip=True)
+                    # Check if this is a step event
+                    step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
+                    if step_match:
+                        step_num = int(step_match.group(1))
+                        # Only add if we haven't seen this step number yet
+                        if step_num not in seen_steps:
+                            seen_steps.add(step_num)
+
+                            # Remove redundant prefix like "Step 1 City Council Moderator --- Event: "
+                            # to save space and avoid repetition
+                            description = summary_text
+                            prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
+                            description = prefix_pattern.sub('', description).strip()
+
+                            analytics["timeline"].append({
+                                "step": step_num,
+                                "description": description,  # Full description without redundant prefix
+                                "type": "step"
+                            })
+
+            # Sort timeline by step number
+            analytics["timeline"].sort(key=lambda x: x["step"])
 
         # Extract agent-specific actions and goals for detailed analysis
         analytics["agent_details"] = {}

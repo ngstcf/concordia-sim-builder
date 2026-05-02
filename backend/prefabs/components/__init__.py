@@ -232,6 +232,7 @@ COMPONENT_TEMPLATES = {
     "personality_traits": {
         "name": "Personality Traits (Big Five)",
         "description": "Agent's personality based on Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism",
+        "category": "Psychological",
         "parameters": {
             "traits": {
                 "type": "dict",
@@ -254,6 +255,7 @@ COMPONENT_TEMPLATES = {
     "cognitive_bias": {
         "name": "Cognitive Bias",
         "description": "A cognitive bias that affects decision-making (e.g., confirmation bias, availability heuristic)",
+        "category": "Psychological",
         "parameters": {
             "bias_type": {
                 "type": "string",
@@ -273,6 +275,7 @@ COMPONENT_TEMPLATES = {
     "social_identity": {
         "name": "Social Identity",
         "description": "Group memberships and social affiliations that affect perception and behavior",
+        "category": "Social",
         "parameters": {
             "group_membership": {
                 "type": "array",
@@ -292,6 +295,7 @@ COMPONENT_TEMPLATES = {
     "emotion": {
         "name": "Current Emotion",
         "description": "The agent's current emotional state which affects decision-making",
+        "category": "Psychological",
         "parameters": {
             "current_emotion": {
                 "type": "string",
@@ -311,6 +315,7 @@ COMPONENT_TEMPLATES = {
     "theory_of_planned_behavior": {
         "name": "Theory of Planned Behavior",
         "description": "Evaluates behaviors using attitude, norms, and perceived control",
+        "category": "Social",
         "parameters": {
             "behavior": {
                 "type": "string",
@@ -338,6 +343,7 @@ COMPONENT_TEMPLATES = {
     "values": {
         "name": "Core Values",
         "description": "Agent's moral framework and prioritized values",
+        "category": "Psychological",
         "parameters": {
             "core_values": {
                 "type": "array",

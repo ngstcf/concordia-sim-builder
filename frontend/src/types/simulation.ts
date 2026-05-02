@@ -4,7 +4,7 @@
  */
 
 // Type aliases for string literals (better API compatibility than enums)
-export type EngineType = 'sequential' | 'simultaneous' | 'interview' | 'survey';
+export type EngineType = 'sequential' | 'simultaneous' | 'asynchronous' | 'step_controller' | 'interview' | 'survey';
 export type ActingOrder = 'fixed' | 'random' | 'game_master_choice';
 export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama';
 export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'observation' | 'step_end' | 'simulation_complete' | 'error';
@@ -13,6 +13,8 @@ export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'obser
 export const EngineType = {
   SEQUENTIAL: 'sequential' as EngineType,
   SIMULTANEOUS: 'simultaneous' as EngineType,
+  ASYNCHRONOUS: 'asynchronous' as EngineType,
+  STEP_CONTROLLER: 'step_controller' as EngineType,
   INTERVIEW: 'interview' as EngineType,
   SURVEY: 'survey' as EngineType
 };

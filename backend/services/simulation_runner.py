@@ -35,6 +35,25 @@ LOGS_DIR = Path("logs")
 LOGS_DIR.mkdir(exist_ok=True)
 
 
+def _raw_log_to_html(raw_log) -> str:
+    """Convert a raw simulation log to HTML using v2.4's structured logging."""
+    from concordia.utils.structured_logging import SimulationLog
+    sim_log = SimulationLog.from_raw_log(raw_log)
+    return sim_log.to_html()
+
+
+def _simulation_log_to_html(sim_log_or_result) -> str:
+    """Convert a SimulationLog (or legacy result) to HTML string.
+
+    In Concordia v2.4.0, sim.play() returns a SimulationLog object.
+    In older versions it returned HTML strings directly.
+    """
+    from concordia.utils.structured_logging import SimulationLog
+    if isinstance(sim_log_or_result, SimulationLog):
+        return sim_log_or_result.to_html()
+    return str(sim_log_or_result)
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
     llm_settings: LLMSettings
@@ -167,13 +186,8 @@ async def run_simulation_stream(
                         last_checkpoint_step[0] = step
                         print(f"[CHECKPOINT] Saving partial results at step {step}/{max_steps}...")
                         try:
-                            # Get partial results from simulation object's raw log
-                            from concordia.utils import html as html_lib
-
                             raw_log = sim.get_raw_log()
-
-                            # Convert raw log to HTML using the same method as final results
-                            partial_log_html = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
+                            partial_log_html = _raw_log_to_html(raw_log)
 
                             # Create partial checkpoint filename
                             import re
@@ -252,9 +266,8 @@ async def run_simulation_stream(
                         # Try to save emergency checkpoint if hung
                         try:
                             print(f"[WATCHDOG] Attempting emergency checkpoint save...")
-                            from concordia.utils import html as html_lib
                             hung_raw_log = sim.get_raw_log()
-                            hung_html = html_lib.PythonObjectToHTMLConverter(hung_raw_log).convert()
+                            hung_html = _raw_log_to_html(hung_raw_log)
                             hung_styled = _inject_html_styles(hung_html)
 
                             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -296,10 +309,9 @@ async def run_simulation_stream(
                 # Try to get partial results from the simulation object
                 # The simulation object may have partial state that can be salvaged
                 try:
-                    from concordia.utils import html as html_lib
                     raw_log = sim.get_raw_log()
                     debug_print(f"[DEBUG] Retrieved raw_log with {len(raw_log)} entries")
-                    results = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
+                    results = _raw_log_to_html(raw_log)
                     print(f"[WARNING] Saved partial results due to simulation error ({len(results)} chars)")
                 except Exception as partial_error:
                     # If we can't even get partial results, create a minimal error log
@@ -326,9 +338,8 @@ async def run_simulation_stream(
         # This ensures we have a saved copy even if HTML conversion fails
         try:
             print("[CHECKPOINT] Saving emergency checkpoint before HTML processing...")
-            from concordia.utils import html as html_lib
             emergency_raw_log = sim.get_raw_log()
-            emergency_html = html_lib.PythonObjectToHTMLConverter(emergency_raw_log).convert()
+            emergency_html = _raw_log_to_html(emergency_raw_log)
             emergency_styled = _inject_html_styles(emergency_html)
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -754,13 +765,13 @@ async def run_simulation_stream(
                 traceback.print_exc()
 
         try:
-            results_html = str(results)
+            results_html = _simulation_log_to_html(results)
             debug_print(f"[DEBUG] Results converted to HTML (length: {len(results_html)})")
         except Exception as e:
             print(f"[ERROR] Failed to convert results to HTML: {e}")
             import traceback
             traceback.print_exc()
-            results_html = str(results)  # Try again
+            results_html = str(results)
 
         # Inject CSS styles for better readability
         styled_html = _inject_html_styles(results_html)
@@ -1067,7 +1078,7 @@ async def run_simulation_simple(
         )
 
         # Convert to HTML string
-        results_html = str(results)
+        results_html = _simulation_log_to_html(results)
 
         # Declare variable at function scope for game-theoretic data
         game_theoretic_data = None
@@ -1486,7 +1497,10 @@ async def run_simulation_simple(
 
 
 def _inject_html_styles(html: str) -> str:
-    """Inject CSS styles into Concordia HTML logs for better readability."""
+    """Inject CSS styles into Concordia HTML logs for better readability.
+    Skips injection for v2.4+ structured logs which have their own styling."""
+    if 'const ENTRIES =' in html and 'const CONTENT_STORE =' in html:
+        return html
     styles = """
     <style type="text/css">
       /* Reset and base improvements */
