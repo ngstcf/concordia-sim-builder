@@ -782,6 +782,17 @@ export async function analyzeSimulation(simulationId: string, llmSettings?: {
   return response.data;
 }
 
+export async function generatePersonas(request: {
+  context: string;
+  diversity_axes: string[];
+  num_personas: number;
+  num_memories: number;
+  llm_settings: any;
+}): Promise<{ personas: Array<{ name: string; goal: string; memories: string[]; description: string }> }> {
+  const response = await api.post('/api/simulations/generate-personas', request);
+  return response.data;
+}
+
 export async function shutdownServer(): Promise<void> {
   await api.post('/api/server/shutdown');
 }

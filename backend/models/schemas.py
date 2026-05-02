@@ -322,6 +322,28 @@ class GroundedVariablesExtractionRequest(BaseModel):
         }
 
 
+class PersonaGenerationRequest(BaseModel):
+    """Request to generate diverse agent personas."""
+    context: str = Field(..., description="Shared scenario context for all personas")
+    diversity_axes: List[str] = Field(..., min_length=1, description="Axes along which to vary personas")
+    num_personas: int = Field(5, ge=1, le=20, description="Number of personas to generate")
+    num_memories: int = Field(5, ge=1, le=15, description="Memories per persona")
+    llm_settings: LLMSettings = Field(..., description="LLM settings for generation")
+
+
+class GeneratedPersona(BaseModel):
+    """A generated persona."""
+    name: str
+    goal: str = ""
+    memories: List[str] = Field(default_factory=list)
+    description: str = ""
+
+
+class PersonaGenerationResponse(BaseModel):
+    """Response containing generated personas."""
+    personas: List[GeneratedPersona]
+
+
 # Resolve forward references
 NestedSimulationConfig.model_rebuild()
 AgentConfig.model_rebuild()

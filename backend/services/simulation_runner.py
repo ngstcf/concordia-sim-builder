@@ -836,8 +836,18 @@ async def run_simulation_stream(
         metadata_filename = log_path.stem + '.metadata.json'
         metadata_path = LOGS_DIR / metadata_filename
 
+        start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
+        end_time_iso = datetime.datetime.now().isoformat()
+
         agent_metadata = {
             "timestamp": timestamp,
+            "started_at": start_time_iso,
+            "completed_at": end_time_iso,
+            "elapsed_seconds": round(elapsed, 1),
+            "llm": {
+                "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+                "model": llm_settings.model_name,
+            },
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,
@@ -1455,8 +1465,18 @@ async def run_simulation_simple(
         metadata_filename = log_path.stem + '.metadata.json'
         metadata_path = LOGS_DIR / metadata_filename
 
+        start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
+        end_time_iso = datetime.datetime.now().isoformat()
+
         agent_metadata = {
             "timestamp": timestamp,
+            "started_at": start_time_iso,
+            "completed_at": end_time_iso,
+            "elapsed_seconds": round(elapsed, 1),
+            "llm": {
+                "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+                "model": llm_settings.model_name,
+            },
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,

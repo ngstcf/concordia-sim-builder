@@ -65,7 +65,7 @@ def cognitive_bias_component(
 
     description = bias_descriptions.get(bias_type, f"exhibits {bias_type}")
 
-    state = f"This person {description} (strength: {biasness_strength})."
+    state = f"This person {description} (strength: {bias_strength})."
 
     class CognitiveBiasComponent(entity_component.ConstantComponent):
         def __init__(self, state: str = state):
@@ -358,6 +358,27 @@ COMPONENT_TEMPLATES = {
             }
         },
         "function": values_component
+    },
+    "emotional_stance": {
+        "name": "Emotional Stance (Dynamic)",
+        "description": "Dynamic emotion-driven behavior - agent selects an emotion each step and reasons through that lens. Requires Minimal prefab.",
+        "category": "Dynamic Behavior",
+        "parameters": {
+            "emotion_options": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Emotions the agent can experience each step",
+                "default": ["hopeful", "anxious", "defiant", "resigned", "neutral"]
+            },
+            "num_observations_to_select": {
+                "type": "integer",
+                "description": "Key observations to highlight per emotion",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 20
+            }
+        },
+        "function": None
     },
 }
 

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { generatePersonas } from '../../utils/api';
 import AgentEditor from './AgentEditor';
 
 const PREFAB_BADGES: Record<string, { label: string; color: string }> = {
@@ -19,12 +20,30 @@ function getPrefabBadge(prefab: string) {
   return PREFAB_BADGES[key] || { label: key, color: 'bg-gray-100 text-gray-600' };
 }
 
+interface GeneratedPersona {
+  name: string;
+  goal: string;
+  memories: string[];
+  description: string;
+  selected: boolean;
+}
+
 export default function AgentList() {
-  const { config, addAgent, removeAgent, reorderAgents } = useSimulation();
+  const { config, addAgent, removeAgent, reorderAgents, llmSettings } = useSimulation();
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Persona generator state
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [genContext, setGenContext] = useState('');
+  const [genAxes, setGenAxes] = useState('');
+  const [genCount, setGenCount] = useState(5);
+  const [genMemories, setGenMemories] = useState(5);
+  const [generating, setGenerating] = useState(false);
+  const [generatedPersonas, setGeneratedPersonas] = useState<GeneratedPersona[]>([]);
+  const [genError, setGenError] = useState('');
 
   const handleAddAgent = () => {
     const newAgent = {
@@ -69,6 +88,51 @@ export default function AgentList() {
     setDragOverIndex(null);
   };
 
+  const handleGenerate = async () => {
+    if (!genContext.trim() || !genAxes.trim()) return;
+    setGenerating(true);
+    setGenError('');
+    setGeneratedPersonas([]);
+    try {
+      const result = await generatePersonas({
+        context: genContext,
+        diversity_axes: genAxes.split(',').map(a => a.trim()).filter(Boolean),
+        num_personas: genCount,
+        num_memories: genMemories,
+        llm_settings: llmSettings,
+      });
+      setGeneratedPersonas(result.personas.map(p => ({ ...p, selected: true })));
+    } catch (err: any) {
+      setGenError(err?.response?.data?.detail || err?.message || 'Generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleAddGenerated = () => {
+    const selected = generatedPersonas.filter(p => p.selected);
+    selected.forEach((persona, i) => {
+      addAgent({
+        id: `agent-${Date.now()}-${i}`,
+        name: persona.name,
+        prefab: 'basic__Entity',
+        goal: persona.goal || undefined,
+        memories: persona.memories,
+        randomize_choices: true,
+      });
+    });
+    setShowGenerator(false);
+    setGeneratedPersonas([]);
+    setGenContext('');
+    setGenAxes('');
+  };
+
+  const togglePersonaSelection = (index: number) => {
+    setGeneratedPersonas(prev =>
+      prev.map((p, i) => i === index ? { ...p, selected: !p.selected } : p)
+    );
+  };
+
   const memoryCount = (agent: typeof config.agents[0]) => agent.memories?.length || 0;
   const componentCount = (agent: typeof config.agents[0]) =>
     agent.components ? Object.keys(agent.components).length : 0;
@@ -79,15 +143,26 @@ export default function AgentList() {
         <h3 className="text-lg font-medium text-gray-900">
           Agents ({config.agents.length})
         </h3>
-        <button
-          onClick={handleAddAgent}
-          className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Agent
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGenerator(true)}
+            className="inline-flex items-center px-3 py-2 border border-green-300 text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100"
+          >
+            <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Generate
+          </button>
+          <button
+            onClick={handleAddAgent}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          >
+            <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Agent
+          </button>
+        </div>
       </div>
 
       {config.agents.length === 0 ? (
@@ -115,7 +190,6 @@ export default function AgentList() {
                     : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
                 }`}
               >
-                {/* Drag handle */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                     <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
@@ -187,6 +261,164 @@ export default function AgentList() {
           agentId={editingAgent}
           onClose={() => setEditingAgent(null)}
         />
+      )}
+
+      {/* Persona Generator Modal */}
+      {showGenerator && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Generate Agent Personas
+                </h3>
+                <button onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); }} className="text-gray-400 hover:text-gray-600">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Uses Concordia's persona generators to create diverse agent populations from a scenario description.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {generatedPersonas.length === 0 ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Scenario Context</label>
+                    <textarea
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      value={genContext}
+                      onChange={e => setGenContext(e.target.value)}
+                      placeholder="A small coastal town debating a new fishing regulation that would limit daily catch quotas..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Diversity Axes (comma-separated)</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      value={genAxes}
+                      onChange={e => setGenAxes(e.target.value)}
+                      placeholder="age, occupation, stance on regulation, economic status"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Dimensions along which personas will differ.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Number of Personas</label>
+                      <input
+                        type="number" min={1} max={20}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                        value={genCount}
+                        onChange={e => setGenCount(parseInt(e.target.value) || 5)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Memories per Persona</label>
+                      <input
+                        type="number" min={1} max={15}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                        value={genMemories}
+                        onChange={e => setGenMemories(parseInt(e.target.value) || 5)}
+                      />
+                    </div>
+                  </div>
+                  {genError && (
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                      <p className="text-sm text-red-700">{genError}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-700 font-medium">
+                      Generated {generatedPersonas.length} personas
+                      <span className="text-gray-500 font-normal ml-1">
+                        ({generatedPersonas.filter(p => p.selected).length} selected)
+                      </span>
+                    </p>
+                    <button
+                      onClick={() => setGeneratedPersonas(prev => prev.map(p => ({ ...p, selected: !prev.every(pp => pp.selected) })))}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Toggle All
+                    </button>
+                  </div>
+                  {generatedPersonas.map((persona, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => togglePersonaSelection(idx)}
+                      className={`p-3 rounded-md border-2 cursor-pointer transition ${
+                        persona.selected
+                          ? 'border-green-400 bg-green-50'
+                          : 'border-gray-200 bg-white opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={persona.selected}
+                          onChange={() => togglePersonaSelection(idx)}
+                          className="mt-1 h-4 w-4 text-green-600 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{persona.name}</p>
+                          {persona.goal && <p className="text-xs text-gray-600 mt-0.5">{persona.goal}</p>}
+                          {persona.description && <p className="text-xs text-gray-500 mt-1 italic">{persona.description}</p>}
+                          <p className="text-[11px] text-gray-400 mt-1">{persona.memories.length} memories</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
+              {generatedPersonas.length > 0 ? (
+                <>
+                  <button
+                    onClick={() => setGeneratedPersonas([])}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleAddGenerated}
+                    disabled={!generatedPersonas.some(p => p.selected)}
+                    className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add {generatedPersonas.filter(p => p.selected).length} Agent{generatedPersonas.filter(p => p.selected).length !== 1 ? 's' : ''}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); }}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={generating || !genContext.trim() || !genAxes.trim()}
+                    className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generating ? 'Generating...' : 'Generate Personas'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

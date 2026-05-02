@@ -18,6 +18,9 @@ from backend.models.schemas import (
     ExecutionRequest,
     ComponentValidationRequest,
     GroundedVariablesExtractionRequest,
+    PersonaGenerationRequest,
+    GeneratedPersona,
+    PersonaGenerationResponse,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -2095,4 +2098,49 @@ async def analyze_simulation_endpoint(request: dict):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze simulation: {str(e)}"
+        )
+
+
+@router.post("/generate-personas")
+async def generate_personas(request: PersonaGenerationRequest):
+    """Generate diverse agent personas using Concordia's persona generators."""
+    from backend.services.llm_factory import get_model_and_embedder
+    from concordia.contrib.persona_generators.two_stage_persona_generator import TwoStagePersonaGenerator
+
+    try:
+        model, _ = get_model_and_embedder(request.llm_settings)
+        generator = TwoStagePersonaGenerator(model)
+
+        characteristics_list = generator.generate_diverse_persona_characteristics(
+            initial_context=request.context,
+            diversity_axes=request.diversity_axes,
+            num_personas=request.num_personas,
+        )
+
+        personas = []
+        for char_dict in characteristics_list:
+            name = char_dict.get("name", "Unknown")
+            description = char_dict.get("description", "")
+            goal = char_dict.get("goal", "")
+
+            memories = generator.generate_single_persona_memories(
+                persona_details={**char_dict, "initial_context": request.context},
+                num_memories=request.num_memories,
+            )
+
+            personas.append(GeneratedPersona(
+                name=name,
+                goal=goal,
+                memories=memories,
+                description=description,
+            ))
+
+        return PersonaGenerationResponse(personas=personas)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Persona generation failed: {str(e)}"
         )

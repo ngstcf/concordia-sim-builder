@@ -191,6 +191,26 @@ export interface SimulationTemplate {
   llm_settings: LLMSettings;
 }
 
+// Persona Generation
+export interface PersonaGenerationRequest {
+  context: string;
+  diversity_axes: string[];
+  num_personas: number;
+  num_memories: number;
+  llm_settings: LLMSettings;
+}
+
+export interface GeneratedPersona {
+  name: string;
+  goal: string;
+  memories: string[];
+  description: string;
+}
+
+export interface PersonaGenerationResponse {
+  personas: GeneratedPersona[];
+}
+
 // API Response wrappers
 export interface PrefabsResponseData extends PrefabsResponse {}
 

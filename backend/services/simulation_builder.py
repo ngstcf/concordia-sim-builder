@@ -118,7 +118,37 @@ def build_simulation(
 
         # Add additional components if specified
         if agent_config.components:
-            entity_params.update(agent_config.components)
+            components_copy = dict(agent_config.components)
+
+            # Handle reasoning_steps: instantiate for minimal__Entity
+            reasoning_steps = components_copy.pop('reasoning_steps', None)
+            if reasoning_steps and agent_config.prefab == 'minimal__Entity':
+                from backend.prefabs.reasoning_steps import create_reasoning_step_component
+                extra = components_copy.get('extra_components', {})
+                for i, step_config in enumerate(reasoning_steps):
+                    comp = create_reasoning_step_component(
+                        model=model,
+                        agent_name=agent_config.name,
+                        config=step_config,
+                        index=i,
+                    )
+                    extra[f'reasoning_step_{i}'] = comp
+                components_copy['extra_components'] = extra
+
+            # Handle emotional_stance: instantiate for minimal__Entity
+            emotional_stance = components_copy.pop('emotional_stance', None)
+            if emotional_stance and agent_config.prefab == 'minimal__Entity':
+                from concordia.contrib.components.agent import emotional_stance as es_module
+                extra = components_copy.get('extra_components', {})
+                extra['emotional_stance'] = es_module.EmotionalStance(
+                    model=model,
+                    name=agent_config.name,
+                    emotion_options=emotional_stance.get('emotion_options', ['happy', 'sad', 'neutral']),
+                    num_observations_to_select=emotional_stance.get('num_observations_to_select', 5),
+                )
+                components_copy['extra_components'] = extra
+
+            entity_params.update(components_copy)
 
         instance_config = prefab_lib.InstanceConfig(
             prefab=agent_config.prefab,
