@@ -726,6 +726,17 @@ export async function deleteCheckpointFiles(): Promise<{
 }
 
 /**
+ * Delete a simulation log and its metadata
+ */
+export async function deleteSimulationLog(filename: string): Promise<{
+  success: boolean;
+  deleted: string[];
+}> {
+  const response = await api.delete(`/api/simulations/logs/${encodeURIComponent(filename)}`);
+  return response.data;
+}
+
+/**
  * Analyze a simulation log using LLM
  */
 export async function analyzeSimulation(simulationId: string, llmSettings?: {

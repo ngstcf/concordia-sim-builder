@@ -3616,6 +3616,32 @@ async def delete_checkpoint_files():
         )
 
 
+@router.delete("/logs/{filename}")
+async def delete_simulation_log(filename: str):
+    """Delete a simulation log and its associated metadata file."""
+    from pathlib import Path
+    import re
+
+    safe_filename = re.sub(r'[^\w\s\-.]', '', filename)
+    if safe_filename != filename or '..' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    logs_dir = Path("logs")
+    log_path = logs_dir / safe_filename
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    deleted = [safe_filename]
+    log_path.unlink()
+
+    meta_path = logs_dir / safe_filename.replace('.html', '.metadata.json')
+    if meta_path.exists():
+        meta_path.unlink()
+        deleted.append(meta_path.name)
+
+    return {"success": True, "deleted": deleted}
+
+
 @router.get("/logs/{filename}")
 async def get_simulation_log(filename: str):
     """Get a specific simulation log by filename."""

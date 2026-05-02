@@ -35,6 +35,11 @@ LOGS_DIR = Path("logs")
 LOGS_DIR.mkdir(exist_ok=True)
 
 
+class SimulationCancelled(Exception):
+    """Raised from within a step callback to stop the simulation loop."""
+    pass
+
+
 def _raw_log_to_html(raw_log) -> str:
     """Convert a raw simulation log to HTML using v2.4's structured logging."""
     from concordia.utils.structured_logging import SimulationLog
@@ -136,7 +141,14 @@ async def run_simulation_stream(
 
             Args:
                 checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+
+            Raises:
+                SimulationCancelled: If cancellation was requested, stops the engine loop.
             """
+            if simulation_state.should_cancel(task_id):
+                print(f"[CANCEL] Cancellation requested — stopping after step {step_count_tracker[0]}")
+                raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
+
             try:
                 # Extract step number from checkpoint data
                 step = checkpoint_data.get('checkpoint_counter', 0)
@@ -289,11 +301,24 @@ async def run_simulation_stream(
             simulation_error_type = None
 
             # Use a try-except to handle Concordia errors while still saving partial results
+            was_cancelled = False
             try:
                 debug_print(f"[DEBUG] Waiting for future.result() to get simulation results...")
                 results = future.result()
                 debug_print(f"[DEBUG] Simulation completed successfully, got results (type: {type(results).__name__})")
                 debug_print(f"[DEBUG] Results length: {len(str(results)) if results else 0} characters")
+            except SimulationCancelled:
+                was_cancelled = True
+                print(f"[CANCEL] Simulation cancelled after step {step_count_tracker[0]}/{max_steps}")
+                simulation_error = f"Cancelled by user after step {step_count_tracker[0]}"
+                simulation_error_type = "SimulationCancelled"
+                simulation_state.update_simulation_status(task_id, status="cancelled")
+                try:
+                    raw_log = sim.get_raw_log()
+                    results = _raw_log_to_html(raw_log)
+                    print(f"[CANCEL] Saved partial results ({len(results)} chars)")
+                except Exception:
+                    results = f"<html><body><h1>Simulation Cancelled</h1><p>Cancelled after step {step_count_tracker[0]}</p></body></html>"
             except Exception as sim_error:
                 # Simulation failed, but try to save partial results
                 simulation_error = str(sim_error)
@@ -883,7 +908,10 @@ async def run_simulation_stream(
         print("[DEBUG] About to yield SIMULATION_COMPLETE event")
 
         # Determine completion status and message
-        if simulation_error:
+        if was_cancelled:
+            completion_message = f'Simulation cancelled after step {step_count_tracker[0]}/{max_steps} (partial results saved)'
+            completed = False
+        elif simulation_error:
             completion_message = f'Simulation failed: {simulation_error}'
             completed = False
         else:
@@ -999,7 +1027,14 @@ async def run_simulation_simple(
 
             Args:
                 checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+
+            Raises:
+                SimulationCancelled: If cancellation was requested, stops the engine loop.
             """
+            if simulation_state.should_cancel(task_id):
+                print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
+                raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
+
             # Extract step number from checkpoint data
             step = checkpoint_data.get('checkpoint_counter', 0)
             step_count[0] = step
@@ -1032,11 +1067,20 @@ async def run_simulation_simple(
         for gm in sim.game_masters:
             debug_print(f"[DEBUG] Game Master: {gm.name}, type: {type(gm).__name__}")
 
-        results = sim.play(
-            max_steps=config.max_steps,
-            get_state_callback=progress_callback,
-            verbose=True
-        )
+        was_cancelled = False
+        try:
+            results = sim.play(
+                max_steps=config.max_steps,
+                get_state_callback=progress_callback,
+                verbose=True
+            )
+        except SimulationCancelled:
+            was_cancelled = True
+            print(f"[CANCEL] Simulation cancelled after step {step_count[0]}/{config.max_steps}")
+            simulation_state.update_simulation_status(task_id, status="cancelled")
+            raw_log = sim.get_raw_log()
+            results = _raw_log_to_html(raw_log)
+            print(f"[CANCEL] Saved partial results ({len(str(results))} chars)")
         debug_print(f"[DEBUG] Simulation play completed, results type: {type(results).__name__}")
 
         # Try to get step count from results
@@ -1469,12 +1513,14 @@ async def run_simulation_simple(
         # Return results with log path
         return {
             'config': config.model_dump(mode='json'),
-            'completed': True,
+            'completed': not was_cancelled,
+            'cancelled': was_cancelled,
             'timestamp': datetime.datetime.now().isoformat(),
-            'results': results_html,  # Return original for in-app viewing (styles injected separately in frontend)
+            'results': results_html,
             'log_path': str(log_path),
             'log_filename': log_filename,
-            'task_id': task_id
+            'task_id': task_id,
+            'message': f'Cancelled after step {step_count[0]}' if was_cancelled else 'Simulation completed successfully'
         }
 
     except asyncio.CancelledError:
