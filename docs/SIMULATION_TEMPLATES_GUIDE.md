@@ -1,6 +1,6 @@
 # Simulation Templates Guide
 
-This guide explains every pre-built template in the Concordia Simulation Builder. Each template is a ready-to-run configuration that demonstrates a specific feature or scenario. Load any template from the **template dropdown** in the top-right of the Simulation Builder, then click **Load**.
+This guide explains every pre-built template in the Concordia Simulation Builder. Each template is a ready-to-run configuration that demonstrates a specific feature or scenario. Click **Browse Templates** in the Simulation Builder to open the template picker — you can search by name or description, filter by category, feature tags, or engine type, and sort by name, agent count, or step count. Select a template card and click **Load Template**.
 
 You can run templates as-is or modify them to fit your needs. All parameters are editable after loading.
 
@@ -93,7 +93,9 @@ Tips:
 | **Goal** | What the agent is trying to achieve. This strongly guides the agent's decisions. Be specific — see below. |
 | **Pre-loaded Memories** | Facts the agent "knows" before the simulation starts. One per line. These shape personality, knowledge, and behavior. |
 | **Randomize Action Choices** | When the agent must pick from a list of options, should the option order be shuffled? Turn OFF for strategic games where option order matters. |
+| **Prefab Settings** | Parameters specific to the selected prefab — e.g., observation history length (basic), time horizon (plan), custom instructions (minimal), fixed responses (puppet). These appear automatically based on the chosen prefab. |
 | **Components** | Optional psychological traits, biases, or behavioral modifiers. See [Components](#psychological-components). |
+| **Custom Reasoning Steps** | (Minimal prefab only) Custom questions the agent asks itself each turn. See [Components](#psychological-components). |
 
 #### Writing Effective Goals
 
@@ -145,7 +147,7 @@ Memories are facts loaded into the agent's long-term memory before the simulatio
 | **conversational** | Optimized for natural back-and-forth dialogue. Has stronger listening/responding components. Better at referencing what others actually said. | ~10 dialogue-tuned components | Debates, therapy sessions, interviews, any dialogue-heavy scenario. |
 | **rational** | Makes decisions by explicitly weighing expected utility. Has an internal reasoning step that evaluates costs and benefits before acting. | ~10 components + utility calc | Negotiations, economic simulations, game theory experiments. |
 | **puppet** | Does not generate its own actions. Waits for external input. Other agents interact with it normally. | Minimal (externally driven) | Wizard-of-Oz experiments, human-in-the-loop studies, controlled experiments. |
-| **minimal** | Bare-minimum agent with very few internal components. Fast but shallow reasoning. | ~3 components | Performance testing, large-scale simulations where you need many simple agents. |
+| **minimal** | Bare-minimum agent with very few internal components. Fast but shallow reasoning. Supports **custom reasoning steps** and **extra components** (e.g., Emotional Stance) via the Agent Editor. | ~3 components + extras | Performance testing, large-scale simulations, or agents that need custom cognition via reasoning steps. |
 
 **Mixing prefabs in one simulation:** You can use different prefabs for different agents. For example, one `basic_with_plan__Entity` commander + two `basic__Entity` crew members. Or one `basic_scripted__Entity` moderator + four `basic__Entity` participants.
 
@@ -245,6 +247,9 @@ Optional modifiers you can add to any agent through the Agent Editor. Components
 | **Core Values** | Psychological | core_values (list), value_conflict (optional text) | Defines what the agent prioritizes morally. Add a value_conflict to create internal tension. |
 | **Social Identity** | Social | group_membership (list), identification_strength (weak/moderate/strong) | Assigns group identities that trigger in-group favoritism and out-group skepticism. |
 | **Theory of Planned Behavior** | Social | behavior, attitude, subjective_norm, perceived_control | Models how the agent evaluates a specific behavior based on personal attitude, social pressure, and perceived ability. |
+| **Emotional Stance (Dynamic)** | Dynamic Behavior | emotion_options (list), num_observations_to_select (int) | Dynamic emotion-driven behavior — the agent selects an emotion each step and reasons through that lens. Unlike the static Current Emotion component, this changes over the course of the simulation. Requires the **minimal** prefab. |
+
+**Custom Reasoning Steps** (minimal prefab only): In addition to the components above, agents using the minimal prefab can have custom reasoning steps — questions the agent asks itself each turn (e.g., "Who might betray me?", "What are the power dynamics here?"). Configure these in the **Custom Reasoning Steps** section of the Agent Editor. Each step has a question, answer prefix, number of memories to retrieve, and an option to add the answer back to memory.
 
 **Cognitive Bias Types:**
 | Bias | Effect on Agent |
@@ -346,7 +351,9 @@ Private information or instructions given to individual agents that other agents
 
 **22 of 26 built-in templates use player-specific context.** It is one of the most important tools for creating realistic simulations.
 
-This field is available via JSON import/export (not directly in the UI builder). Add a `player_specific_context` key to the top-level config:
+Edit player-specific context directly in the **Player-Specific Context** panel in the right column of the Simulation Builder (below the Memory Editor). The panel auto-populates a textarea for each agent in your configuration. A badge shows how many agents have private context set.
+
+You can also set it via JSON import/export using a `player_specific_context` key in the top-level config:
 
 ```json
 {
@@ -1891,7 +1898,7 @@ This field is available via JSON import/export (not directly in the UI builder).
 
 ## Tips for Creating Your Own Simulations
 
-1. **Start from a template.** Load the closest template and modify it rather than building from scratch.
+1. **Start from a template.** Click **Browse Templates** and use the search and filter tools to find the closest template, then modify it rather than building from scratch.
 
 2. **Write measurable goals.** "Secure at least $1.2M for Engineering while maintaining a collaborative relationship" produces more interesting behavior than "Do well in the negotiation." Include quantitative targets, secondary objectives, and priority ordering.
 
@@ -1909,6 +1916,8 @@ This field is available via JSON import/export (not directly in the UI builder).
 
 9. **Turn off Randomize Choices for strategic games.** When agents pick from a list (COOPERATE/DEFECT), randomized option order can bias results.
 
-10. **Use the JSON Export/Import.** After configuring a simulation you like, export the JSON. You can share it with colleagues or version-control it.
+10. **Use the Persona Generator for diverse populations.** Click **Generate** next to the Add Agent button to auto-generate agents with varied backgrounds. Provide a scenario context and diversity axes (e.g., age, occupation, stance) and the system will create agents with names, goals, and memories. You can preview and select which personas to add.
 
-11. **Add research framing to premises.** Include methodological context in the premise — what this simulation models, what variables to watch, what theoretical framework it tests. This helps the GM produce academically relevant narration.
+11. **Use the JSON Export/Import.** After configuring a simulation you like, export the JSON. You can share it with colleagues or version-control it.
+
+12. **Add research framing to premises.** Include methodological context in the premise — what this simulation models, what variables to watch, what theoretical framework it tests. This helps the GM produce academically relevant narration.
