@@ -150,6 +150,12 @@ class SimulationConfig(BaseModel):
         None,
         description="Character-specific context (for formative memories initializer)"
     )
+    checkpoint_interval: int = Field(
+        5,
+        ge=1,
+        le=100,
+        description="Save partial checkpoint every N steps (0 to disable)"
+    )
 
     class Config:
         json_schema_extra = {

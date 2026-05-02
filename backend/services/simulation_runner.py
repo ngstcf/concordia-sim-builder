@@ -126,7 +126,7 @@ async def run_simulation_stream(
 
         # Variables for partial checkpointing
         last_checkpoint_step = [0]  # Use list for mutable access
-        checkpoint_interval = 5  # Save partial results every N steps
+        checkpoint_interval = getattr(config, 'checkpoint_interval', 5) or 5
 
         print("🎮 Running simulation...")
         print(f"   (This may take a while depending on {max_steps} steps and {len(config.agents)} agents)")

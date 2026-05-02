@@ -113,6 +113,7 @@ export interface SimulationConfig {
   game_master: GameMasterConfig;
   shared_memories: string[];
   player_specific_context?: Record<string, string>;
+  checkpoint_interval?: number;
 }
 
 // LLM Settings

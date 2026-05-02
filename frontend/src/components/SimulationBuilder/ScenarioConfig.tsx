@@ -83,6 +83,25 @@ export default function ScenarioConfig() {
           />
         </div>
 
+        {/* Checkpoint Interval */}
+        <div>
+          <label htmlFor="checkpoint_interval" className="block text-sm font-medium text-gray-700">
+            Checkpoint Interval
+          </label>
+          <input
+            type="number"
+            id="checkpoint_interval"
+            min={1}
+            max={100}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            value={config.checkpoint_interval ?? 5}
+            onChange={(e) => setConfig({ ...config, checkpoint_interval: parseInt(e.target.value) || 5 })}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Save partial results every N steps. Checkpoints are saved to the logs folder for recovery.
+          </p>
+        </div>
+
         {/* Engine Type */}
         <div>
           <label htmlFor="engine_type" className="block text-sm font-medium text-gray-700">
