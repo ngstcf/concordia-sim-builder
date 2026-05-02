@@ -90,14 +90,19 @@ async def run_simulation_stream(
         print(f"Agents: {', '.join([a.name for a in config.agents])}")
         print(f"{'='*60}\n")
 
+        # Generate task_id for cancellation support
+        task_id = str(uuid.uuid4())
+        simulation_state.register_simulation(task_id, config)
+
         # Get model and embedder
         print("🔄 Initializing LLM and embedder...")
         model, embedder = get_model_and_embedder(llm_settings)
         print("✓ Model and embedder ready\n")
 
-        # Send start event
+        # Send start event with task_id so frontend can cancel
         yield _format_sse(EventType.SIMULATION_START, {
             'message': 'Building simulation...',
+            'task_id': task_id,
             'config': config.model_dump(mode='json')
         })
 
@@ -265,8 +270,14 @@ async def run_simulation_stream(
 
                     # Log periodic watchdog status every minute
                     if int(time_since_progress) % 60 == 0 and time_since_progress > 0:
+                        from backend.services.llm_factory import get_llm_activity
+                        activity = get_llm_activity()
                         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
+                        if activity['calls_in_flight'] > 0:
+                            waiting = time.time() - activity['last_call_start']
+                            print(f"[WATCHDOG] {current_time} - Step {step_count_tracker[0]}/{max_steps} | LLM call in progress ({waiting:.0f}s) | {activity['total_calls']} calls total")
+                        else:
+                            print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
                     if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
                         print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
@@ -932,6 +943,7 @@ async def run_simulation_stream(
         debug_print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
         yield completion_event
         print("[DEBUG] SIMULATION_COMPLETE event yielded")
+        simulation_state.cleanup_simulation(task_id)
 
     except Exception as e:
         # Send error event

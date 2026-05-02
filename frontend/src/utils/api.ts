@@ -161,7 +161,10 @@ export async function executeSimulationStream(
 
                 switch (eventType) {
                   case 'simulation_start':
-                    console.log('[executeSimulationStream] Simulation started:', data.message);
+                    console.log('[executeSimulationStream] Simulation started:', data.message, 'task_id:', data.task_id);
+                    if (data.task_id) {
+                      onProgress?.({ step: 0, max_steps: 0, elapsed: 0, est_remaining: 0, est_time_str: '', task_id: data.task_id } as any);
+                    }
                     eventCount++;
                     break;
                   case 'step_progress':
@@ -777,6 +780,10 @@ export async function analyzeSimulation(simulationId: string, llmSettings?: {
     llm_settings: llmSettings
   });
   return response.data;
+}
+
+export async function shutdownServer(): Promise<void> {
+  await api.post('/api/server/shutdown');
 }
 
 export default api;

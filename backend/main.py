@@ -4,6 +4,7 @@ Concordia Simulation Builder - FastAPI Backend
 Main application entry point.
 """
 import os
+import signal
 
 # Load environment variables from .env file FIRST
 # This must happen before any other imports that depend on debug_print
@@ -74,6 +75,17 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.post("/api/server/shutdown")
+async def shutdown_server():
+    """Kill server + reloader parent immediately."""
+    ppid = os.getppid()
+    try:
+        os.kill(ppid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    os._exit(1)
 
 
 # Serve frontend static files in production

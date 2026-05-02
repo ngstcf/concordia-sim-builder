@@ -191,6 +191,7 @@ class LLMSettings(BaseModel):
     temperature: float = Field(0.5, ge=0, le=2, description="Sampling temperature")  # Match Concordia's DEFAULT_TEMPERATURE
     max_tokens: int = Field(3500, ge=1, le=32000, description="Maximum tokens to generate")  # Increased for better response quality
     api_version: Optional[str] = Field(None, description="API version for Azure OpenAI (e.g., '2024-02-15-preview'). Env: AZURE_OAI_API_VERSION")
+    request_timeout: int = Field(120, ge=10, le=600, description="Per-request timeout in seconds for LLM calls")
 
     # Validators to strip whitespace from string fields
     @field_validator('model_name', 'base_url', 'api_key', mode='before')

@@ -68,7 +68,8 @@ const defaultLLMSettings: LLMSettings = {
   model_name: 'deepseek-chat',
   embedder_model: 'all-MiniLM-L6-v2',
   temperature: 0.5,  // Match Concordia's DEFAULT_TEMPERATURE
-  max_tokens: 3500  // Increased for better response quality
+  max_tokens: 3500,  // Increased for better response quality
+  request_timeout: 120
 };
 
 interface SimulationProviderProps {

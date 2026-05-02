@@ -350,8 +350,11 @@ export default function SimulationRunner() {
       config,
       llmSettings,
       // onProgress
-      (progressData) => {
+      (progressData: any) => {
         console.log('[handleRun] onProgress callback called with:', progressData);
+        if (progressData.task_id) {
+          setTaskId(progressData.task_id);
+        }
         setProgress(progressData);
       },
       // onComplete
@@ -422,7 +425,11 @@ export default function SimulationRunner() {
                 <select
                   className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={llmSettings.provider}
-                  onChange={(e) => setLLMSettings({ ...llmSettings, provider: e.target.value as any })}
+                  onChange={(e) => {
+                    const provider = e.target.value as any;
+                    const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                    setLLMSettings({ ...llmSettings, provider, request_timeout: timeout });
+                  }}
                 >
                   <option value="deepseek">DeepSeek</option>
                   <option value="openai">OpenAI</option>
@@ -519,6 +526,21 @@ export default function SimulationRunner() {
                   className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={llmSettings.max_tokens}
                   onChange={(e) => setLLMSettings({ ...llmSettings, max_tokens: parseInt(e.target.value) })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Request Timeout (s)
+                  <span className="text-gray-400 ml-1" title="Max seconds to wait for each LLM response. Increase for slow models (e.g. Ollama Remote).">ⓘ</span>
+                </label>
+                <input
+                  type="number"
+                  step="10"
+                  min="10"
+                  max="600"
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={llmSettings.request_timeout}
+                  onChange={(e) => setLLMSettings({ ...llmSettings, request_timeout: parseInt(e.target.value) || 120 })}
                 />
               </div>
             </div>

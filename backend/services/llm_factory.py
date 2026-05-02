@@ -3,10 +3,26 @@ LLM factory for creating language model and embedder instances.
 Uses the wrapper classes from backend.models.llm_wrappers.
 """
 import os
+import time
+import threading
 from typing import Tuple, Optional, Collection
 from enum import Enum
 from concordia.language_model import language_model
 from backend.models.schemas import LLMSettings, LLMProvider
+
+# Shared LLM activity tracker — updated on every call, read by watchdog
+_llm_activity = {
+    'last_call_start': 0.0,
+    'last_call_end': 0.0,
+    'calls_in_flight': 0,
+    'total_calls': 0,
+}
+_llm_activity_lock = threading.Lock()
+
+
+def get_llm_activity() -> dict:
+    with _llm_activity_lock:
+        return dict(_llm_activity)
 
 
 # Import wrapper classes from backend.models.llm_wrappers
@@ -25,9 +41,11 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
     This allows the user's temperature setting from the web app to be used.
     """
 
-    def __init__(self, base_model: language_model.LanguageModel, temperature: float):
+    def __init__(self, base_model: language_model.LanguageModel, temperature: float, request_timeout: float = 120.0, max_tokens: int = 3500):
         self._model = base_model
         self._temperature = temperature
+        self._request_timeout = request_timeout
+        self._max_tokens = max_tokens
 
     def sample_text(
         self,
@@ -48,6 +66,10 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
         if temperature is None:
             temperature = self._temperature
 
+        max_tokens = max(max_tokens, self._max_tokens)
+
+        timeout = self._request_timeout
+
         env_timeout = os.getenv('LLM_TIMEOUT')
         if env_timeout:
             try:
@@ -55,17 +77,26 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
             except ValueError:
                 pass
 
-        return self._model.sample_text(
-            prompt,
-            max_tokens=max_tokens,
-            terminators=terminators,
-            temperature=temperature,
-            timeout=timeout,
-            seed=seed,
-            top_p=top_p,
-            top_k=top_k,
-            **kwargs,
-        )
+        with _llm_activity_lock:
+            _llm_activity['last_call_start'] = time.time()
+            _llm_activity['calls_in_flight'] += 1
+            _llm_activity['total_calls'] += 1
+        try:
+            return self._model.sample_text(
+                prompt,
+                max_tokens=max_tokens,
+                terminators=terminators,
+                temperature=temperature,
+                timeout=timeout,
+                seed=seed,
+                top_p=top_p,
+                top_k=top_k,
+                **kwargs,
+            )
+        finally:
+            with _llm_activity_lock:
+                _llm_activity['last_call_end'] = time.time()
+                _llm_activity['calls_in_flight'] -= 1
 
     def sample_choice(
         self,
@@ -185,9 +216,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
-    # Wrap model with temperature configuration from settings
-    # This ensures the user's temperature setting from the web app is actually used
-    model = TemperatureConfiguredModel(model, settings.temperature)
+    request_timeout = float(getattr(settings, 'request_timeout', 120))
+    model = TemperatureConfiguredModel(model, settings.temperature, request_timeout, settings.max_tokens)
 
     # Create embedder
     embedder = SentenceTransformerEmbedder(settings.embedder_model)

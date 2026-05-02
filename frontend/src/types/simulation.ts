@@ -125,6 +125,7 @@ export interface LLMSettings {
   temperature: number;
   max_tokens: number;
   api_version?: string;  // For Azure OpenAI
+  request_timeout: number;
 }
 
 // Execution Request

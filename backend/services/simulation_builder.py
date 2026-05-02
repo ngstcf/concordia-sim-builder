@@ -323,6 +323,15 @@ def build_simulation(
     else:
         debug_print(f"[DEBUG] No critical decision points found")
 
+    # Inject ReactiveMeasurements for async engine (required by Concordia)
+    if config.engine_type == EngineType.ASYNCHRONOUS:
+        from concordia.utils import async_measurements
+        reactive = async_measurements.ReactiveMeasurements()
+        for inst in instances:
+            if 'measurements' not in inst.params:
+                inst.params['measurements'] = reactive
+        debug_print(f"[DEBUG] Injected ReactiveMeasurements into {len(instances)} instances for async engine")
+
     # Create simulation configuration
     sim_config = prefab_lib.Config(
         default_premise=premise_text,
