@@ -27,7 +27,7 @@ const OUTPUT_TYPES = [
 ];
 
 export default function SceneEditor() {
-  const { config, setGameMaster } = useSimulation();
+  const { config, setConfig, setGameMaster } = useSimulation();
 
   const existingScenes: Scene[] = (config.game_master.parameters?.scenes || []).map(
     (s: any, i: number) => ({ ...s, id: s.id || `scene-${i}` })
@@ -42,9 +42,14 @@ export default function SceneEditor() {
 
   const syncToConfig = (updated: Scene[]) => {
     const clean = updated.map(({ id, ...rest }) => rest);
-    setGameMaster({
-      ...config.game_master,
-      parameters: { ...config.game_master.parameters, scenes: clean },
+    const totalRounds = updated.reduce((sum, s) => sum + s.num_rounds, 0);
+    setConfig({
+      ...config,
+      max_steps: totalRounds > 0 ? totalRounds : config.max_steps,
+      game_master: {
+        ...config.game_master,
+        parameters: { ...config.game_master.parameters, scenes: clean },
+      },
     });
   };
 
@@ -263,7 +268,22 @@ export default function SceneEditor() {
                       max={100}
                       className="w-32 border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
                       value={scene.num_rounds}
-                      onChange={(e) => updateScene(scene.id, { num_rounds: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => {
+                        const newRounds = parseInt(e.target.value) || 1;
+                        const cta = scene.scene_type.action_spec.call_to_action;
+                        const updatedCta = cta.replace(/\b\d+\s+rounds?\b/gi, `${newRounds} rounds`);
+                        if (updatedCta !== cta) {
+                          updateScene(scene.id, {
+                            num_rounds: newRounds,
+                            scene_type: {
+                              ...scene.scene_type,
+                              action_spec: { ...scene.scene_type.action_spec, call_to_action: updatedCta },
+                            },
+                          });
+                        } else {
+                          updateScene(scene.id, { num_rounds: newRounds });
+                        }
+                      }}
                     />
                   </div>
 

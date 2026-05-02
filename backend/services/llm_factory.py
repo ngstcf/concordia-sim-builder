@@ -154,15 +154,20 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = AnthropicModel(api_key=api_key, model_name=model_name)
 
     elif provider == LLMProvider.OLLAMA.value:
-        # Ollama uses OpenAI-compatible API running on localhost or remote server
-        # Default base URL for Ollama is http://localhost:11434/v1
-        # Can also use services like OpenWebUI which may require an API key
-        ollama_base_url = base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+        # Ollama local — always uses localhost, no auth needed
+        ollama_base_url = 'http://localhost:11434/v1'
+        model = CustomGPTModel(
+            api_key='ollama',
+            model_name=model_name,
+            base_url=ollama_base_url
+        )
 
-        # Use provided API key, or check environment, or use dummy key for local Ollama
-        # Some Ollama hosting services (like OpenWebUI) require an API key
-        ollama_api_key = api_key or os.getenv('OLLAMA_API_KEY', 'ollama')
-
+    elif provider == LLMProvider.OLLAMA_REMOTE.value:
+        # Ollama remote — uses .env configured endpoint and API key
+        ollama_base_url = base_url or os.getenv('OLLAMA_BASE_URL')
+        if not ollama_base_url:
+            raise ValueError("OLLAMA_BASE_URL not set for remote Ollama. Set it in .env or provide base_url.")
+        ollama_api_key = api_key or os.getenv('OLLAMA_API_KEY', '')
         model = CustomGPTModel(
             api_key=ollama_api_key,
             model_name=model_name,

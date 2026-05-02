@@ -42,7 +42,44 @@ export default function ScenarioConfig() {
             max={1000}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             value={config.max_steps}
-            onChange={(e) => setConfig({ ...config, max_steps: parseInt(e.target.value) || 10 })}
+            onChange={(e) => {
+              const newSteps = parseInt(e.target.value) || 10;
+              const oldSteps = config.max_steps;
+              const scenes = config.game_master.parameters?.scenes;
+              if (scenes && Array.isArray(scenes) && scenes.length > 0) {
+                const updatedScenes = scenes.map((s: any) => {
+                  const updated = { ...s };
+                  if (scenes.length === 1) {
+                    updated.num_rounds = newSteps;
+                  } else if (s.num_rounds === oldSteps || (s.num_rounds && s.num_rounds > newSteps)) {
+                    updated.num_rounds = Math.max(1, Math.round(s.num_rounds * newSteps / oldSteps));
+                  }
+                  if (updated.scene_type?.action_spec?.call_to_action) {
+                    updated.scene_type = {
+                      ...updated.scene_type,
+                      action_spec: {
+                        ...updated.scene_type.action_spec,
+                        call_to_action: updated.scene_type.action_spec.call_to_action.replace(
+                          /\b\d+\s+rounds?\b/gi,
+                          `${updated.num_rounds} rounds`
+                        ),
+                      },
+                    };
+                  }
+                  return updated;
+                });
+                setConfig({
+                  ...config,
+                  max_steps: newSteps,
+                  game_master: {
+                    ...config.game_master,
+                    parameters: { ...config.game_master.parameters, scenes: updatedScenes },
+                  },
+                });
+              } else {
+                setConfig({ ...config, max_steps: newSteps });
+              }
+            }}
           />
         </div>
 

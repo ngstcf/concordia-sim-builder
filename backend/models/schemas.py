@@ -31,6 +31,7 @@ class LLMProvider(str, Enum):
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    OLLAMA_REMOTE = "ollama_remote"
     GLM = "glm"  # Zhipu AI (GLM models)
 
 

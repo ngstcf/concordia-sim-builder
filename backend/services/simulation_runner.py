@@ -144,7 +144,6 @@ async def run_simulation_stream(
                 elapsed = time.time() - start_time_progress[0]
 
                 # Log timestamp for debugging hangs
-                import datetime
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[HEARTBEAT] {current_time} - Step {step}/{max_steps} callback received")
 
@@ -254,7 +253,6 @@ async def run_simulation_stream(
 
                     # Log periodic watchdog status every minute
                     if int(time_since_progress) % 60 == 0 and time_since_progress > 0:
-                        import datetime
                         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 

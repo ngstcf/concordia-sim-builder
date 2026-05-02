@@ -6,7 +6,7 @@
 // Type aliases for string literals (better API compatibility than enums)
 export type EngineType = 'sequential' | 'simultaneous' | 'asynchronous' | 'step_controller' | 'interview' | 'survey';
 export type ActingOrder = 'fixed' | 'random' | 'game_master_choice';
-export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama';
+export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama' | 'ollama_remote';
 export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'observation' | 'step_end' | 'simulation_complete' | 'error';
 
 // Constants for enum-like usage
@@ -32,7 +32,8 @@ export const LLMProvider = {
   GEMINI: 'gemini' as LLMProvider,
   ANTHROPIC: 'anthropic' as LLMProvider,
   GLM: 'glm' as LLMProvider,
-  OLLAMA: 'ollama' as LLMProvider
+  OLLAMA: 'ollama' as LLMProvider,
+  OLLAMA_REMOTE: 'ollama_remote' as LLMProvider
 };
 
 export const EventType = {

@@ -431,6 +431,7 @@ export default function SimulationRunner() {
                   <option value="anthropic">Anthropic</option>
                   <option value="glm">GLM (Zhipu AI)</option>
                   <option value="ollama">Ollama (Local)</option>
+                  <option value="ollama_remote">Ollama (Remote)</option>
                 </select>
               </div>
               <div>

@@ -172,24 +172,21 @@ async def get_provider_models(
     provider = provider.lower()
 
     # Handle Ollama and OpenAI-compatible providers with dynamic model discovery
-    if provider == LLMProvider.OLLAMA.value:
-        # Determine the base URL to query
-        if base_url:
-            models_url = f"{base_url.rstrip('/')}/models"
-        else:
-            # Use environment variable or default to localhost
-            ollama_base = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+    if provider in (LLMProvider.OLLAMA.value, LLMProvider.OLLAMA_REMOTE.value):
+        # Local Ollama: always localhost, no auth
+        # Remote Ollama: uses .env endpoint and key
+        if provider == LLMProvider.OLLAMA_REMOTE.value:
+            ollama_base = base_url or os.getenv('OLLAMA_BASE_URL', '')
+            if not ollama_base:
+                return {'provider': provider, 'models': [], 'error': 'OLLAMA_BASE_URL not set in .env'}
             models_url = f"{ollama_base.rstrip('/')}/models"
-
-        # Determine API key
-        headers = {}
-        if api_key:
-            headers['Authorization'] = f"Bearer {api_key}"
-        else:
-            # Try to get from environment
-            env_key = os.getenv('OLLAMA_API_KEY')
+            headers = {}
+            env_key = api_key or os.getenv('OLLAMA_API_KEY')
             if env_key:
                 headers['Authorization'] = f"Bearer {env_key}"
+        else:
+            models_url = "http://localhost:11434/v1/models"
+            headers = {}
 
         try:
             # Disable SSL verification for myai.unu.edu and self-hosted instances
@@ -929,7 +926,7 @@ async def get_strategic_game_template():
     Use for: Matrix games, strategic decisions with payoffs/scores
     """
     return {
-        "name": "Prisoner's Dilemma (4 rounds)",
+        "name": "Prisoner's Dilemma",
         "description": "Strategic game theory scenario with payoffs and scores",
         "prefab_type": "game_theoretic_and_dramaturgic__GameMaster",
         "config": {
@@ -937,7 +934,7 @@ async def get_strategic_game_template():
 Each round, they must choose to COOPERATE or DEFECT.
 Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each,
 One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
-            "max_steps": 4,  # 4 rounds (num_rounds must equal max_steps)
+            "max_steps": 4,
             "agents": [
                 {
                     "id": "player1",
@@ -984,7 +981,7 @@ One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
                                 }
                             },
                             "participants": ["Alex", "Sam"],
-                            "num_rounds": 4,  # 4 rounds (must equal max_steps)
+                            "num_rounds": 4,
                             "premise": {
                                 "Alex": [
                                     "You are in a Prisoner's Dilemma tournament against Sam.",
@@ -992,7 +989,7 @@ One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
                                     "Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each.",
                                     "If you Cooperate and Sam Defects, you get 0, Sam gets 5.",
                                     "If you Defect and Sam Cooperates, you get 5, Sam gets 0.",
-                                    "Maximize your total score over 4 rounds."
+                                    "Maximize your total score across all rounds."
                                 ],
                                 "Sam": [
                                     "You are in a Prisoner's Dilemma tournament against Alex.",
@@ -1000,7 +997,7 @@ One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
                                     "Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each.",
                                     "If you Cooperate and Alex Defects, you get 0, Alex gets 5.",
                                     "If you Defect and Alex Cooperates, you get 5, Alex gets 0.",
-                                    "Maximize your total score over 4 rounds."
+                                    "Maximize your total score across all rounds."
                                 ]
                             }
                         }
@@ -1008,7 +1005,6 @@ One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
                 }
             },
             "shared_memories": [
-                "This is a 4-round Prisoner's Dilemma tournament.",
                 "Players see each other's previous choices.",
                 "The goal is to maximize total points.",
                 "Payoffs: (C,C)=(3,3), (D,D)=(1,1), (C,D)=(0,5), (D,C)=(5,0)"
@@ -3793,8 +3789,14 @@ async def get_simulation_analytics(filename: str):
                     return value
 
                 excluded_entities = {'Game Master', 'game_master'}
+                gm_name_from_meta = metadata.get("game_master", {}).get("name", "") if metadata else ""
+                if gm_name_from_meta:
+                    excluded_entities.add(gm_name_from_meta)
+
                 agent_names_set = set()
                 agent_action_counts = {}
+                agent_action_texts = {}
+                agent_goals = {}
                 max_step = 0
                 observation_count = 0
                 timeline_entries = {}
@@ -3804,6 +3806,7 @@ async def get_simulation_analytics(filename: str):
                     step = entry.get('step', 0)
                     entity = entry.get('entity_name', '')
                     entry_type = entry.get('entry_type', '')
+                    component = entry.get('component_name', '')
                     summary = entry.get('summary', '')
                     dedup_data = entry.get('deduplicated_data', {})
 
@@ -3812,20 +3815,38 @@ async def get_simulation_analytics(filename: str):
                     # Collect all text for word count
                     all_text_parts.append(summary)
 
-                    # Collect agent names (exclude GM)
-                    if entity and entity not in excluded_entities:
+                    # Collect agent names only from entity-type entries (excludes GM step entries)
+                    if entity and entity not in excluded_entities and entry_type == 'entity':
                         agent_names_set.add(entity)
 
-                    # Count actions: entity entries with __act__ in their data
+                    # Count actions and extract action text from entity entries
                     if entry_type == 'entity' and entity not in excluded_entities:
                         resolved = _resolve_ref(dedup_data)
                         value_data = resolved.get('value', {})
                         if isinstance(value_data, dict):
                             has_action = '__act__' in value_data or value_data.get('Key') == '__act__'
+
+                            if has_action:
+                                agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
+                                act_data = value_data.get('__act__', {})
+                                act_text = act_data.get('Value', '') if isinstance(act_data, dict) else str(act_data)
+                                if act_text:
+                                    if entity not in agent_action_texts:
+                                        agent_action_texts[entity] = []
+                                    agent_action_texts[entity].append({
+                                        "step": step,
+                                        "text": act_text
+                                    })
+
+                            if entity not in agent_goals and 'Goal' in value_data:
+                                goal_data = value_data['Goal']
+                                goal_text = goal_data.get('Value', '') if isinstance(goal_data, dict) else str(goal_data)
+                                if goal_text:
+                                    agent_goals[entity] = goal_text
                         else:
                             has_action = '__act__' in str(value_data) if value_data else False
-                        if has_action:
-                            agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
+                            if has_action:
+                                agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
 
                     # Count observations
                     if 'observation' in entry_type.lower() or '[observation]' in summary.lower():
@@ -3848,6 +3869,19 @@ async def get_simulation_analytics(filename: str):
                 analytics["agent_actions"] = {a: agent_action_counts.get(a, 0) for a in analytics["agents"]}
                 analytics["total_observations"] = observation_count
                 analytics["timeline"] = sorted(timeline_entries.values(), key=lambda x: x["step"])
+
+                # Build agent_details from structured data
+                analytics["agent_details"] = {}
+                for agent in analytics["agents"]:
+                    goal = agent_goals.get(agent, "")
+                    if not goal and agent in agent_metadata and agent_metadata[agent].get("goal"):
+                        goal = agent_metadata[agent]["goal"]
+                    analytics["agent_details"][agent] = {
+                        "actions": agent_action_texts.get(agent, []),
+                        "goal": goal,
+                        "memories": []
+                    }
+                    debug_print(f"[DEBUG] Agent '{agent}': goal='{goal[:80]}...', actions={len(agent_action_texts.get(agent, []))}")
 
                 # Update word/character counts from structured data
                 full_text = ' '.join(all_text_parts)
@@ -3986,9 +4020,13 @@ async def get_simulation_analytics(filename: str):
             analytics["timeline"].sort(key=lambda x: x["step"])
 
         # Extract agent-specific actions and goals for detailed analysis
-        analytics["agent_details"] = {}
+        # (skip if already populated by v2.4 structured log parser above)
+        if "agent_details" not in analytics or not analytics["agent_details"]:
+            analytics["agent_details"] = {}
 
         for agent in analytics["agents"]:
+            if agent in analytics.get("agent_details", {}) and analytics["agent_details"][agent].get("actions"):
+                continue
             agent_details = {
                 "actions": [],
                 "goal": "",
