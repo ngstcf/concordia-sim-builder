@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus } from '../../utils/api';
+import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -385,6 +385,32 @@ export default function SimulationRunner() {
       }
     }, 5000);
   }, []);
+
+  // On mount: recover if a simulation is running (handles HMR / page refresh)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const allStatus = await getSimulationsStatus();
+        const tasks = Object.values(allStatus) as any[];
+        const runningSim = tasks.find((s: any) => s.status === 'running' || s.status === 'cancelling');
+        if (runningSim && !cancelled) {
+          setTaskId(runningSim.task_id);
+          setRunning(true);
+          setDisconnected(true);
+          setProgress({
+            step: runningSim.steps_completed || 0,
+            max_steps: runningSim.config?.max_steps || 0,
+            elapsed: 0,
+            est_remaining: 0,
+            est_time_str: 'Reconnecting...',
+          });
+          startPollingRecovery(runningSim.task_id);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [startPollingRecovery]);
 
   // Fetch available models when provider changes
   useEffect(() => {
