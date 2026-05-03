@@ -60,6 +60,62 @@ def _simulation_log_to_html(sim_log_or_result) -> str:
     return str(sim_log_or_result)
 
 
+def _save_checkpoint_metadata(
+    checkpoint_path: Path,
+    config: SimulationConfig,
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None,
+    start_time: float,
+    current_step: int,
+    max_steps: int,
+):
+    """Save partial metadata alongside a checkpoint so analytics tabs work."""
+    import json
+
+    metadata = {
+        "timestamp": datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "started_at": datetime.datetime.fromtimestamp(start_time).isoformat(),
+        "completed_at": None,
+        "elapsed_seconds": round(time.time() - start_time, 1),
+        "is_checkpoint": True,
+        "checkpoint_step": current_step,
+        "max_steps": max_steps,
+        "llm": {
+            "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+            "model": llm_settings.model_name,
+        },
+        "gm_llm": {
+            "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+            "model": gm_llm_settings.model_name,
+        } if gm_llm_settings else None,
+        "premise": config.premise,
+        "game_master": {
+            "prefab": config.game_master.prefab,
+            "name": config.game_master.name,
+        },
+        "agents": [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "prefab": agent.prefab,
+                "goal": agent.goal or "",
+                "memories_count": len(agent.memories) if agent.memories else 0,
+            }
+            for agent in config.agents
+        ],
+    }
+
+    if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
+        metadata["game_master"]["grounded_variables"] = [
+            var.model_dump() if hasattr(var, 'model_dump') else var
+            for var in config.game_master.grounded_variables
+        ]
+
+    metadata_path = checkpoint_path.with_suffix('.metadata.json')
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2)
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
     llm_settings: LLMSettings,
@@ -255,6 +311,12 @@ async def run_simulation_stream(
                             with open(checkpoint_path, 'w', encoding='utf-8') as f:
                                 f.write(styled_partial)
 
+                            # Save partial metadata so analytics tabs work on checkpoints
+                            _save_checkpoint_metadata(
+                                checkpoint_path, config, llm_settings, gm_llm_settings,
+                                start_time, step, max_steps
+                            )
+
                             print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename} ({len(styled_partial):,} chars)")
                         except Exception as checkpoint_error:
                             print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
@@ -367,6 +429,11 @@ async def run_simulation_stream(
                             with open(hung_path, 'w', encoding='utf-8') as f:
                                 f.write(hung_styled)
 
+                            _save_checkpoint_metadata(
+                                hung_path, config, llm_settings, gm_llm_settings,
+                                start_time, step_count_tracker[0], max_steps
+                            )
+
                             print(f"[WATCHDOG] ✓ Emergency checkpoint saved: {hung_filename} ({len(hung_styled):,} chars)")
                         except Exception as hung_error:
                             print(f"[WATCHDOG] Failed to save emergency checkpoint: {hung_error}")
@@ -451,6 +518,11 @@ async def run_simulation_stream(
 
             with open(emergency_path, 'w', encoding='utf-8') as f:
                 f.write(emergency_styled)
+
+            _save_checkpoint_metadata(
+                emergency_path, config, llm_settings, gm_llm_settings,
+                start_time, step_count_tracker[0], max_steps
+            )
 
             print(f"[CHECKPOINT] ✓ Emergency checkpoint saved: {emergency_filename} ({len(emergency_styled):,} chars)")
         except Exception as emergency_error:

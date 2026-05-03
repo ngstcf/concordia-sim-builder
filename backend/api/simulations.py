@@ -855,13 +855,24 @@ async def get_simulation_analytics(filename: str):
         raise HTTPException(status_code=404, detail="Log file not found")
 
     # Try to load metadata file first (contains agent goals, config info)
+    # For checkpoint files, strip the _checkpoint_stepN suffix to find the metadata
     metadata_path = log_path.with_suffix('.metadata.json')
+    if not metadata_path.exists():
+        checkpoint_match = re.search(r'_checkpoint_step\d+$', log_path.stem)
+        if checkpoint_match:
+            base_stem = log_path.stem[:checkpoint_match.start()]
+            metadata_path = log_path.parent / f"{base_stem}.metadata.json"
+        emergency_match = re.search(r'_(?:EMERGENCY_CHECKPOINT|WATCHDOG_EMERGENCY_step\d+)$', log_path.stem)
+        if emergency_match:
+            base_stem = log_path.stem[:emergency_match.start()]
+            metadata_path = log_path.parent / f"{base_stem}.metadata.json"
+
+    metadata = None
     agent_metadata = {}
     premise_from_metadata = ""
     gm_prefab = None
-    game_theoretic_actions = {}  # Store game-theoretic action data for later use
+    game_theoretic_actions = {}
 
-    # NEW: Feature detection flags
     has_nested_sims = False
     has_grounded_variables = False
     has_components = False
@@ -962,6 +973,7 @@ async def get_simulation_analytics(filename: str):
             "elapsed_seconds": metadata.get("elapsed_seconds") if metadata else None,
             "started_at": metadata.get("started_at") if metadata else None,
             "completed_at": metadata.get("completed_at") if metadata else None,
+            "is_checkpoint": "_checkpoint_step" in safe_filename or "_EMERGENCY_CHECKPOINT" in safe_filename or "_WATCHDOG_EMERGENCY" in safe_filename,
             # Feature detection flags
             "has_nested_sims": has_nested_sims,
             "has_grounded_variables": has_grounded_variables,

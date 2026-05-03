@@ -22,9 +22,22 @@ function formatTime(ts: number): string {
 
 function lineColor(entry: LogEntry): string {
   if (entry.cat === 'llm') return 'text-blue-400';
-  if (entry.cat === 'debug') return 'text-gray-400';
-  if (entry.msg.startsWith('Entity ') && (entry.msg.includes(' observed: ') || entry.msg.includes(' chose action: ')))
-    return 'text-cyan-300';
+  if (entry.cat === 'debug') return 'text-gray-500';
+
+  const m = entry.msg;
+
+  if (m.startsWith('Entity ') && m.includes(' observed: ')) return 'text-cyan-300';
+  if (m.startsWith('Entity ') && m.includes(' chose action: ')) return 'text-emerald-400';
+
+  if (m.includes('[WARNING]') || m.includes('⚠️')) return 'text-yellow-400';
+  if (m.includes('[Analyzer]')) return 'text-purple-400';
+  if (m.includes('[WATCHDOG]')) return 'text-orange-400';
+
+  if (m.startsWith('✓') || m.includes('Completed') || m.includes('complete'))
+    return 'text-green-400';
+  if (m.startsWith('🔄') || m.startsWith('▶') || m.includes('Starting') || m.includes('Initializing'))
+    return 'text-amber-300';
+
   return 'text-gray-200';
 }
 
