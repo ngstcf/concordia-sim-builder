@@ -104,8 +104,10 @@ export default function SimulationAnalysis({ simulationId: propSimulationId, log
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    a.download = `simulation_analysis_${timestamp}.md`;
+    const base = logFilename
+      ? logFilename.replace(/\.html$/, '')
+      : `simulation_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+    a.download = `${base}_analysis.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
