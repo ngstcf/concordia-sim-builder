@@ -24,7 +24,7 @@ pip install beautifulsoup4 lxml
 Or install all backend dependencies:
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Usage

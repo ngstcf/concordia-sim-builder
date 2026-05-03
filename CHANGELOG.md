@@ -47,12 +47,12 @@ When upgrading gdm-concordia:
    git checkout -b test-concordia-upgrade
    ```
 
-2. **Update version in requirements-concordia.txt**
+2. **Update version in requirements.txt**
 
 3. **Install new version**
    ```bash
    source env/bin/activate
-   pip install -r requirements-concordia.txt
+   pip install -r requirements.txt
    ```
 
 4. **Run validation tests**
