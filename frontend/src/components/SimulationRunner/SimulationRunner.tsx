@@ -253,6 +253,7 @@ export default function SimulationRunner() {
   const [stepDataLog, setStepDataLog] = useState<Array<{ step: number; acting_entity: string; action: string }>>([]);
   const isStepControlled = config?.engine_type === 'step_controller';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [cachedAnalysis, setCachedAnalysis] = useState<any>(null);
   const [progress, setProgress] = useState<{
     step: number;
     max_steps: number;
@@ -315,6 +316,7 @@ export default function SimulationRunner() {
       timestamp: modified
     });
     setError(null);
+    setCachedAnalysis(null);
   };
 
   const handleRun = async () => {
@@ -323,6 +325,7 @@ export default function SimulationRunner() {
     setResults(null);
     setTaskId(null);
     setProgress(null);
+    setCachedAnalysis(null);
 
     // Check if there are agents before validating
     if (config.agents.length === 0 || !config.premise) {
@@ -1134,6 +1137,8 @@ export default function SimulationRunner() {
                     simulationId={results.task_id || null}
                     logFilename={results.log_filename || null}
                     llmSettings={llmSettings}
+                    cachedAnalysis={cachedAnalysis}
+                    onAnalysisComplete={setCachedAnalysis}
                   />
                 )}
 
