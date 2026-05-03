@@ -252,6 +252,7 @@ export default function SimulationRunner() {
   const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stopped' | null>(null);
   const [stepDataLog, setStepDataLog] = useState<Array<{ step: number; acting_entity: string; action: string }>>([]);
   const isStepControlled = config?.engine_type === 'step_controller';
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [progress, setProgress] = useState<{
     step: number;
     max_steps: number;
@@ -410,9 +411,9 @@ export default function SimulationRunner() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center pt-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Simulation Runner</h2>
           <p className="text-sm text-gray-500">
@@ -427,9 +428,31 @@ export default function SimulationRunner() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Settings & Config */}
-        <div className="lg:col-span-1 space-y-6">
+      <div className="flex gap-6 flex-1 mt-6">
+        {/* Left Column - Settings & Config (collapsible) */}
+        <div className={`transition-all duration-300 ease-in-out flex-shrink-0 ${sidebarCollapsed ? 'w-10' : 'w-80'}`}>
+          {/* Collapse/Expand toggle */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="mb-3 w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors border border-gray-200 bg-white"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+                </svg>
+                <span>Collapse</span>
+              </>
+            )}
+          </button>
+
+          {!sidebarCollapsed && (
+          <div className="space-y-6">
           {/* LLM Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200">
             <div className="px-5 py-4 border-b border-gray-200">
@@ -721,10 +744,12 @@ export default function SimulationRunner() {
 
           {/* Recent Simulations */}
           <RecentSimulations onLoadSimulation={handleLoadSimulation} />
+          </div>
+          )}
         </div>
 
         {/* Right Column - Results */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Validation Status */}
           {validation && (
             <div className={`rounded-xl p-4 ${validation.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
@@ -815,7 +840,7 @@ export default function SimulationRunner() {
 
           {/* Results */}
           {results && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
               {/* Timeout Warning Banner */}
               {!results.completed && (
                 <TimeoutWarning startTime={results.timestamp * 1000} timeout={SIMULATION_TIMEOUT} warningThreshold={WARNING_THRESHOLD} />
@@ -967,14 +992,14 @@ export default function SimulationRunner() {
               </div>
 
               {/* Tab Content */}
-              <div className="p-5">
+              <div className="p-5 flex-1 flex flex-col">
                 {activeTab === 'log' && results.results && (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
+                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                       <span className="text-xs font-medium text-gray-700">Simulation Log</span>
                       <span className="text-xs text-gray-500">Use tabs to switch views</span>
                     </div>
-                    <div className="bg-white" style={{ height: '500px' }}>
+                    <div className="bg-white flex-1 min-h-0">
                       <iframe
                         srcDoc={injectStyles(results.results)}
                         className="w-full h-full border-0"
