@@ -12,6 +12,10 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 
 **Documentation:** [c3.unu.edu/projects/ai/simulator/v2.4.html](https://c3.unu.edu/projects/ai/simulator/v2.4.html)
 
+**Guides:**
+- [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
+- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 31 templates with research setups and experiment suggestions
+
 ## Features
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
