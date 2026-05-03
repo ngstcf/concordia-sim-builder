@@ -4,8 +4,14 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { getComponentTemplates } from '../../utils/api';
+import { getComponentTemplates, getPrefabs, generateFormativeMemories } from '../../utils/api';
 import type { ScriptLine } from '../../types/simulation';
+
+interface PrefabInfo {
+  name: string;
+  description: string;
+  type: string;
+}
 
 interface AgentEditorProps {
   agentId: string;
@@ -25,7 +31,7 @@ interface ComponentConfig {
 }
 
 export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
-  const { config, updateAgent } = useSimulation();
+  const { config, updateAgent, llmSettings } = useSimulation();
   const agent = config.agents.find(a => a.id === agentId);
 
   const [name, setName] = useState(agent?.name || '');
@@ -42,13 +48,31 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     parameters: Record<string, any>;
     category: string;
   }>>([]);
+  const [entityPrefabs, setEntityPrefabs] = useState<PrefabInfo[]>([]);
+
+  // Prefab-specific parameters
+  const [observationHistoryLength, setObservationHistoryLength] = useState<number | undefined>(undefined);
+  const [situationPerceptionHistoryLength, setSituationPerceptionHistoryLength] = useState<number | undefined>(undefined);
+  const [personBySituationHistoryLength, setPersonBySituationHistoryLength] = useState<number | undefined>(undefined);
+  const [forceTimeHorizon, setForceTimeHorizon] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [fixedResponses, setFixedResponses] = useState<Array<{ key: string; value: string }>>([]);
+  const [reasoningSteps, setReasoningSteps] = useState<Array<{ question: string; answer_prefix: string; num_memories: number; add_to_memory: boolean }>>([]);
+  const [generatingBackstory, setGeneratingBackstory] = useState(false);
+  const [backstoryContext, setBackstoryContext] = useState('');
+  const [showBackstoryDialog, setShowBackstoryDialog] = useState(false);
 
   useEffect(() => {
-    // Load component templates
     getComponentTemplates().then(data => {
       setAvailableComponents(data.templates);
     }).catch(err => {
       console.error('Failed to load component templates:', err);
+    });
+
+    getPrefabs().then(data => {
+      setEntityPrefabs(data.entities);
+    }).catch(err => {
+      console.error('Failed to load prefabs:', err);
     });
   }, []);
 
@@ -72,10 +96,23 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
         setScriptPrompts([]);
       }
 
-      // Load existing component configurations (excluding script)
+      // Load prefab-specific params from components
+      const comps = agent.components || {};
+      setObservationHistoryLength(comps.observation_history_length as number | undefined);
+      setSituationPerceptionHistoryLength(comps.situation_perception_history_length as number | undefined);
+      setPersonBySituationHistoryLength(comps.person_by_situation_history_length as number | undefined);
+      setForceTimeHorizon(comps.force_time_horizon ? String(comps.force_time_horizon) : '');
+      setCustomInstructions((comps.custom_instructions as string) || '');
+      const fr = comps.fixed_responses as Record<string, string> | undefined;
+      setFixedResponses(fr ? Object.entries(fr).map(([key, value]) => ({ key, value })) : []);
+      const rs = comps.reasoning_steps as Array<any> | undefined;
+      setReasoningSteps(rs || []);
+
+      // Load existing component configurations (excluding script and prefab params)
+      const prefabParamKeys = ['script', 'observation_history_length', 'situation_perception_history_length', 'person_by_situation_history_length', 'force_time_horizon', 'custom_instructions', 'fixed_responses', 'reasoning_steps'];
       const existingComponents = agent.components || {};
       const componentEntries = Object.entries(existingComponents)
-        .filter(([key]) => key !== 'script')
+        .filter(([key]) => !prefabParamKeys.includes(key))
         .map(([key, value]) => ({
           templateId: key,
           name: key,
@@ -102,6 +139,28 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     componentConfigs.forEach(comp => {
       components[comp.templateId] = comp.parameters;
     });
+
+    // Add prefab-specific parameters
+    if (prefab === 'basic__Entity') {
+      if (observationHistoryLength !== undefined) components.observation_history_length = observationHistoryLength;
+      if (situationPerceptionHistoryLength !== undefined) components.situation_perception_history_length = situationPerceptionHistoryLength;
+      if (personBySituationHistoryLength !== undefined) components.person_by_situation_history_length = personBySituationHistoryLength;
+    }
+    if (prefab === 'basic_with_plan__Entity' && forceTimeHorizon) {
+      components.force_time_horizon = forceTimeHorizon;
+    }
+    if (prefab === 'minimal__Entity' && customInstructions) {
+      components.custom_instructions = customInstructions;
+    }
+    if (prefab === 'puppet__Entity' && fixedResponses.length > 0) {
+      const fr: Record<string, string> = {};
+      fixedResponses.forEach(({ key, value }) => { if (key.trim()) fr[key] = value; });
+      if (Object.keys(fr).length > 0) components.fixed_responses = fr;
+    }
+    if (prefab === 'minimal__Entity' && reasoningSteps.length > 0) {
+      const validSteps = reasoningSteps.filter(s => s.question.trim());
+      if (validSteps.length > 0) components.reasoning_steps = validSteps;
+    }
 
     updateAgent(agentId, {
       name,
@@ -170,6 +229,28 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     setComponentConfigs(componentConfigs.filter((_, i) => i !== index));
   };
 
+  const handleGenerateBackstory = async () => {
+    setGeneratingBackstory(true);
+    try {
+      const result = await generateFormativeMemories({
+        agent_name: name,
+        agent_context: backstoryContext,
+        shared_memories: config.shared_memories,
+        sentences_per_episode: 5,
+        llm_settings: llmSettings,
+      });
+      const existing = memories.trim();
+      const newMemories = result.memories.filter(m => m.trim());
+      setMemories(existing ? existing + '\n' + newMemories.join('\n') : newMemories.join('\n'));
+      setShowBackstoryDialog(false);
+      setBackstoryContext('');
+    } catch (err: any) {
+      alert('Backstory generation failed: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setGeneratingBackstory(false);
+    }
+  };
+
   const isScripted = prefab === 'basic_scripted__Entity' || prefab === 'context_aware_scripted__Entity';
 
   return (
@@ -199,19 +280,45 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               value={prefab}
               onChange={(e) => setPrefab(e.target.value)}
             >
-              <option value="basic__Entity">Basic Entity</option>
-              <option value="basic_with_plan__Entity">Entity with Plan</option>
-              <option value="basic_scripted__Entity">Scripted Entity (Exact Responses)</option>
-              <option value="context_aware_scripted__Entity">Scripted Entity (Context-Aware)</option>
-              <option value="minimal__Entity">Minimal Entity</option>
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              {isScripted && (
-                prefab === 'basic_scripted__Entity'
-                  ? 'Forces exact scripted responses regardless of context'
-                  : 'Adapts scripted prompts based on conversation context'
+              {entityPrefabs.length > 0 ? (
+                <>
+                  <optgroup label="Standard">
+                    {entityPrefabs.filter(p => ['basic__Entity', 'basic_with_plan__Entity', 'minimal__Entity'].includes(p.name)).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Scripted">
+                    {entityPrefabs.filter(p => p.name.includes('scripted')).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Specialized">
+                    {entityPrefabs.filter(p => ['conversational__Entity', 'rational__Entity', 'puppet__Entity', 'fake_assistant_with_configurable_system_prompt__Entity'].includes(p.name)).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '')}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Experimental">
+                    {entityPrefabs.filter(p => p.name.includes('image') || p.name.includes('companion')).map(p => (
+                      <option key={p.name} value={p.name}>{p.name.replace('__Entity', '').replace('__AICompanionEntity', ' (AI)').replace('__HumanUserEntity', ' (Human)')}</option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                <>
+                  <option value="basic__Entity">basic</option>
+                  <option value="basic_with_plan__Entity">basic_with_plan</option>
+                  <option value="basic_scripted__Entity">basic_scripted</option>
+                  <option value="context_aware_scripted__Entity">context_aware_scripted</option>
+                  <option value="minimal__Entity">minimal</option>
+                </>
               )}
-            </p>
+            </select>
+            {(() => {
+              const selected = entityPrefabs.find(p => p.name === prefab);
+              return selected ? (
+                <p className="mt-1 text-xs text-gray-500">{selected.description}</p>
+              ) : null;
+            })()}
           </div>
 
           {/* Goal */}
@@ -228,7 +335,50 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
 
           {/* Memories */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Pre-loaded Memories</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">Pre-loaded Memories</label>
+              <button
+                type="button"
+                onClick={() => setShowBackstoryDialog(!showBackstoryDialog)}
+                disabled={generatingBackstory || !name.trim()}
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingBackstory ? 'Generating...' : 'Generate Backstory'}
+              </button>
+            </div>
+
+            {showBackstoryDialog && (
+              <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-md">
+                <p className="text-xs text-gray-600 mb-2">
+                  Generate formative memories using LLM. Shared memories from the scenario will be included automatically.
+                </p>
+                <textarea
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm mb-2"
+                  value={backstoryContext}
+                  onChange={(e) => setBackstoryContext(e.target.value)}
+                  placeholder="Optional: Describe this character's background, role, or personality..."
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowBackstoryDialog(false); setBackstoryContext(''); }}
+                    className="text-xs px-3 py-1 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateBackstory}
+                    disabled={generatingBackstory}
+                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {generatingBackstory ? 'Generating...' : 'Generate'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <textarea
               rows={6}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 font-mono text-sm"
@@ -252,6 +402,264 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               Randomize action choices
             </label>
           </div>
+
+          {/* Prefab-Specific Settings */}
+          {(prefab === 'basic__Entity' || prefab === 'basic_with_plan__Entity' || prefab === 'minimal__Entity' || prefab === 'puppet__Entity') && (
+            <div className="border-t border-gray-200 pt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                <span className="flex items-center">
+                  <svg className="h-4 w-4 text-indigo-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Prefab Settings
+                  <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                    {prefab.replace('__Entity', '')}
+                  </span>
+                </span>
+              </label>
+
+              <div className="space-y-3 bg-indigo-50 p-3 rounded-md border border-indigo-200">
+                {/* basic__Entity: memory/perception history lengths */}
+                {prefab === 'basic__Entity' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Observation History Length</label>
+                      <input
+                        type="number" min={10} max={10000}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                        value={observationHistoryLength ?? ''}
+                        onChange={e => setObservationHistoryLength(e.target.value ? parseInt(e.target.value) : undefined)}
+                        placeholder="Default: 1000000"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-0.5">How many observations the agent retains in working memory.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Situation Perception Depth</label>
+                      <input
+                        type="number" min={1} max={100}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                        value={situationPerceptionHistoryLength ?? ''}
+                        onChange={e => setSituationPerceptionHistoryLength(e.target.value ? parseInt(e.target.value) : undefined)}
+                        placeholder="Default: 25"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-0.5">Memories retrieved when agent asks "What situation am I in?"</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Person-by-Situation Depth</label>
+                      <input
+                        type="number" min={1} max={50}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                        value={personBySituationHistoryLength ?? ''}
+                        onChange={e => setPersonBySituationHistoryLength(e.target.value ? parseInt(e.target.value) : undefined)}
+                        placeholder="Default: 5"
+                      />
+                      <p className="text-[11px] text-gray-500 mt-0.5">Memories retrieved when agent asks "What would someone like me do?"</p>
+                    </div>
+                  </>
+                )}
+
+                {/* basic_with_plan__Entity: force_time_horizon */}
+                {prefab === 'basic_with_plan__Entity' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Force Time Horizon</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                      value={forceTimeHorizon}
+                      onChange={e => setForceTimeHorizon(e.target.value)}
+                      placeholder='e.g., "the next 24 hours" (empty = LLM decides)'
+                    />
+                    <p className="text-[11px] text-gray-500 mt-0.5">Fixed time horizon for planning. Leave empty to let the agent decide dynamically.</p>
+                  </div>
+                )}
+
+                {/* minimal__Entity: custom_instructions */}
+                {prefab === 'minimal__Entity' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Custom Instructions</label>
+                    <textarea
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                      value={customInstructions}
+                      onChange={e => setCustomInstructions(e.target.value)}
+                      placeholder="Custom behavioral instructions for this agent (replaces default instructions)..."
+                    />
+                    <p className="text-[11px] text-gray-500 mt-0.5">Overrides the default instruction text. Use for highly customized agent behavior.</p>
+                  </div>
+                )}
+
+                {/* puppet__Entity: fixed_responses */}
+                {prefab === 'puppet__Entity' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-medium text-gray-700">Fixed Responses</label>
+                      <button
+                        type="button"
+                        onClick={() => setFixedResponses([...fixedResponses, { key: '', value: '' }])}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                      >
+                        + Add Response
+                      </button>
+                    </div>
+                    {fixedResponses.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">No fixed responses. Agent will use LLM for all actions.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {fixedResponses.map((fr, idx) => (
+                          <div key={idx} className="flex gap-2 items-start">
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                value={fr.key}
+                                onChange={e => {
+                                  const updated = [...fixedResponses];
+                                  updated[idx] = { ...fr, key: e.target.value };
+                                  setFixedResponses(updated);
+                                }}
+                                placeholder="Call-to-action trigger..."
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                value={fr.value}
+                                onChange={e => {
+                                  const updated = [...fixedResponses];
+                                  updated[idx] = { ...fr, value: e.target.value };
+                                  setFixedResponses(updated);
+                                }}
+                                placeholder="Fixed response..."
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFixedResponses(fixedResponses.filter((_, i) => i !== idx))}
+                              className="text-red-400 hover:text-red-600 text-xs p-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-gray-500 mt-1">Map call-to-action prompts to predetermined responses. Unmatched actions fall back to LLM.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Reasoning Steps - only for minimal__Entity */}
+          {prefab === 'minimal__Entity' && (
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  <span className="flex items-center">
+                    <svg className="h-4 w-4 text-amber-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Custom Reasoning Steps
+                    <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Cognition</span>
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setReasoningSteps([...reasoningSteps, { question: '', answer_prefix: '{agent_name} thinks: ', num_memories: 10, add_to_memory: false }])}
+                  className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                >
+                  + Add Step
+                </button>
+              </div>
+
+              {reasoningSteps.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">
+                  No custom reasoning steps. The agent uses default three-question reasoning.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {reasoningSteps.map((step, index) => (
+                    <div key={index} className="border border-amber-200 rounded-md p-3 bg-amber-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-amber-700">Step {index + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => setReasoningSteps(reasoningSteps.filter((_, i) => i !== index))}
+                          className="text-red-400 hover:text-red-600 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Question</label>
+                          <textarea
+                            rows={2}
+                            className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                            value={step.question}
+                            onChange={e => {
+                              const updated = [...reasoningSteps];
+                              updated[index] = { ...step, question: e.target.value };
+                              setReasoningSteps(updated);
+                            }}
+                            placeholder='e.g., "Who might betray {agent_name} in this situation?"'
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Answer Prefix</label>
+                            <input
+                              type="text"
+                              className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-xs"
+                              value={step.answer_prefix}
+                              onChange={e => {
+                                const updated = [...reasoningSteps];
+                                updated[index] = { ...step, answer_prefix: e.target.value };
+                                setReasoningSteps(updated);
+                              }}
+                              placeholder="{agent_name} thinks: "
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Memories to Retrieve</label>
+                            <input
+                              type="number" min={1} max={50}
+                              className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-xs"
+                              value={step.num_memories}
+                              onChange={e => {
+                                const updated = [...reasoningSteps];
+                                updated[index] = { ...step, num_memories: parseInt(e.target.value) || 10 };
+                                setReasoningSteps(updated);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 text-amber-600 rounded"
+                            checked={step.add_to_memory}
+                            onChange={e => {
+                              const updated = [...reasoningSteps];
+                              updated[index] = { ...step, add_to_memory: e.target.checked };
+                              setReasoningSteps(updated);
+                            }}
+                          />
+                          <label className="ml-2 text-xs text-gray-600">Save reasoning result to memory</label>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-2 text-xs text-gray-500">
+                Custom questions the agent asks itself each step. Use {'{agent_name}'} as a placeholder.
+              </p>
+            </div>
+          )}
 
           {/* Scripted Prompts - only shown for scripted entities */}
           {isScripted && (
@@ -368,13 +776,23 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
                 }}
               >
                 <option value="">+ Add Component...</option>
-                {availableComponents
-                  .filter(template => !componentConfigs.some(c => c.templateId === template.id))
-                  .map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
+                {(() => {
+                  const unused = availableComponents.filter(
+                    t => !componentConfigs.some(c => c.templateId === t.id)
+                  );
+                  const groups: Record<string, typeof unused> = {};
+                  unused.forEach(t => {
+                    const cat = t.category || 'General';
+                    (groups[cat] = groups[cat] || []).push(t);
+                  });
+                  return Object.entries(groups).map(([cat, templates]) => (
+                    <optgroup key={cat} label={cat}>
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  ));
+                })()}
               </select>
             </div>
 

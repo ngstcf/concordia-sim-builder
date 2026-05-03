@@ -4,6 +4,7 @@ Concordia Simulation Builder - FastAPI Backend
 Main application entry point.
 """
 import os
+import signal
 
 # Load environment variables from .env file FIRST
 # This must happen before any other imports that depend on debug_print
@@ -12,6 +13,10 @@ load_dotenv()
 
 # Fix tokenizers parallelism warning
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# Install stdout tee for log broadcasting to frontend
+from backend.utils.stdout_tee import install_tee
+install_tee()
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -36,7 +41,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Concordia Simulation Builder",
     description="API for building and running Concordia agent-based simulations",
-    version="1.0.0",
+    version="2.4.0",
     lifespan=lifespan
 )
 
@@ -58,7 +63,7 @@ async def root():
     """Root endpoint."""
     return {
         "message": "Concordia Simulation Builder API",
-        "version": "1.0.0",
+        "version": "2.4.0",
         "docs": "/docs",
         "endpoints": {
             "prefabs": "/api/simulations/prefabs",
@@ -74,6 +79,17 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.post("/api/server/shutdown")
+async def shutdown_server():
+    """Kill server + reloader parent immediately."""
+    ppid = os.getppid()
+    try:
+        os.kill(ppid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    os._exit(1)
 
 
 # Serve frontend static files in production

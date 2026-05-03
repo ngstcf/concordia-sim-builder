@@ -2,10 +2,10 @@
  * SimulationRunner Component
  * Run simulations and view results
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels } from '../../utils/api';
+import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -14,6 +14,8 @@ import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
+import LogViewer from './LogViewer';
+import type { LogEntry } from './LogViewer';
 
 // Inject CSS styles into Concordia HTML logs to improve readability
 function injectStyles(html: string): string {
@@ -242,13 +244,26 @@ function TimeoutWarning({ startTime, timeout, warningThreshold }: { startTime: n
 
 export default function SimulationRunner() {
   const navigate = useNavigate();
-  const { config, validation, setValidation, llmSettings, setLLMSettings } = useSimulation();
+  const { config, setConfig, validation, setValidation, llmSettings, setLLMSettings, gmLlmSettings, setGmLlmSettings } = useSimulation();
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stopped' | null>(null);
+  const [stepDataLog, setStepDataLog] = useState<Array<{ step: number; acting_entity: string; action: string }>>([]);
+  const isStepControlled = config?.engine_type === 'step_controller';
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [cachedAnalysis, setCachedAnalysis] = useState<any>(null);
+  const [simulationMeta, setSimulationMeta] = useState<{
+    llm_provider?: string;
+    llm_model?: string;
+    gm_llm_provider?: string | null;
+    gm_llm_model?: string | null;
+    elapsed_seconds?: number;
+    steps_completed?: number;
+  } | null>(null);
   const [progress, setProgress] = useState<{
     step: number;
     max_steps: number;
@@ -256,6 +271,8 @@ export default function SimulationRunner() {
     est_remaining: number;
     est_time_str: string;
   } | null>(null);
+  const [disconnected, setDisconnected] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Timeout warning state - track elapsed time for running simulations
   const SIMULATION_TIMEOUT = parseInt(import.meta.env.VITE_SIMULATION_TIMEOUT || '18000000', 10);
@@ -265,6 +282,135 @@ export default function SimulationRunner() {
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; [key: string]: any }>>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+
+  // GM model selection state
+  const [gmAvailableModels, setGmAvailableModels] = useState<Array<{ id: string; name: string; [key: string]: any }>>([]);
+  const [gmLoadingModels, setGmLoadingModels] = useState(false);
+  const [gmModelsError, setGmModelsError] = useState<string | null>(null);
+
+  // Live log streaming state
+  const [logConfig, setLogConfig] = useState<{ debug_enabled: boolean; llm_logging_enabled: boolean } | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const logEsRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    getLogConfig().then(setLogConfig).catch(() => {});
+  }, []);
+
+  const handleToggleLogs = useCallback(() => {
+    setShowLogs(prev => {
+      const next = !prev;
+      if (next) {
+        setLogEntries([]);
+        logEsRef.current = connectLogStream(
+          (entry) => setLogEntries(prev => {
+            const updated = [...prev, entry];
+            return updated.length > 600 ? updated.slice(-500) : updated;
+          }),
+          () => {},
+        );
+      } else {
+        logEsRef.current?.close();
+        logEsRef.current = null;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      logEsRef.current?.close();
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const startPollingRecovery = useCallback((tid: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    let failCount = 0;
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+    const stopPolling = (clearBanner = true) => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      if (clearBanner) setDisconnected(false);
+    };
+
+    const handleCompletion = async (data: any) => {
+      stopPolling();
+      if (data.log_filename) {
+        try {
+          const res = await fetch(`${API_BASE}/api/simulations/logs/${data.log_filename}`);
+          const logData = await res.json();
+          setResults({ ...data, results: logData.html_content, timestamp: logData.modified });
+        } catch {
+          setResults(data);
+        }
+      } else {
+        setResults(data);
+      }
+      setSimulationMeta({
+        llm_provider: data.llm_provider,
+        llm_model: data.llm_model,
+        gm_llm_provider: data.gm_llm_provider,
+        gm_llm_model: data.gm_llm_model,
+        elapsed_seconds: data.elapsed_seconds,
+        steps_completed: data.steps_completed,
+      });
+      setProgress(null);
+      setRunning(false);
+    };
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getSimulationStatus(tid);
+        failCount = 0;
+        if (status.status === 'completed' && status.completion_data) {
+          await handleCompletion(status.completion_data);
+        } else if (status.status === 'running' || status.status === 'cancelling') {
+          setProgress(prev => prev ? { ...prev, step: status.steps_completed } : null);
+        } else if (status.status === 'error' || status.status === 'cancelled') {
+          stopPolling();
+          setError(status.error || (status.status === 'cancelled' ? 'Simulation was cancelled' : 'Simulation failed'));
+          setProgress(null);
+          setRunning(false);
+        }
+      } catch (err: any) {
+        failCount++;
+        if (err?.response?.status === 404 || failCount >= 6) {
+          stopPolling();
+          setError('Connection lost and simulation status unavailable. Check Results page for saved output.');
+          setRunning(false);
+        }
+      }
+    }, 5000);
+  }, []);
+
+  // On mount: recover if a simulation is running (handles HMR / page refresh)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const allStatus = await getSimulationsStatus();
+        const tasks = Object.values(allStatus) as any[];
+        const runningSim = tasks.find((s: any) => s.status === 'running' || s.status === 'cancelling');
+        if (runningSim && !cancelled) {
+          setTaskId(runningSim.task_id);
+          setRunning(true);
+          setDisconnected(true);
+          setProgress({
+            step: runningSim.steps_completed || 0,
+            max_steps: runningSim.config?.max_steps || 0,
+            elapsed: 0,
+            est_remaining: 0,
+            est_time_str: 'Reconnecting...',
+          });
+          startPollingRecovery(runningSim.task_id);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [startPollingRecovery]);
 
   // Fetch available models when provider changes
   useEffect(() => {
@@ -302,6 +448,45 @@ export default function SimulationRunner() {
     fetchModels();
   }, [llmSettings.provider]);
 
+  // Fetch available models when GM provider changes
+  useEffect(() => {
+    if (!gmLlmSettings) {
+      setGmAvailableModels([]);
+      setGmModelsError(null);
+      return;
+    }
+
+    const fetchGmModels = async () => {
+      setGmLoadingModels(true);
+      setGmModelsError(null);
+
+      try {
+        const result = await getProviderModels(
+          gmLlmSettings.provider,
+          gmLlmSettings.api_key,
+          gmLlmSettings.base_url
+        );
+
+        if (result.error) {
+          setGmModelsError(result.error);
+          setGmAvailableModels([]);
+        } else {
+          setGmAvailableModels(result.models);
+          if (result.models.length > 0 && !result.models.find(m => m.id === gmLlmSettings.model_name)) {
+            setGmLlmSettings({ ...gmLlmSettings, model_name: result.models[0].id });
+          }
+        }
+      } catch (err: any) {
+        setGmModelsError(err.message || 'Failed to fetch models');
+        setGmAvailableModels([]);
+      } finally {
+        setGmLoadingModels(false);
+      }
+    };
+
+    fetchGmModels();
+  }, [gmLlmSettings?.provider]);
+
   const handleLoadSimulation = (htmlContent: string, filename: string, modified: number) => {
     setResults({
       results: htmlContent,
@@ -311,6 +496,23 @@ export default function SimulationRunner() {
       timestamp: modified
     });
     setError(null);
+    setCachedAnalysis(null);
+    setSimulationMeta(null);
+
+    getSimulationAnalytics(filename).then(analytics => {
+      const llm = analytics.llm;
+      const gmLlm = analytics.gm_llm;
+      if (llm || analytics.elapsed_seconds) {
+        setSimulationMeta({
+          llm_provider: llm?.provider,
+          llm_model: llm?.model,
+          gm_llm_provider: gmLlm?.provider,
+          gm_llm_model: gmLlm?.model,
+          elapsed_seconds: analytics.elapsed_seconds ?? undefined,
+          steps_completed: analytics.total_steps,
+        });
+      }
+    }).catch(() => {});
   };
 
   const handleRun = async () => {
@@ -319,6 +521,8 @@ export default function SimulationRunner() {
     setResults(null);
     setTaskId(null);
     setProgress(null);
+    setCachedAnalysis(null);
+    setSimulationMeta(null);
 
     // Check if there are agents before validating
     if (config.agents.length === 0 || !config.premise) {
@@ -343,6 +547,10 @@ export default function SimulationRunner() {
 
     setRunning(true);
     setCancelling(false);
+    setDisconnected(false);
+    setControllerState(null);
+    setStepDataLog([]);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     console.log('[handleRun] About to call executeSimulationStream');
 
     // Use streaming execution for progress updates
@@ -350,16 +558,28 @@ export default function SimulationRunner() {
       config,
       llmSettings,
       // onProgress
-      (progressData) => {
+      (progressData: any) => {
         console.log('[handleRun] onProgress callback called with:', progressData);
+        if (progressData.task_id) {
+          setTaskId(progressData.task_id);
+        }
         setProgress(progressData);
       },
       // onComplete
       (result) => {
         console.log('[handleRun] onComplete callback called');
         setResults(result);
+        setSimulationMeta({
+          llm_provider: result.llm_provider,
+          llm_model: result.llm_model,
+          gm_llm_provider: result.gm_llm_provider,
+          gm_llm_model: result.gm_llm_model,
+          elapsed_seconds: result.elapsed_seconds,
+          steps_completed: result.steps_completed,
+        });
         setProgress(null);
         setRunning(false);
+        setControllerState(null);
       },
       // onError
       (errMsg) => {
@@ -367,7 +587,33 @@ export default function SimulationRunner() {
         setError(errMsg);
         setProgress(null);
         setRunning(false);
-      }
+        setControllerState(null);
+      },
+      // onStepData
+      (data) => {
+        setStepDataLog(prev => [...prev, { step: data.step, acting_entity: data.acting_entity, action: data.action }]);
+      },
+      // onControllerState
+      (data) => {
+        setControllerState(data.state as 'playing' | 'paused' | 'stopped');
+        if (data.task_id) setTaskId(data.task_id);
+      },
+      // gmLlmSettings
+      gmLlmSettings,
+      // onDisconnect
+      () => {
+        setDisconnected(true);
+        setTaskId(prev => {
+          if (prev) {
+            startPollingRecovery(prev);
+          } else {
+            setError('Connection lost before simulation started. The simulation may still be running — check Results page.');
+            setRunning(false);
+            setDisconnected(false);
+          }
+          return prev;
+        });
+      },
     );
     console.log('[handleRun] executeSimulationStream completed');
   };
@@ -391,9 +637,9 @@ export default function SimulationRunner() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center pt-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Simulation Runner</h2>
           <p className="text-sm text-gray-500">
@@ -408,9 +654,31 @@ export default function SimulationRunner() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Settings & Config */}
-        <div className="lg:col-span-1 space-y-6">
+      <div className="flex gap-6 flex-1 mt-6">
+        {/* Left Column - Settings & Config (collapsible) */}
+        <div className={`transition-all duration-300 ease-in-out flex-shrink-0 ${sidebarCollapsed ? 'w-10' : 'w-80'}`}>
+          {/* Collapse/Expand toggle */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="mb-3 w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors border border-gray-200 bg-white"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+                </svg>
+                <span>Collapse</span>
+              </>
+            )}
+          </button>
+
+          {!sidebarCollapsed && (
+          <div className="space-y-6">
           {/* LLM Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200">
             <div className="px-5 py-4 border-b border-gray-200">
@@ -422,15 +690,20 @@ export default function SimulationRunner() {
                 <select
                   className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={llmSettings.provider}
-                  onChange={(e) => setLLMSettings({ ...llmSettings, provider: e.target.value as any })}
+                  onChange={(e) => {
+                    const provider = e.target.value as any;
+                    const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                    setLLMSettings({ ...llmSettings, provider, request_timeout: timeout });
+                  }}
                 >
-                  <option value="deepseek">DeepSeek</option>
                   <option value="openai">OpenAI</option>
-                  <option value="azure">Azure OpenAI</option>
                   <option value="gemini">Gemini</option>
                   <option value="anthropic">Anthropic</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="azure">Azure OpenAI</option>
                   <option value="glm">GLM (Zhipu AI)</option>
                   <option value="ollama">Ollama (Local)</option>
+                  <option value="ollama_remote">Ollama (Remote)</option>
                 </select>
               </div>
               <div>
@@ -520,6 +793,141 @@ export default function SimulationRunner() {
                   onChange={(e) => setLLMSettings({ ...llmSettings, max_tokens: parseInt(e.target.value) })}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Request Timeout (s)
+                  <span className="text-gray-400 ml-1" title="Max seconds to wait for each LLM response. Increase for slow models (e.g. Ollama Remote).">ⓘ</span>
+                </label>
+                <input
+                  type="number"
+                  step="10"
+                  min="10"
+                  max="600"
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={llmSettings.request_timeout}
+                  onChange={(e) => setLLMSettings({ ...llmSettings, request_timeout: parseInt(e.target.value) || 120 })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* GM Settings */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Game Master</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Early Termination Toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={config.game_master.allow_early_termination !== false}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    game_master: { ...config.game_master, allow_early_termination: e.target.checked }
+                  })}
+                />
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Allow early termination</span>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {config.game_master.allow_early_termination !== false
+                      ? 'GM can end the simulation before max steps'
+                      : 'Simulation always runs to max steps'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Separate GM LLM toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={gmLlmSettings !== null}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setGmLlmSettings({ ...llmSettings, temperature: 0.1 });
+                    } else {
+                      setGmLlmSettings(null);
+                    }
+                  }}
+                />
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Use separate LLM for GM</span>
+                  <p className="text-xs text-gray-400 mt-0.5">Different model for GM decisions (termination, turn order)</p>
+                </div>
+              </label>
+
+              {/* GM LLM provider/model selectors */}
+              {gmLlmSettings && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">GM Provider</label>
+                    <select
+                      className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={gmLlmSettings.provider}
+                      onChange={(e) => {
+                        const provider = e.target.value as any;
+                        const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                        setGmLlmSettings({ ...gmLlmSettings, provider, request_timeout: timeout });
+                      }}
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="azure">Azure OpenAI</option>
+                      <option value="glm">GLM (Zhipu AI)</option>
+                      <option value="ollama">Ollama (Local)</option>
+                      <option value="ollama_remote">Ollama (Remote)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">GM Model</label>
+                    {gmLoadingModels ? (
+                      <div className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 bg-gray-50 flex items-center">
+                        <svg className="animate-spin h-4 w-4 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-gray-500">Loading models...</span>
+                      </div>
+                    ) : gmModelsError ? (
+                      <div className="w-full">
+                        <select
+                          className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={gmLlmSettings.model_name}
+                          onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                        >
+                          <option value="">Custom model</option>
+                          {gmAvailableModels.map(model => (
+                            <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-amber-600">{gmModelsError}</p>
+                      </div>
+                    ) : gmAvailableModels.length > 0 ? (
+                      <select
+                        className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={gmLlmSettings.model_name}
+                        onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                      >
+                        {gmAvailableModels.map(model => (
+                          <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={gmLlmSettings.model_name}
+                        onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                        placeholder="Enter model name for GM"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -537,6 +945,72 @@ export default function SimulationRunner() {
               >
                 Run Simulation
               </button>
+            ) : isStepControlled && controllerState ? (
+              <div className="flex-1 space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => taskId && simulationPlay(taskId)}
+                    disabled={controllerState === 'playing'}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
+                      controllerState === 'playing'
+                        ? 'bg-green-200 text-green-500 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                  >
+                    <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                    Play
+                  </button>
+                  <button
+                    onClick={() => taskId && simulationPause(taskId)}
+                    disabled={controllerState === 'paused'}
+                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
+                      controllerState === 'paused'
+                        ? 'bg-yellow-200 text-yellow-500 cursor-not-allowed'
+                        : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                    }`}
+                  >
+                    <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    Pause
+                  </button>
+                  <button
+                    onClick={() => taskId && simulationStep(taskId)}
+                    disabled={controllerState === 'playing'}
+                    className="flex-1 py-2 px-4 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:bg-blue-300 disabled:cursor-not-allowed"
+                  >
+                    <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 15,12 5,21"/><rect x="16" y="3" width="3" height="18"/></svg>
+                    Step
+                  </button>
+                  <button
+                    onClick={() => taskId && simulationStop(taskId)}
+                    className="py-2 px-4 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-all"
+                  >
+                    <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                    Stop
+                  </button>
+                </div>
+                <div className={`text-center text-xs font-medium py-1.5 rounded-lg ${
+                  controllerState === 'paused' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                  controllerState === 'playing' ? 'bg-green-50 text-green-700 border border-green-200' :
+                  'bg-gray-50 text-gray-600 border border-gray-200'
+                }`}>
+                  {controllerState === 'paused' && 'Paused — click Step or Play to continue'}
+                  {controllerState === 'playing' && 'Running continuously...'}
+                  {controllerState === 'stopped' && 'Stopped'}
+                </div>
+                {stepDataLog.length > 0 && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">Step Log</p>
+                    {stepDataLog.map((entry, i) => (
+                      <div key={i} className="text-xs text-gray-700 py-1 border-b border-gray-100 last:border-0">
+                        <span className="font-mono text-gray-400 mr-2">#{entry.step}</span>
+                        <span className="font-semibold text-blue-700">{entry.acting_entity}</span>
+                        <span className="text-gray-400 mx-1">—</span>
+                        <span className="text-gray-600 truncate">{entry.action.slice(0, 120)}{entry.action.length > 120 ? '...' : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <button
@@ -616,10 +1090,12 @@ export default function SimulationRunner() {
 
           {/* Recent Simulations */}
           <RecentSimulations onLoadSimulation={handleLoadSimulation} />
+          </div>
+          )}
         </div>
 
         {/* Right Column - Results */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Validation Status */}
           {validation && (
             <div className={`rounded-xl p-4 ${validation.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
@@ -708,9 +1184,59 @@ export default function SimulationRunner() {
             </div>
           )}
 
+          {/* Connection Lost Banner */}
+          {disconnected && running && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+              <svg className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-semibold text-amber-800">Connection lost</h4>
+                <p className="text-xs text-amber-700 mt-1">
+                  The progress stream was interrupted. The simulation is still running on the server — polling for results every 5 seconds.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Live Logs */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleLogs}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                showLogs
+                  ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                  : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {showLogs ? 'Hide Live Logs' : 'Show Live Logs'}
+            </button>
+            {showLogs && (
+              <span className="text-[10px] text-gray-400">
+                Streaming backend terminal output
+              </span>
+            )}
+          </div>
+          {showLogs && (
+            <div className="space-y-3">
+              <LogViewer
+                title={logConfig?.debug_enabled ? 'System & Debug Log' : 'System Log'}
+                categories={logConfig?.debug_enabled ? ['system', 'debug'] : ['system']}
+                entries={logEntries}
+              />
+              {logConfig?.llm_logging_enabled && (
+                <LogViewer
+                  title="LLM Log"
+                  categories={['llm']}
+                  entries={logEntries}
+                />
+              )}
+            </div>
+          )}
+
           {/* Results */}
           {results && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
               {/* Timeout Warning Banner */}
               {!results.completed && (
                 <TimeoutWarning startTime={results.timestamp * 1000} timeout={SIMULATION_TIMEOUT} warningThreshold={WARNING_THRESHOLD} />
@@ -759,6 +1285,55 @@ export default function SimulationRunner() {
                     <span className="text-xs text-green-700 flex-1 min-w-0">
                       Log saved to <code className="bg-green-100 px-1.5 py-0.5 rounded text-xs break-all" style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{results.log_path}</code>
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Simulation Metadata Bar */}
+              {simulationMeta && (simulationMeta.llm_provider || simulationMeta.elapsed_seconds) && (
+                <div className="mx-5 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-600">
+                    {simulationMeta.llm_provider && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-gray-500">LLM:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.llm_provider}/{simulationMeta.llm_model}</span>
+                      </div>
+                    )}
+                    {simulationMeta.gm_llm_provider && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                        <span className="text-gray-500">GM:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.gm_llm_provider}/{simulationMeta.gm_llm_model}</span>
+                      </div>
+                    )}
+                    {simulationMeta.elapsed_seconds != null && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-gray-500">Duration:</span>
+                        <span className="font-medium text-gray-700">
+                          {simulationMeta.elapsed_seconds >= 60
+                            ? `${Math.floor(simulationMeta.elapsed_seconds / 60)}m ${Math.round(simulationMeta.elapsed_seconds % 60)}s`
+                            : `${Math.round(simulationMeta.elapsed_seconds)}s`
+                          }
+                        </span>
+                      </div>
+                    )}
+                    {simulationMeta.steps_completed != null && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        <span className="text-gray-500">Steps:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.steps_completed}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -847,19 +1422,29 @@ export default function SimulationRunner() {
                     >
                       Analysis
                     </button>
+                    <button
+                      onClick={() => setActiveTab('measurements')}
+                      className={`${
+                        activeTab === 'measurements'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
+                    >
+                      Component Logs
+                    </button>
                   </nav>
                 </div>
               </div>
 
               {/* Tab Content */}
-              <div className="p-5">
+              <div className="p-5 flex-1 flex flex-col">
                 {activeTab === 'log' && results.results && (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
+                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                       <span className="text-xs font-medium text-gray-700">Simulation Log</span>
                       <span className="text-xs text-gray-500">Use tabs to switch views</span>
                     </div>
-                    <div className="bg-white" style={{ height: '500px' }}>
+                    <div className="bg-white flex-1 min-h-0">
                       <iframe
                         srcDoc={injectStyles(results.results)}
                         className="w-full h-full border-0"
@@ -906,7 +1491,13 @@ export default function SimulationRunner() {
                     simulationId={results.task_id || null}
                     logFilename={results.log_filename || null}
                     llmSettings={llmSettings}
+                    cachedAnalysis={cachedAnalysis}
+                    onAnalysisComplete={setCachedAnalysis}
                   />
+                )}
+
+                {activeTab === 'measurements' && (
+                  <MeasurementsView filename={results.log_filename || null} />
                 )}
               </div>
 
@@ -936,6 +1527,74 @@ export default function SimulationRunner() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MeasurementsView({ filename }: { filename: string | null }) {
+  const [data, setData] = useState<Record<string, any[]> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!filename) return;
+    setLoading(true);
+    import('../../utils/api').then(({ getSimulationAnalytics }) => {
+      getSimulationAnalytics(filename).then(analytics => {
+        setData((analytics as any).measurements || {});
+      }).catch(() => setData({})).finally(() => setLoading(false));
+    });
+  }, [filename]);
+
+  const toggleChannel = (ch: string) => {
+    setExpandedChannels(prev => {
+      const next = new Set(prev);
+      next.has(ch) ? next.delete(ch) : next.add(ch);
+      return next;
+    });
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Loading measurements...</p>;
+  if (!data || Object.keys(data).length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-gray-500">No component measurement data available for this simulation.</p>
+        <p className="text-xs text-gray-400 mt-1">Measurements are captured when components publish data during execution.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500 mb-2">{Object.keys(data).length} measurement channel{Object.keys(data).length !== 1 ? 's' : ''} captured during simulation.</p>
+      {Object.entries(data).map(([channelName, entries]) => (
+        <div key={channelName} className="border border-gray-200 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleChannel(channelName)}
+            className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+          >
+            <span className="text-sm font-medium text-gray-700">{channelName}</span>
+            <span className="text-xs text-gray-400">{entries.length} entries {expandedChannels.has(channelName) ? '▲' : '▼'}</span>
+          </button>
+          {expandedChannels.has(channelName) && (
+            <div className="max-h-80 overflow-y-auto">
+              {entries.map((entry, idx) => (
+                <div key={idx} className={`px-4 py-2 text-xs font-mono ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-t border-gray-100`}>
+                  {typeof entry === 'object' ? (
+                    <div className="space-y-0.5">
+                      {Object.entries(entry).map(([k, v]) => (
+                        <div key={k}><span className="text-gray-500">{k}:</span> <span className="text-gray-800">{String(v)}</span></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-800">{String(entry)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

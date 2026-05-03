@@ -149,6 +149,7 @@ class NestedSimulationComponent(
         max_steps: int = 5,
         extraction_prompt: str = 'What were the key observations?',
         pre_act_label: str = '\nNested Simulation',
+        embedder: Any = None,
     ):
         """Initialize the nested simulation component.
 
@@ -159,15 +160,18 @@ class NestedSimulationComponent(
             max_steps: Maximum steps for nested simulation
             extraction_prompt: Prompt for extracting key observations
             pre_act_label: Label for pre-act output
+            embedder: Sentence embedder for building nested sim
         """
         self._model = model
         self._parent_context = parent_context
         self._nested_config = nested_config
-        self._max_steps = max_steps
+        self._max_steps = min(max_steps, 10)
         self._extraction_prompt = extraction_prompt
         self._pre_act_label = pre_act_label
         self._name = "nested_simulation"
         self._nested_result = None
+        self._embedder = embedder
+        self._has_run = False
 
     def get_name(self) -> str:
         """Return the component name."""
@@ -194,7 +198,13 @@ class NestedSimulationComponent(
         component_name: str,
         action_spec: Optional[entity_lib.ActionSpec] = None,
     ) -> str:
-        """Provide current state before acting."""
+        """Provide current state before acting. Triggers nested sim on first call."""
+        if not self._has_run and self._nested_config and self._embedder:
+            try:
+                self.run_nested_simulation(self._embedder)
+            except Exception as e:
+                self._nested_result = {'summary': f'Nested simulation failed: {e}', 'key_observations': [], 'outcome': ''}
+            self._has_run = True
         return self.get_state()
 
     def post_act(self, event: str) -> str:

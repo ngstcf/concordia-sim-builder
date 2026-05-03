@@ -4,8 +4,17 @@
  */
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { getPrefabs, getContribComponents } from '../../utils/api';
 import Editor from '@monaco-editor/react';
-import type { VariableConfig } from '../../types/simulation';
+import type { VariableConfig, ContribComponentConfig } from '../../types/simulation';
+import SceneEditor from './SceneEditor';
+import QuestionnaireBuilder from './QuestionnaireBuilder';
+
+interface PrefabInfo {
+  name: string;
+  description: string;
+  type: string;
+}
 
 interface VariableConfigWithId extends VariableConfig {
   id: string;
@@ -21,16 +30,41 @@ export default function GameMasterConfig() {
   const [showExample, setShowExample] = useState(false);
   const [showCriticalDecisions, setShowCriticalDecisions] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [showContribComponents, setShowContribComponents] = useState(false);
+  const [contribRegistry, setContribRegistry] = useState<Array<{
+    id: string; name: string; description: string; category: string;
+    params: Record<string, { type: string; default?: any; min?: number; max?: number; description?: string }>;
+  }>>([]);
+  const [gmPrefabs, setGmPrefabs] = useState<PrefabInfo[]>([]);
+
+  useEffect(() => {
+    getPrefabs().then(data => {
+      setGmPrefabs(data.game_masters);
+    }).catch(err => {
+      console.error('Failed to load GM prefabs:', err);
+    });
+    getContribComponents().then(data => {
+      setContribRegistry(data.components);
+    }).catch(err => {
+      console.error('Failed to load contrib components:', err);
+    });
+  }, []);
 
   // Sync variables with config when config changes externally
   useEffect(() => {
     if (config.game_master.grounded_variables) {
       setVariables(config.game_master.grounded_variables.map((v, i) => ({ ...v, id: `var-${i}` })));
     } else {
-      // Clear variables when template has none
       setVariables([]);
     }
   }, [config.game_master.grounded_variables]);
+
+  // Sync contrib components visibility when config changes externally
+  useEffect(() => {
+    if (config.game_master.contrib_components && config.game_master.contrib_components.length > 0) {
+      setShowContribComponents(true);
+    }
+  }, [config.game_master.contrib_components]);
 
   // Get critical decision points from game_master (can be at root level or in parameters)
   const getCriticalDecisionPoints = (): Array<{step: number; description: string; options: string[]}> => {
@@ -196,6 +230,34 @@ export default function GameMasterConfig() {
     });
   };
 
+  const contribComponents: ContribComponentConfig[] = config.game_master.contrib_components || [];
+
+  const addContribComponent = (componentId: string) => {
+    const entry = contribRegistry.find(c => c.id === componentId);
+    if (!entry) return;
+    const defaults: Record<string, any> = {};
+    for (const [key, schema] of Object.entries(entry.params)) {
+      if (schema.default !== undefined) defaults[key] = schema.default;
+    }
+    const updated = [...contribComponents, { component_id: componentId, params: defaults }];
+    setGameMaster({ ...config.game_master, contrib_components: updated });
+  };
+
+  const updateContribComponent = (index: number, params: Record<string, any>) => {
+    const updated = [...contribComponents];
+    updated[index] = { ...updated[index], params };
+    setGameMaster({ ...config.game_master, contrib_components: updated });
+  };
+
+  const removeContribComponent = (index: number) => {
+    const updated = contribComponents.filter((_, i) => i !== index);
+    setGameMaster({ ...config.game_master, contrib_components: updated.length > 0 ? updated : undefined });
+  };
+
+  const availableContribIds = contribRegistry
+    .filter(c => !contribComponents.some(cc => cc.component_id === c.id))
+    .map(c => c.id);
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h3 className="text-lg font-medium text-gray-900 mb-4">Game Master</h3>
@@ -226,11 +288,44 @@ export default function GameMasterConfig() {
             value={config.game_master.prefab}
             onChange={(e) => setGameMaster({ ...config.game_master, prefab: e.target.value })}
           >
-            <option value="generic__GameMaster">Generic (Narrative)</option>
-            <option value="dialogic__GameMaster">Dialogic (Conversation)</option>
-            <option value="game_theoretic_and_dramaturgic__GameMaster">Game-Theoretic</option>
-            <option value="interviewer__GameMaster">Interviewer</option>
+            {gmPrefabs.length > 0 ? (
+              <>
+                <optgroup label="Narrative">
+                  {gmPrefabs.filter(p => ['generic__GameMaster', 'dialogic__GameMaster', 'dialogic_and_dramaturgic__GameMaster', 'scripted__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Structured">
+                  {gmPrefabs.filter(p => ['game_theoretic_and_dramaturgic__GameMaster', 'interviewer__GameMaster', 'open_ended_interviewer__GameMaster', 'marketplace__GameMaster', 'psychology_experiment__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Situated">
+                  {gmPrefabs.filter(p => ['situated__GameMaster', 'situated_in_time_and_place__GameMaster', 'physically_situated_and_dramaturgic__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Simulation">
+                  {gmPrefabs.filter(p => ['async_social_media__GameMaster', 'space_ship__GameMaster'].includes(p.name)).map(p => (
+                    <option key={p.name} value={p.name}>{p.name.replace('__GameMaster', '')}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              <>
+                <option value="generic__GameMaster">generic</option>
+                <option value="dialogic__GameMaster">dialogic</option>
+                <option value="game_theoretic_and_dramaturgic__GameMaster">game_theoretic_and_dramaturgic</option>
+                <option value="interviewer__GameMaster">interviewer</option>
+              </>
+            )}
           </select>
+          {(() => {
+            const selected = gmPrefabs.find(p => p.name === config.game_master.prefab);
+            return selected ? (
+              <p className="mt-1 text-xs text-gray-500">{selected.description}</p>
+            ) : null;
+          })()}
         </div>
 
         {/* Acting Order */}
@@ -271,6 +366,16 @@ export default function GameMasterConfig() {
             </label>
           </div>
         </div>
+
+        {/* Scene Editor - for game-theoretic and situated GMs */}
+        {['game_theoretic_and_dramaturgic__GameMaster', 'physically_situated_and_dramaturgic__GameMaster', 'scripted__GameMaster'].includes(config.game_master.prefab) && (
+          <SceneEditor />
+        )}
+
+        {/* Questionnaire Builder - for interviewer GMs */}
+        {['interviewer__GameMaster', 'open_ended_interviewer__GameMaster'].includes(config.game_master.prefab) && (
+          <QuestionnaireBuilder />
+        )}
 
         {/* Grounded Variables - optional advanced feature */}
         <div>
@@ -472,6 +577,144 @@ export default function GameMasterConfig() {
               <p className="mt-3 text-xs text-gray-500 italic">
                 💡 Tip: Variables are automatically tracked and updated by the Game Master during the simulation.
               </p>
+            </div>
+          )}
+        </div>
+
+        {/* Contrib GM Components */}
+        <div>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+            <div className="flex items-start gap-2 min-w-0">
+              <svg className="h-4 w-4 text-indigo-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-medium text-gray-700">GM Components</span>
+                <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full flex-shrink-0">Advanced</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowContribComponents(!showContribComponents)}
+              className="text-sm text-blue-600 hover:text-blue-800 self-start sm:self-auto flex-shrink-0"
+            >
+              {showContribComponents ? '− Hide' : '+ Show'}
+            </button>
+          </div>
+
+          {showContribComponents && (
+            <div className="mt-3 bg-indigo-50 p-4 rounded-md border border-indigo-200">
+              <p className="text-xs text-gray-600 mb-3">
+                Add optional Concordia contrib components to enhance the Game Master with additional behaviors.
+              </p>
+
+              {availableContribIds.length > 0 && (
+                <div className="flex gap-2 mb-3">
+                  <select
+                    id="contrib-component-select"
+                    className="flex-1 border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a component...</option>
+                    {availableContribIds.map(id => {
+                      const entry = contribRegistry.find(c => c.id === id)!;
+                      return (
+                        <option key={id} value={id}>
+                          {entry.name} — {entry.description}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const select = document.getElementById('contrib-component-select') as HTMLSelectElement;
+                      if (select.value) {
+                        addContribComponent(select.value);
+                        select.value = '';
+                      }
+                    }}
+                    className="text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-md hover:bg-indigo-200 flex-shrink-0"
+                  >
+                    + Add
+                  </button>
+                </div>
+              )}
+
+              {contribComponents.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center py-2">
+                  No GM components added. Select one above to enhance your Game Master.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {contribComponents.map((cc, idx) => {
+                    const entry = contribRegistry.find(c => c.id === cc.component_id);
+                    if (!entry) return null;
+                    return (
+                      <div key={`${cc.component_id}-${idx}`} className="bg-white p-3 rounded-md border border-gray-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">{entry.name}</span>
+                            <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{entry.category}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeContribComponent(idx)}
+                            className="text-red-400 hover:text-red-600 p-1"
+                            title="Remove component"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">{entry.description}</p>
+
+                        {Object.keys(entry.params).length > 0 && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(entry.params).map(([paramKey, paramSchema]) => (
+                              <div key={paramKey} className={paramSchema.type === 'string' ? 'col-span-2' : ''}>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  {paramKey.replace(/_/g, ' ')}
+                                </label>
+                                {paramSchema.type === 'string' ? (
+                                  <input
+                                    type="text"
+                                    className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                    value={cc.params[paramKey] ?? paramSchema.default ?? ''}
+                                    onChange={(e) => updateContribComponent(idx, { ...cc.params, [paramKey]: e.target.value })}
+                                    placeholder={paramSchema.description}
+                                  />
+                                ) : paramSchema.type === 'float' ? (
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min={paramSchema.min}
+                                    max={paramSchema.max}
+                                    className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                    value={cc.params[paramKey] ?? paramSchema.default ?? 0}
+                                    onChange={(e) => updateContribComponent(idx, { ...cc.params, [paramKey]: parseFloat(e.target.value) || 0 })}
+                                  />
+                                ) : (
+                                  <input
+                                    type="number"
+                                    min={paramSchema.min}
+                                    max={paramSchema.max}
+                                    className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-xs"
+                                    value={cc.params[paramKey] ?? paramSchema.default ?? 0}
+                                    onChange={(e) => updateContribComponent(idx, { ...cc.params, [paramKey]: parseInt(e.target.value) || 0 })}
+                                  />
+                                )}
+                                {paramSchema.description && (
+                                  <p className="mt-0.5 text-xs text-gray-400">{paramSchema.description}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -126,16 +126,12 @@ class CustomGPTModel:
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
         timeout: float = 180.0,  # Per-request timeout (can be overridden via LLM_TIMEOUT env var)
-        max_retries: int = 2  # Retry attempts (can be overridden via LLM_MAX_RETRIES env var)
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 2,  # Retry attempts (can be overridden via LLM_MAX_RETRIES env var)
+        **kwargs,
     ) -> str:
-        """Sample text from the model with retry logic for transient errors and enforced timeout.
-
-        Timeout Behavior:
-        - Waits the FULL timeout duration before flagging an error
-        - Does NOT prematurely interrupt long-running requests
-        - If request completes at 179s (of 180s timeout) → SUCCESS
-        - If request completes at 181s (of 180s timeout) → RETRY
-        """
+        """Sample text from the model with retry logic for transient errors and enforced timeout."""
         import os
         from openai import APITimeoutError, AuthenticationError, RateLimitError, APIError
         from httpcore import ConnectTimeout, ConnectError
@@ -313,9 +309,12 @@ class GeminiModel:
         *,
         max_tokens: int = 2000,  # Match Concordia's DEFAULT_MAX_TOKENS
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
-        terminators: list[str] | None = None,  # Accept but ignore for compatibility
-        timeout: float = 60.0,  # Accept but ignore for compatibility
-        seed: int | None = None
+        terminators: list[str] | None = None,
+        timeout: float = 60.0,
+        seed: int | None = None,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        **kwargs,
     ) -> str:
         """Sample text from Gemini using the new google.genai package."""
         try:
@@ -330,10 +329,8 @@ class GeminiModel:
                 'max_output_tokens': actual_max_tokens,
                 'temperature': temperature,
             }
-            # Debug: log the config and prompt size
-            prompt_preview = prompt[:100] if len(prompt) > 100 else prompt
-            print(f"Gemini API call: model={self._model_name}, max_tokens={actual_max_tokens}, temp={temperature}")
-            print(f"Prompt preview: {prompt_preview}...")
+            llm_print(f"[LLM] Calling {self._model_name} with max_tokens={actual_max_tokens}, temp={temperature}")
+            call_start = time.time()
 
             response = self._client.models.generate_content(
                 model=self._model_name,
@@ -341,46 +338,22 @@ class GeminiModel:
                 config=config,
             )
 
-            # The response object is a GenerateContentResponse with a .text property
+            elapsed = time.time() - call_start
+
             if response is None:
-                print(f"⚠️  Warning: Model {self._model_name} returned None response")
-                print(f"    Max tokens: {actual_max_tokens}")
-                print(f"    Hint: Check API key and model name")
+                llm_print(f"[LLM] Warning: {self._model_name} returned None response after {elapsed:.1f}s")
                 return ""
 
-            # Try to get text using the .text property
-            # The .text property exists but might return None if there's no text content
             text = response.text
             if text:
+                llm_print(f"[LLM] Response received in {elapsed:.1f}s ({len(text)} chars)")
                 return text
 
-            # Fallback: debug and try to extract from candidates manually
-            print(f"⚠️  Warning: Model {self._model_name} returned empty response")
-            print(f"    Max tokens requested: {actual_max_tokens}")
-
-            finish_reason = "N/A"
-            if hasattr(response, 'candidates') and response.candidates:
-                candidate = response.candidates[0]
-                finish_reason = candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'
-
-            print(f"    Finish reason: {finish_reason}")
-
-            if finish_reason == "MAX_TOKENS":
-                print(f"    Hint: Try increasing max_tokens for this model")
-            else:
-                print(f"    Hint: Check prompt format and safety filters")
-
-            # Detailed debugging
-            print(f"    Response has candidates: {hasattr(response, 'candidates')}")
-            if hasattr(response, 'candidates'):
-                print(f"    Number of candidates: {len(response.candidates) if response.candidates else 0}")
-
+            llm_print(f"[LLM] Warning: {self._model_name} returned empty response after {elapsed:.1f}s")
             return ""
 
         except Exception as e:
-            print(f"Error in Gemini API call: {e}")
-            import traceback
-            traceback.print_exc()
+            llm_print(f"[LLM] Gemini error: {type(e).__name__}: {e}")
             raise
 
     def sample_choice(
@@ -434,8 +407,11 @@ class GLMModel:
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
-        timeout: float = 60.0,  # Accept for compatibility with Concordia API; timeout is set at client level
-        max_retries: int = 3
+        timeout: float = 60.0,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 3,
+        **kwargs,
     ) -> str:
         """Sample text from GLM model with retry logic."""
         from openai import APITimeoutError
@@ -447,17 +423,9 @@ class GLMModel:
         max_tokens = max(max_tokens, 2000)
 
         for attempt in range(max_retries):
+            attempt_start = time.time()
             try:
-                # Debug: Log prompt details for empty response investigation
-                if attempt == 0:
-                    print(f"\n{'='*60}")
-                    print(f"GLM API Call:")
-                    print(f"  Model: {self._model_name}")
-                    print(f"  Max tokens: {max_tokens}")
-                    print(f"  Temperature: {temperature}")
-                    print(f"  Prompt length: {len(prompt)} chars")
-                    print(f"  Prompt preview: {prompt[:300]}...")
-                    print(f"{'='*60}\n")
+                llm_print(f"[LLM] Calling {self._model_name} with max_tokens={max_tokens}, temp={temperature}")
 
                 response = self._client.chat.completions.create(
                     model=self._model_name,
@@ -466,45 +434,33 @@ class GLMModel:
                     temperature=temperature
                 )
 
-                # Debug: Log response details
-                if hasattr(response, 'usage'):
-                    print(f"GLM API Response: tokens_used={response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 'N/A'}")
-
+                elapsed = time.time() - attempt_start
                 content = response.choices[0].message.content
 
-                # Debug: Log if content is None/empty
-                if content is None:
-                    print(f"⚠️  Warning: Model {self._model_name} returned None content")
-                    print(f"    Max tokens: {max_tokens}")
-                    print(f"    Hint: Check API key and quota")
-                elif content.strip() == "":
-                    print(f"⚠️  Warning: Model {self._model_name} returned empty response")
-                    print(f"    Max tokens: {max_tokens}")
-                    print(f"    Hint: Try increasing max_tokens or check prompt format")
-
-                # Handle None or empty responses from GLM
                 if content is None or content.strip() == "":
                     if attempt < max_retries - 1:
-                        print(f"    Retrying... (attempt {attempt + 1}/{max_retries})")
+                        llm_print(f"[LLM] Warning: {self._model_name} returned empty response after {elapsed:.1f}s, retrying...")
                         time.sleep(1)
                         continue
                     else:
-                        print(f"    Using fallback after {max_retries} attempts")
+                        llm_print(f"[LLM] Warning: {self._model_name} returned empty after {max_retries} attempts")
                         return "(No response generated)"
+
+                llm_print(f"[LLM] Response received in {elapsed:.1f}s ({len(content)} chars)")
                 return content
 
             except (APITimeoutError, ConnectTimeout) as e:
+                elapsed = time.time() - attempt_start
                 if attempt < max_retries - 1:
                     wait_time = 5 * (2 ** attempt)
-                    print(f"GLM timeout on attempt {attempt + 1}/{max_retries}. "
-                          f"Retrying in {wait_time} seconds...")
+                    llm_print(f"[LLM] GLM timeout after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    print(f"GLM API error after {max_retries} retries: {e}")
+                    llm_print(f"[LLM] GLM error after {elapsed:.1f}s and {max_retries} retries: {e}")
                     raise
 
             except Exception as e:
-                print(f"GLM API error: {e}")
+                llm_print(f"[LLM] GLM error: {type(e).__name__}: {e}")
                 raise
 
     def sample_choice(
@@ -540,6 +496,13 @@ class AnthropicModel:
         self._client = Anthropic(api_key=api_key)
         self._model_name = model_name
 
+    def _supports_temperature(self) -> bool:
+        """Opus 4.7+ uses extended thinking and rejects the temperature parameter."""
+        m = self._model_name.lower()
+        if 'opus-4-7' in m or 'opus-4-8' in m or 'opus-4-9' in m:
+            return False
+        return True
+
     def sample_text(
         self,
         prompt: str,
@@ -548,8 +511,11 @@ class AnthropicModel:
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         seed: int | None = None,
         terminators: Sequence[str] | None = None,
-        timeout: float = 60.0,  # Accept for compatibility with Concordia API
-        max_retries: int = 3
+        timeout: float = 60.0,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        max_retries: int = 3,
+        **kwargs,
     ) -> str:
         """Sample text from Anthropic Claude with retry logic."""
         # Claude models have large context windows (200k tokens)
@@ -558,21 +524,21 @@ class AnthropicModel:
         max_tokens = max(max_tokens, 2000)
 
         for attempt in range(max_retries):
+            attempt_start = time.time()
             try:
-                # Build the message creation parameters
+                llm_print(f"[LLM] Calling {self._model_name} with max_tokens={max_tokens}, temp={temperature}")
+
                 params = {
                     "model": self._model_name,
                     "max_tokens": max_tokens,
-                    "temperature": temperature,
                     "messages": [{"role": "user", "content": prompt}]
                 }
 
-                # Anthropic supports the seed parameter for deterministic responses
+                if self._supports_temperature():
+                    params["temperature"] = temperature
+
                 if seed is not None:
                     params["seed"] = seed
-
-                # Note: Anthropic doesn't support stop sequences (terminators) in Messages API
-                # in the same way as OpenAI, so we ignore them for compatibility
 
                 response = self._client.messages.create(**params)
 
@@ -580,43 +546,38 @@ class AnthropicModel:
                 # Response format: {'content': [block1, block2, ...], ...}
                 # Blocks can be: TextBlock, ThinkingBlock, etc.
                 # We need to filter and concatenate only text blocks
+                elapsed = time.time() - attempt_start
+
                 if response.content and len(response.content) > 0:
                     text_parts = []
                     for block in response.content:
-                        # Handle different content block types
                         if hasattr(block, 'text'):
-                            # This is a TextBlock
                             text_parts.append(block.text)
                         elif hasattr(block, 'thinking'):
-                            # This is a ThinkingBlock - skip it
                             continue
                         else:
-                            # Unknown block type, try to get string representation
                             text_parts.append(str(block))
 
                     result = ''.join(text_parts)
                     if result:
+                        llm_print(f"[LLM] Response received in {elapsed:.1f}s ({len(result)} chars)")
                         return result
                     else:
-                        print(f"⚠️  Warning: Model {self._model_name} returned empty response")
-                        print(f"    Max tokens: {max_tokens}")
-                        print(f"    Hint: Check if prompt format is compatible with Claude API")
+                        llm_print(f"[LLM] Warning: {self._model_name} returned empty response after {elapsed:.1f}s")
                         return ""
                 else:
-                    print(f"⚠️  Warning: Model {self._model_name} returned empty content")
-                    print(f"    Max tokens: {max_tokens}")
-                    print(f"    Hint: Try increasing max_tokens or check API usage limits")
+                    llm_print(f"[LLM] Warning: {self._model_name} returned empty content after {elapsed:.1f}s")
                     return ""
 
             except Exception as e:
+                elapsed = time.time() - attempt_start
                 if attempt < max_retries - 1:
-                    # Exponential backoff
                     wait_time = 5 * (2 ** attempt)
-                    print(f"Anthropic API error on attempt {attempt + 1}/{max_retries}. "
-                          f"Retrying in {wait_time} seconds... Error: {e}")
+                    llm_print(f"[LLM] Anthropic error after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. "
+                          f"Retrying in {wait_time}s... Error: {e}")
                     time.sleep(wait_time)
                 else:
-                    print(f"Anthropic API error after {max_retries} retries: {e}")
+                    llm_print(f"[LLM] Anthropic error after {elapsed:.1f}s and {max_retries} retries: {e}")
                     raise
 
     def sample_choice(

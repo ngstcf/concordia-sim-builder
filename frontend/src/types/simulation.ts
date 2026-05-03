@@ -4,15 +4,17 @@
  */
 
 // Type aliases for string literals (better API compatibility than enums)
-export type EngineType = 'sequential' | 'simultaneous' | 'interview' | 'survey';
+export type EngineType = 'sequential' | 'simultaneous' | 'asynchronous' | 'step_controller' | 'interview' | 'survey';
 export type ActingOrder = 'fixed' | 'random' | 'game_master_choice';
-export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama';
+export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama' | 'ollama_remote';
 export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'observation' | 'step_end' | 'simulation_complete' | 'error';
 
 // Constants for enum-like usage
 export const EngineType = {
   SEQUENTIAL: 'sequential' as EngineType,
   SIMULTANEOUS: 'simultaneous' as EngineType,
+  ASYNCHRONOUS: 'asynchronous' as EngineType,
+  STEP_CONTROLLER: 'step_controller' as EngineType,
   INTERVIEW: 'interview' as EngineType,
   SURVEY: 'survey' as EngineType
 };
@@ -30,7 +32,8 @@ export const LLMProvider = {
   GEMINI: 'gemini' as LLMProvider,
   ANTHROPIC: 'anthropic' as LLMProvider,
   GLM: 'glm' as LLMProvider,
-  OLLAMA: 'ollama' as LLMProvider
+  OLLAMA: 'ollama' as LLMProvider,
+  OLLAMA_REMOTE: 'ollama_remote' as LLMProvider
 };
 
 export const EventType = {
@@ -82,6 +85,12 @@ export interface AgentConfig {
   nested_simulation?: NestedSimulationConfig;
 }
 
+// Contrib GM Component Configuration
+export interface ContribComponentConfig {
+  component_id: string;
+  params: Record<string, any>;
+}
+
 // Game Master Configuration
 export interface GameMasterConfig {
   prefab: string;
@@ -90,6 +99,8 @@ export interface GameMasterConfig {
   parameters: Record<string, any>;
   grounded_variables?: VariableConfig[];
   critical_decision_points?: CriticalDecisionPoint[];
+  contrib_components?: ContribComponentConfig[];
+  allow_early_termination?: boolean;
 }
 
 // Critical Decision Point
@@ -110,6 +121,7 @@ export interface SimulationConfig {
   game_master: GameMasterConfig;
   shared_memories: string[];
   player_specific_context?: Record<string, string>;
+  checkpoint_interval?: number;
 }
 
 // LLM Settings
@@ -122,6 +134,7 @@ export interface LLMSettings {
   temperature: number;
   max_tokens: number;
   api_version?: string;  // For Azure OpenAI
+  request_timeout: number;
 }
 
 // Execution Request
@@ -184,6 +197,26 @@ export interface SimulationTemplate {
   description: string;
   config: SimulationConfig;
   llm_settings: LLMSettings;
+}
+
+// Persona Generation
+export interface PersonaGenerationRequest {
+  context: string;
+  diversity_axes: string[];
+  num_personas: number;
+  num_memories: number;
+  llm_settings: LLMSettings;
+}
+
+export interface GeneratedPersona {
+  name: string;
+  goal: string;
+  memories: string[];
+  description: string;
+}
+
+export interface PersonaGenerationResponse {
+  personas: GeneratedPersona[];
 }
 
 // API Response wrappers

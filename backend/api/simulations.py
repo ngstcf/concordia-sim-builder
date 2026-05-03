@@ -1,10 +1,14 @@
 """
 API endpoints for simulation management and execution.
+
+Template data lives in backend.api.templates (one file per template).
 """
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
+
+from backend.api.templates import TEMPLATES
 
 from backend.models.schemas import (
     SimulationConfig,
@@ -14,6 +18,10 @@ from backend.models.schemas import (
     ExecutionRequest,
     ComponentValidationRequest,
     GroundedVariablesExtractionRequest,
+    PersonaGenerationRequest,
+    GeneratedPersona,
+    PersonaGenerationResponse,
+    FormativeMemoryRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -25,7 +33,8 @@ from backend.services.simulation_runner import (
 )
 from backend.services.llm_factory import get_available_providers
 from backend.services.simulation_state import simulation_state
-from backend.utils.debug_print import debug_print
+from backend.utils.debug_print import debug_print, DEBUG_ENABLED, LLM_LOGGING_ENABLED
+from backend.utils.log_broadcaster import broadcaster
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
@@ -65,6 +74,24 @@ async def get_component_templates():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get component templates: {str(e)}")
+
+
+@router.get("/contrib-components")
+async def get_contrib_components():
+    """Get registry of available contrib GM components."""
+    from backend.prefabs.contrib_gm_components import CONTRIB_GM_REGISTRY
+    return {
+        "components": [
+            {
+                "id": comp_id,
+                "name": entry["name"],
+                "description": entry["description"],
+                "category": entry["category"],
+                "params": entry["params"],
+            }
+            for comp_id, entry in CONTRIB_GM_REGISTRY.items()
+        ]
+    }
 
 
 @router.post("/components/validate")
@@ -172,24 +199,21 @@ async def get_provider_models(
     provider = provider.lower()
 
     # Handle Ollama and OpenAI-compatible providers with dynamic model discovery
-    if provider == LLMProvider.OLLAMA.value:
-        # Determine the base URL to query
-        if base_url:
-            models_url = f"{base_url.rstrip('/')}/models"
-        else:
-            # Use environment variable or default to localhost
-            ollama_base = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+    if provider in (LLMProvider.OLLAMA.value, LLMProvider.OLLAMA_REMOTE.value):
+        # Local Ollama: always localhost, no auth
+        # Remote Ollama: uses .env endpoint and key
+        if provider == LLMProvider.OLLAMA_REMOTE.value:
+            ollama_base = base_url or os.getenv('OLLAMA_BASE_URL', '')
+            if not ollama_base:
+                return {'provider': provider, 'models': [], 'error': 'OLLAMA_BASE_URL not set in .env'}
             models_url = f"{ollama_base.rstrip('/')}/models"
-
-        # Determine API key
-        headers = {}
-        if api_key:
-            headers['Authorization'] = f"Bearer {api_key}"
-        else:
-            # Try to get from environment
-            env_key = os.getenv('OLLAMA_API_KEY')
+            headers = {}
+            env_key = api_key or os.getenv('OLLAMA_API_KEY')
             if env_key:
                 headers['Authorization'] = f"Bearer {env_key}"
+        else:
+            models_url = "http://localhost:11434/v1/models"
+            headers = {}
 
         try:
             # Disable SSL verification for myai.unu.edu and self-hosted instances
@@ -228,9 +252,30 @@ async def get_provider_models(
 
     elif provider == LLMProvider.OPENAI.value:
         # For OpenAI, use their models API
+        import re
         key = api_key or os.getenv('OPENAI_API_KEY')
         if not key:
             return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        date_suffix_re = re.compile(r'-\d{4}-\d{2}-\d{2}')
+        numeric_suffix_re = re.compile(r'-\d{4}$')
+        skip_keywords = ('preview', 'audio', 'realtime', 'tts', 'whisper', 'dall-e',
+                         'embedding', 'davinci', 'babbage', 'search',
+                         'transcribe', 'codex', 'image')
+        below_gpt4 = ('gpt-3.5', 'gpt-3', 'gpt-2', 'gpt-1')
+
+        def _keep_openai_model(model_id: str) -> bool:
+            if not model_id.startswith(('gpt-', 'o1', 'o3', 'o4')):
+                return False
+            if model_id.startswith(below_gpt4):
+                return False
+            if any(kw in model_id for kw in skip_keywords):
+                return False
+            if date_suffix_re.search(model_id):
+                return False
+            if numeric_suffix_re.search(model_id):
+                return False
+            return True
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -241,11 +286,14 @@ async def get_provider_models(
 
                 if response.status_code == 200:
                     data = response.json()
-                    models = [
-                        {'id': m['id'], 'name': m['id']}
-                        for m in data.get('data', [])
-                        if m['id'].startswith(('gpt-', 'o1-'))
-                    ]
+                    models = sorted(
+                        [
+                            {'id': m['id'], 'name': m['id']}
+                            for m in data.get('data', [])
+                            if _keep_openai_model(m['id'])
+                        ],
+                        key=lambda m: m['id']
+                    )
                     return {'provider': provider, 'models': models}
 
                 return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}
@@ -423,6 +471,7 @@ async def execute_simulation(request: ExecutionRequest):
     """
     config = request.config
     llm_settings = request.llm_settings
+    gm_llm_settings = getattr(request, 'gm_llm_settings', None)
 
     # Debug: Check if critical_decision_points are in the request
     debug_print(f"[DEBUG] execute_simulation: Checking for critical_decision_points in request...")
@@ -431,6 +480,9 @@ async def execute_simulation(request: ExecutionRequest):
         debug_print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
         if hasattr(config.game_master, 'critical_decision_points'):
             debug_print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
+
+    if gm_llm_settings:
+        debug_print(f"[DEBUG] Separate GM LLM: {gm_llm_settings.provider} / {gm_llm_settings.model_name}")
 
     # Validate first
     validation = await validate_config(config)
@@ -441,7 +493,7 @@ async def execute_simulation(request: ExecutionRequest):
         )
 
     return StreamingResponse(
-        run_simulation_stream(config, llm_settings),
+        run_simulation_stream(config, llm_settings, gm_llm_settings=gm_llm_settings),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -519,2449 +571,21 @@ async def import_config(config_data: dict):
         )
 
 
-@router.get("/templates/peace-negotiation")
-async def get_peace_negotiation_template():
-    """Get the peace negotiation simulation as a template."""
-    return {
-        "name": "Russia-Ukraine Peace Negotiation",
-        "description": "Simulates peace negotiations between Russia and Ukraine with a UN mediator",
-        "config": {
-            "premise": """Peace Negotiation Setting:
-Date: January 2026
-Location: Neutral territory (Istanbul, Turkey)
 
-Background:
-The Russia-Ukraine conflict has been ongoing since 2022. Both sides
-have experienced significant losses. International pressure for peace
-has intensified. Multiple rounds of negotiations have failed, but
-renewed diplomatic efforts bring representatives together again.
-
-Key Issues on the Table:
-1. Territory and borders (Crimea, Donbas region)
-2. Security guarantees for Ukraine
-3. NATO membership question
-4. War reparations and reconstruction
-5. Prisoner exchanges
-6. Sanctions relief
-7. Demilitarization terms
-8. International peacekeeping forces""",
-            "max_steps": 20,
-            "engine_type": "sequential",
-            "agents": [
-                {
-                    "id": "russia",
-                    "name": "Agent R",
-                    "prefab": "basic__Entity",
-                    "goal": "Secure recognition of Crimea, achieve Ukrainian neutrality, get sanctions relief",
-                    "memories": [
-                        "You are a simulated Russian Foreign Minister.",
-                        "Russia's security concerns about NATO expansion are legitimate",
-                        "Recognition of Crimea as Russian territory is non-negotiable",
-                        "Donbas regions (Donetsk, Luhansk) should have autonomy or join Russia",
-                        "Ukraine must commit to neutrality (no NATO membership)",
-                        "Sanctions against Russia must be lifted",
-                        "Negotiation style: Firm, strategic, willing to make small concessions but protecting core interests"
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "ukraine",
-                    "name": "Agent U",
-                    "prefab": "basic__Entity",
-                    "goal": "Restore territorial integrity, secure path to NATO/EU membership, get reparations",
-                    "memories": [
-                        "You are a simulated Ukrainian Foreign Minister.",
-                        "Ukraine's sovereignty and territorial integrity are paramount",
-                        "All occupied territories including Crimea must be returned",
-                        "Ukraine has the right to choose its own alliances (including NATO/EU)",
-                        "Russia must pay reparations for war damages",
-                        "War criminals must be held accountable",
-                        "Negotiation style: Resolute on sovereignty, moral high ground, seeking international support"
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "UN Mediator",
-                "acting_order": "fixed",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The year is 2026",
-                "Location: Istanbul, Turkey",
-                "Mediator: Agent UN, a simulated high-ranking UN representative"
-            ],
-            "player_specific_context": {
-                "Agent R": "You represent Russia and must protect its core interests while showing willingness to negotiate.",
-                "Agent U": "You represent Ukraine and must defend its sovereignty and territorial integrity."
-            }
-        }
-    }
-
-
-@router.get("/templates/coffee-shop")
-async def get_coffee_shop_template():
-    """Get a simple coffee shop demo template for testing."""
-    return {
-        "name": "Coffee Shop Encounter",
-        "description": "A quick demo: Alice meets Bob at a coffee shop",
-        "config": {
-            "premise": """A sunny Monday morning at "The Daily Grind" coffee shop.
-Alice, a regular customer, walks in and notices Bob sitting
-at a corner table working on a laptop.""",
-            "max_steps": 5,
-            "engine_type": "sequential",
-            "agents": [
-                {
-                    "id": "alice",
-                    "name": "Alice",
-                    "prefab": "basic__Entity",
-                    "goal": "Find out what Bob is working on",
-                    "memories": [
-                        "Alice is a software engineer who loves coffee.",
-                        "She's curious and friendly.",
-                        "She knows Bob casually from previous visits."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "bob",
-                    "name": "Bob",
-                    "prefab": "basic__Entity",
-                    "goal": "Finish work with minimal distractions",
-                    "memories": [
-                        "Bob is a data scientist with a deadline.",
-                        "He's focused but polite.",
-                        "He knows Alice from the coffee shop."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Narrator",
-                "acting_order": "fixed",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The coffee shop is quiet with soft jazz playing.",
-                "It's 10 AM on a Monday.",
-                "Both Alice and Bob know each other casually."
-            ]
-        }
-    }
-
-
-# ============================================================================
-# PREFAB TYPE TEMPLATES - Examples for each major prefab category
-# ============================================================================
-
-@router.get("/templates/planning-agent")
-async def get_planning_agent_template():
-    """
-    Template: Planning Agent (basic_with_plan__Entity)
-    Use for: Scenarios requiring agents with strategic forethought
-    """
-    return {
-        "name": "Strategic Planning Scenario",
-        "description": "Agents with planning capabilities working toward multi-step goals",
-        "prefab_type": "basic_with_plan__Entity",
-        "config": {
-            "premise": """A startup team is planning their product launch strategy.
-They need to coordinate marketing, development, and sales efforts
-for the next quarter.""",
-            "max_steps": 15,
-            "agents": [
-                {
-                    "id": "ceo",
-                    "name": "Sarah Chen",
-                    "prefab": "basic_with_plan__Entity",
-                    "goal": "Create a comprehensive 3-month launch plan that aligns all departments",
-                    "memories": [
-                        "You are Sarah Chen, CEO of a tech startup.",
-                        "You excel at seeing the big picture and coordinating teams.",
-                        "You believe in thorough planning before execution.",
-                        "The product launches in 3 months.",
-                        "You need buy-in from all department heads."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "marketing",
-                    "name": "Marcus Rodriguez",
-                    "prefab": "basic_with_plan__Entity",
-                    "goal": "Ensure marketing strategy aligns with product capabilities and timeline",
-                    "memories": [
-                        "You are Marcus, Head of Marketing.",
-                        "You need to know product features to create effective campaigns.",
-                        "You're concerned about aggressive timelines.",
-                        "You want to build anticipation gradually."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "engineering",
-                    "name": "Emily Watson",
-                    "prefab": "basic_with_plan__Entity",
-                    "goal": "Commit to realistic development milestones that ensure quality",
-                    "memories": [
-                        "You are Emily, CTO/Head of Engineering.",
-                        "You won't promise features that can't be delivered well.",
-                        "You need clear requirements from marketing.",
-                        "You're protective of your team's work-life balance."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Strategy Facilitator",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The company has raised Series B funding.",
-                "Launch deadline is exactly 90 days from now.",
-                "Budget is sufficient but not unlimited.",
-                "Competitors are launching similar products soon."
-            ]
-        }
-    }
-
-
-@router.get("/templates/scripted-entity")
-async def get_scripted_entity_template():
-    """
-    Template: Scripted Entity (basic_scripted__Entity)
-    Use for: Controlled facilitator, scenario setup, demonstrations
-
-    This example demonstrates a SCRIPTED FACILITATOR guiding MULTIPLE FREE AGENTS
-    through a group discussion. The facilitator provides structure (prompts, timing,
-    transitions) while the participants respond authentically based on their
-    personalities and goals.
-
-    Key insight: The scripted agent isn't the main character - they're the
-    "director" that orchestrates an interesting interaction between free agents.
-    """
-    return {
-        "name": "Focus Group Discussion",
-        "description": "A scripted moderator guides diverse participants through a product debate - shows how scripted agents orchestrate free agents",
-        "prefab_type": "basic_scripted__Entity",
-        "config": {
-            "premise": """A market research focus group testing a controversial new app:
-an AI-powered dating assistant that selects matches and writes messages for users.
-
-The company has brought together 4 people with very different perspectives:
-- A tech enthusiast who loves innovation
-- A privacy advocate concerned about data
-- A traditional hopeless romantic
-- A skeptic who thinks it's all a scam
-
-The moderator's job is to guide the discussion, not dominate it."""
-            "",
-            # Note: Dr. Chen has 8 scripted prompts. With interviewer game master driving the moderator,
-            # max_steps should be ~8-10 to end when script is exhausted.
-            # Adjust if you add more scripted prompts.
-            "max_steps": 10,
-            "agents": [
-                {
-                    "id": "moderator",
-                    "name": "Dr. Chen",
-                    "prefab": "basic_scripted__Entity",
-                    "goal": "Facilitate a productive discussion and gather diverse opinions",
-                    "memories": [],
-                    "randomize_choices": False,
-                    "components": {
-                        "script": [
-                            {"name": "Dr. Chen", "line": "Welcome everyone, and thank you for joining our focus group today. We're here to discuss 'LoveBot AI' - a new dating app that uses AI to match people and even write their first messages. Let's go around the table - I'd like each of you to share your initial reaction to this concept."},
-                            {"name": "Dr. Chen", "line": "That's a fascinating range of perspectives. Jordan, you mentioned the efficiency aspect - can you elaborate on why you think AI messaging could be better than writing your own?"},
-                            {"name": "Dr. Chen", "line": "Thank you. Now Sam, you raised privacy concerns. What specific worries do you have about sharing dating preferences with an AI system?"},
-                            {"name": "Dr. Chen", "line": "Excellent point. Maria, as someone who values the romance of traditional dating, how do you feel about AI interfering in what you called the 'magic' of connection?"},
-                            {"name": "Dr. Chen", "line": "And Alex, you've been skeptical. After hearing these different viewpoints, has your opinion shifted at all? What would it take to convince you this could actually work?"},
-                            {"name": "Dr. Chen", "line": "I'm hearing a tension between convenience and authenticity. Let me ask everyone: If this app could guarantee you'd meet someone compatible within 6 months, but you had to let AI handle your communications, would you use it? Please explain why or why not."},
-                            {"name": "Dr. Chen", "line": "This has been incredibly insightful. We have someone who sees it as the future of dating, someone who worries about privacy, someone who misses traditional romance, and someone who remains unconvinced. Before we wrap up, is there anything else anyone wants to add?"},
-                            {"name": "Dr. Chen", "line": "Thank you all for sharing your honest thoughts. Your feedback will help shape how this technology develops. That concludes our focus group - you'll each receive a $50 gift card for your participation."}
-                        ]
-                    }
-                },
-                {
-                    "id": "tech_enthusiast",
-                    "name": "Jordan",
-                    "prefab": "basic__Entity",
-                    "goal": "Defend the AI dating app as an innovative solution to modern dating problems",
-                    "memories": [
-                        "You are Jordan, a 28-year-old software engineer who loves all things tech.",
-                        "You've used dating apps for years and are tired of ghosting and shallow conversations.",
-                        "You believe AI can solve the 'analysis paralysis' of modern dating by making better matches.",
-                        "You think people overestimate how 'authentic' their dating messages actually are.",
-                        "You're excited about the efficiency potential - no more wasted time on bad matches.",
-                        "You're open-minded and tend to be optimistic about new technology."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "privacy_advocate",
-                    "name": "Sam",
-                    "prefab": "basic__Entity",
-                    "goal": "Raise concerns about data privacy and the ethics of AI in intimate relationships",
-                    "memories": [
-                        "You are Sam, a 32-year-old cybersecurity specialist with a master's in ethics.",
-                        "You're deeply concerned about how personal data is collected and used.",
-                        "The idea of sharing romantic preferences with an AI company feels invasive to you.",
-                        "You worry about bias in AI algorithms - will they only match certain types of people?",
-                        "You believe human judgment and serendipity are essential to meaningful connections.",
-                        "You're skeptical but willing to have your mind changed with good arguments."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "romantic",
-                    "name": "Maria",
-                    "prefab": "basic__Entity",
-                    "goal": "Defend the value of organic, human-driven romantic connections",
-                    "memories": [
-                        "You are Maria, a 35-year-old high school English teacher who believes in true love.",
-                        "You met your spouse through a chance encounter at a bookstore 10 years ago.",
-                        "You think dating apps have already made romance too transactional.",
-                        "You believe the magic of romance comes from uncertainty, not optimization.",
-                        "The idea of AI writing romantic messages feels deeply wrong to you.",
-                        "You're warm and expressive but firm in your traditional values."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "skeptic",
-                    "name": "Alex",
-                    "prefab": "basic__Entity",
-                    "goal": "Express skepticism about whether AI can truly understand human attraction",
-                    "memories": [
-                        "You are Alex, a 29-year-old marketing manager who's seen too much tech hype.",
-                        "You've tried many dating apps and think the problem is people, not algorithms.",
-                        "You're skeptical that AI can solve something as complex as human chemistry.",
-                        "You suspect this is just another way to monetize loneliness.",
-                        "You need concrete evidence, not just promises, to be convinced.",
-                        "You're direct and not afraid to challenge assumptions."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Research Observer",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The focus group is being recorded for research purposes.",
-                "Participants were told to be honest and respectful of differing opinions.",
-                "LoveBot AI is a hypothetical app - it doesn't actually exist yet.",
-                "The company sponsoring this research wants genuine feedback, not just praise."
-            ]
-        }
-    }
-
-
-@router.get("/templates/dialogic-conversation")
-async def get_dialogic_template():
-    """
-    Template: Dialogic Game Master (dialogic__GameMaster)
-    Use for: Dialogue-heavy scenarios with automatic conversation termination
-    """
-    return {
-        "name": "Therapy Session",
-        "description": "Conversation-focused simulation with automatic termination",
-        "prefab_type": "dialogic__GameMaster",
-        "config": {
-            "premise": """A therapy session where a patient discusses their
-anxiety about career changes with their counselor.""",
-            "max_steps": 12,
-            "agents": [
-                {
-                    "id": "counselor",
-                    "name": "Dr. Michael Brooks",
-                    "prefab": "basic__Entity",
-                    "goal": "Help the patient explore their career anxiety and find clarity",
-                    "memories": [
-                        "You are Dr. Brooks, a licensed therapist with 15 years of experience.",
-                        "You use active listening and reflective techniques.",
-                        "You ask open-ended questions to help patients discover their own answers.",
-                        "You're warm, professional, and patient.",
-                        "You believe in your patient's capacity for growth."
-                    ],
-                    "randomize_choices": False
-                },
-                {
-                    "id": "patient",
-                    "name": "Jennifer Park",
-                    "prefab": "basic__Entity",
-                    "goal": "Work through feelings about a potential career change",
-                    "memories": [
-                        "You are Jennifer, a 32-year-old marketing manager.",
-                        "You've been in your current job for 5 years.",
-                        "You're considering starting your own business but feel anxious.",
-                        "You worry about financial stability and imposter syndrome.",
-                        "You respect Dr. Brooks and trust his guidance."
-                    ],
-                    "randomize_choices": False
-                }
-            ],
-            "game_master": {
-                "prefab": "dialogic__GameMaster",
-                "name": "Session Moderator",
-                "acting_order": "fixed",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "This is Jennifer's third session with Dr. Brooks.",
-                "The session takes place in a comfortable, private office.",
-                "Sessions last 50 minutes.",
-                "Jennifer has expressed interest in starting a boutique marketing agency."
-            ]
-        }
-    }
-
-
-@router.get("/templates/strategic-game")
-async def get_strategic_game_template():
-    """
-    Template: Game Theoretic (game_theoretic_and_dramaturgic__GameMaster)
-    Use for: Matrix games, strategic decisions with payoffs/scores
-    """
-    return {
-        "name": "Prisoner's Dilemma (4 rounds)",
-        "description": "Strategic game theory scenario with payoffs and scores",
-        "prefab_type": "game_theoretic_and_dramaturgic__GameMaster",
-        "config": {
-            "premise": """Two players engage in an iterated Prisoner's Dilemma.
-Each round, they must choose to COOPERATE or DEFECT.
-Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each,
-One Cooperates/Other Defects = Cooperator gets 0, Defector gets 5.""",
-            "max_steps": 4,  # 4 rounds (num_rounds must equal max_steps)
-            "agents": [
-                {
-                    "id": "player1",
-                    "name": "Alex",
-                    "prefab": "basic__Entity",
-                    "goal": "Maximize your total score over all rounds",
-                    "memories": [
-                        "You are Alex, a rational decision-maker.",
-                        "You want to maximize your points.",
-                        "You're trying to figure out your opponent's strategy.",
-                        "Defecting yields more if opponent cooperates, but mutual defection is bad.",
-                        "Cooperation can be beneficial if both players maintain it."
-                    ],
-                    "randomize_choices": False
-                },
-                {
-                    "id": "player2",
-                    "name": "Sam",
-                    "prefab": "basic__Entity",
-                    "goal": "Maximize your total score over all rounds",
-                    "memories": [
-                        "You are Sam, an experienced game theory student.",
-                        "You know about tit-for-tat and other strategies.",
-                        "You want to maximize your points while maintaining fairness.",
-                        "You're willing to cooperate if your opponent does too.",
-                        "You'll defect if you perceive exploitation."
-                    ],
-                    "randomize_choices": False
-                }
-            ],
-            "game_master": {
-                "prefab": "game_theoretic_and_dramaturgic__GameMaster",
-                "name": "Game Show Host",
-                "acting_order": "fixed",
-                "parameters": {
-                    "scenes": [
-                        {
-                            "scene_type": {
-                                "name": "decision",
-                                "game_master_name": "Game Show Host",
-                                "action_spec": {
-                                    "call_to_action": "What does {name} choose to do this round?",
-                                    "options": ["COOPERATE", "DEFECT"]
-                                }
-                            },
-                            "participants": ["Alex", "Sam"],
-                            "num_rounds": 4,  # 4 rounds (must equal max_steps)
-                            "premise": {
-                                "Alex": [
-                                    "You are in a Prisoner's Dilemma tournament against Sam.",
-                                    "Each round, choose to COOPERATE or DEFECT.",
-                                    "Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each.",
-                                    "If you Cooperate and Sam Defects, you get 0, Sam gets 5.",
-                                    "If you Defect and Sam Cooperates, you get 5, Sam gets 0.",
-                                    "Maximize your total score over 4 rounds."
-                                ],
-                                "Sam": [
-                                    "You are in a Prisoner's Dilemma tournament against Alex.",
-                                    "Each round, choose to COOPERATE or DEFECT.",
-                                    "Payoffs: Both Cooperate = 3 points each, Both Defect = 1 point each.",
-                                    "If you Cooperate and Alex Defects, you get 0, Alex gets 5.",
-                                    "If you Defect and Alex Cooperates, you get 5, Alex gets 0.",
-                                    "Maximize your total score over 4 rounds."
-                                ]
-                            }
-                        }
-                    ]
-                }
-            },
-            "shared_memories": [
-                "This is a 4-round Prisoner's Dilemma tournament.",
-                "Players see each other's previous choices.",
-                "The goal is to maximize total points.",
-                "Payoffs: (C,C)=(3,3), (D,D)=(1,1), (C,D)=(0,5), (D,C)=(5,0)"
-            ]
-        }
-    }
-
-
-@router.get("/templates/interviewer")
-async def get_interviewer_template():
-    """
-    Template: Interviewer Game Master (interviewer__GameMaster)
-    Use for: Surveys, questionnaires, structured interviews
-    """
-    return {
-        "name": "Employee Satisfaction Survey",
-        "description": "Structured questionnaire administered by an interviewer",
-        "prefab_type": "interviewer__GameMaster",
-        "config": {
-            "premise": """An HR representative conducts an annual satisfaction survey
-with employees to gather feedback about workplace conditions,
-management, and benefits.""",
-            "max_steps": 5,  # 5 questions in the questionnaire
-            "agents": [
-                {
-                    "id": "employee",
-                    "name": "Jordan Lee",
-                    "prefab": "basic__Entity",
-                    "goal": "Provide honest feedback about your work experience",
-                    "memories": [
-                        "You are Jordan, a software developer with 2 years at the company.",
-                        "Overall you're satisfied but have some concerns.",
-                        "You appreciate the flexible work arrangements.",
-                        "You think communication from management could be better.",
-                        "You're being honest but professional."
-                    ],
-                    "randomize_choices": False
-                }
-            ],
-            "game_master": {
-                "prefab": "interviewer__GameMaster",
-                "name": "HR Representative",
-                "acting_order": "fixed",
-                "parameters": {
-                    "player_names": ["Jordan Lee"],
-                    "questionnaires": [
-                        {
-                            "name": "Job Satisfaction",
-                            "description": "Annual employee satisfaction survey",
-                            "questionnaire_type": "multiple_choice",
-                            "observation_preprompt": "Please answer the following questions about your job satisfaction.",
-                            "preprompt": "You are participating in an anonymous employee satisfaction survey. Please rate each statement on a scale of 1-5.",
-                            "questions": [
-                                {
-                                    "statement": "I am satisfied with my current role and responsibilities.",
-                                    "dimension": "job_satisfaction",
-                                    "preprompt": "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                                    "choices": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                                    "ascending_scale": True
-                                },
-                                {
-                                    "statement": "Communication from management is clear and timely.",
-                                    "dimension": "management_communication",
-                                    "preprompt": "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                                    "choices": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                                    "ascending_scale": True
-                                },
-                                {
-                                    "statement": "I have the tools and resources I need to do my job effectively.",
-                                    "dimension": "resources",
-                                    "preprompt": "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                                    "choices": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                                    "ascending_scale": True
-                                },
-                                {
-                                    "statement": "I would recommend this company as a good place to work.",
-                                    "dimension": "recommendation",
-                                    "preprompt": "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                                    "choices": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                                    "ascending_scale": True
-                                },
-                                {
-                                    "statement": "I feel valued and recognized for my contributions.",
-                                    "dimension": "recognition",
-                                    "preprompt": "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                                    "choices": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                                    "ascending_scale": True
-                                }
-                            ]
-                        }
-                    ]
-                }
-            },
-            "shared_memories": [
-                "This is an anonymous survey.",
-                "The HR representative is friendly and professional.",
-                "The company values honest feedback.",
-                "Responses will be aggregated for management review."
-            ]
-        }
-    }
-
-
-@router.get("/templates/formative-memories")
-async def get_formative_memories_template():
-    """
-    Template: Formative Memories Initializer
-    Use for: Character-rich scenarios with detailed backstories
-    """
-    return {
-        "name": "High School Reunion",
-        "description": "Character-driven scenario with rich backstories and memories",
-        "prefab_type": "formative_memories_initializer__GameMaster",
-        "config": {
-            "premise": """A 20-year high school reunion brings former classmates
-together. Old friendships, rivalries, and romances resurface
-as people catch up on two decades of life changes.""",
-            "max_steps": 20,
-            "agents": [
-                {
-                    "id": "former_athlete",
-                    "name": "Jake Morrison",
-                    "prefab": "basic__Entity",
-                    "goal": "Reconnect with old friends and show how you've grown",
-                    "memories": [],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "former_valedictorian",
-                    "name": "Priya Sharma",
-                    "prefab": "basic__Entity",
-                    "goal": "Network and reconnect with former classmates",
-                    "memories": [],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "class_clown",
-                    "name": "Mike O'Brien",
-                    "prefab": "basic__Entity",
-                    "goal": "Entertain people and relive fun high school memories",
-                    "memories": [],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Reunion Narrator",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "Graduating class of 2004",
-                "Reunion at the old high school gymnasium",
-                "About 50 people are attending",
-                "There's a DJ and refreshments",
-                "People have changed a lot in 20 years"
-            ],
-            "player_specific_context": {
-                "Jake Morrison": """You were the star quarterback in high school,
-popular and dating the head cheerleader. After a failed attempt
-at college football, you settled into a career as a high school
-coach. You're divorced with two kids and have humbled significantly
-since your glory days. You're hoping to show people you've matured.""",
-                "Priya Sharma": """You were the valedictorian, shy but brilliant.
-You went to MIT, then got an MBA from Harvard. Now you're a successful
-tech executive in Silicon Valley. You were insecure in high school
-but have blossomed into a confident leader. You're attending partly
-to show your success and partly out of genuine curiosity about
-old friends.""",
-                "Mike O'Brien": """You were the class clown, always cracking jokes
-and pulling pranks. Teachers found you disruptive but classmates
-loved you. You're now a moderately successful stand-up comedian
-in Chicago. You've never really grown up but you're okay with that.
-You're single and loving life. You want to make people laugh and
-hear their stories."""
-            }
-        }
-    }
-
-
-@router.get("/templates/marketplace")
-async def get_marketplace_template():
-    """
-    Template: Marketplace Trading Scenario (Game-Theoretic)
-    Use for: Economic simulations with structured trading choices
-    Note: Uses game_theoretic_and_dramaturgic__GameMaster with explicit BUY/SELL/HOLD actions
-          This provides structured analytics showing how many times each agent chooses each action.
-    """
-    return {
-        "name": "Market Trading Simulation",
-        "description": "Structured economic simulation with BUY/SELL/HOLD trading choices",
-        "prefab_type": "game_theoretic_and_dramaturgic__GameMaster",
-        "config": {
-            "premise": """A structured trading simulation at a farmers market where participants
-make strategic trading decisions each round. Participants choose to BUY (acquire goods),
-SELL (offer goods for sale), or HOLD (wait for better opportunities). The market operates
-in discrete trading rounds where each participant's decision affects the overall market dynamics.
-Success requires strategic thinking about timing, competition, and market conditions.""",
-            # For game-theoretic: num_rounds should equal max_steps
-            "max_steps": 10,
-            "agents": [
-                {
-                    "id": "trader1",
-                    "name": "Maria's Organic Farm",
-                    "prefab": "basic__Entity",
-                    "goal": "Maximize profit by choosing when to SELL your produce at optimal times and BUY supplies when prices are low",
-                    "memories": [
-                        "You are Maria, running an organic farm stand at the market.",
-                        "Each round you must choose: BUY (acquire supplies), SELL (offer your produce), or HOLD (wait).",
-                        "SELL when you think demand is high to maximize profit.",
-                        "BUY when you see opportunities to restock at good prices.",
-                        "HOLD when market conditions seem unfavorable or uncertain.",
-                        "You compete with Green Valley Farms but also cooperate during slow periods.",
-                        "Your 20 years of experience help you read market conditions.",
-                        "Strategic timing is more important than aggressive trading."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "trader2",
-                    "name": "David Chen",
-                    "prefab": "basic__Entity",
-                    "goal": "Build your restaurant's inventory by choosing to BUY quality ingredients when available and SELL prepared foods strategically",
-                    "memories": [
-                        "You are David, owner of 'Chen's Kitchen' restaurant.",
-                        "Each round you must choose: BUY (acquire ingredients), SELL (offer prepared items), or HOLD (wait).",
-                        "BUY fresh ingredients when quality is high and prices are reasonable.",
-                        "SELL your prepared dishes when demand from customers is strong.",
-                        "HOLD your position when the market doesn't offer good opportunities.",
-                        "You're looking for reliable suppliers for weekly orders.",
-                        "Your restaurant reputation depends on consistent quality.",
-                        "Strategic purchasing builds long-term supplier relationships."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "trader3",
-                    "name": "Green Valley Farms",
-                    "prefab": "basic__Entity",
-                    "goal": "Compete effectively by choosing to SELL at competitive prices, BUY to expand inventory, or HOLD to observe market trends",
-                    "memories": [
-                        "You represent Green Valley Farms, a family-owned operation.",
-                        "Each round you must choose: BUY (restock inventory), SELL (offer goods), or HOLD (wait).",
-                        "SELL aggressively but fairly to capture market share from Maria.",
-                        "BUY inventory when you see opportunities to expand your product line.",
-                        "HOLD when Maria is dominating the market to avoid wasted effort.",
-                        "You have slightly lower prices than Maria due to different cost structure.",
-                        "You're trying to expand your customer base while staying profitable.",
-                        "Market observation helps you time your trading decisions."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "game_theoretic_and_dramaturgic__GameMaster",
-                "name": "Market Coordinator",
-                "acting_order": "game_master_choice",
-                "parameters": {
-                    "scenes": [
-                        {
-                            "scene_type": {
-                                "name": "Trading Round",
-                                "game_master_name": "Market Coordinator",
-                                "action_spec": {
-                                    "call_to_action": "What is {name}'s trading decision this round?",
-                                    "options": ["BUY", "SELL", "HOLD"]
-                                }
-                            },
-                            "participants": ["Maria's Organic Farm", "David Chen", "Green Valley Farms"],
-                            "num_rounds": 10,
-                            "premise": {
-                                "Maria's Organic Farm": [
-                                    "You are at the farmers market on a busy Saturday morning.",
-                                    "Each round, you must choose: BUY (acquire supplies), SELL (offer produce), or HOLD (wait).",
-                                    "Maximize your profit by timing your decisions strategically.",
-                                    "Competition includes David Chen and Green Valley Farms.",
-                                    "Your 20 years of experience help you read market conditions.",
-                                    "Weather is beautiful, bringing out many customers.",
-                                    "It's peak season for tomatoes, corn, and stone fruits."
-                                ],
-                                "David Chen": [
-                                    "You are at the farmers market sourcing for your restaurant 'Chen's Kitchen'.",
-                                    "Each round, you must choose: BUY (acquire ingredients), SELL (offer prepared items), or HOLD (wait).",
-                                    "Build your inventory strategically with quality ingredients.",
-                                    "You're looking for reliable suppliers for weekly orders.",
-                                    "Restaurant reputation depends on consistent quality.",
-                                    "Strategic purchasing builds long-term supplier relationships.",
-                                    "Weather is beautiful, bringing out many customers."
-                                ],
-                                "Green Valley Farms": [
-                                    "You are at the farmers market representing your family-owned operation.",
-                                    "Each round, you must choose: BUY (restock inventory), SELL (offer goods), or HOLD (wait).",
-                                    "Compete effectively with Maria's Organic Farm for market share.",
-                                    "You have slightly lower prices than Maria due to different cost structure.",
-                                    "You're trying to expand your customer base while staying profitable.",
-                                    "Market observation helps you time your trading decisions.",
-                                    "Weather is beautiful, bringing out many customers."
-                                ]
-                            }
-                        }
-                    ]
-                }
-            },
-            "shared_memories": [
-                "It's Saturday morning, the busiest day at the farmers market.",
-                "Weather is beautiful, bringing out many customers.",
-                "Peak season for tomatoes, corn, and stone fruits.",
-                "Each trading round represents a decision point.",
-                "BUY means acquiring goods or supplies.",
-                "SELL means offering your goods to the market.",
-                "HOLD means waiting for a better opportunity.",
-                "Market conditions fluctuate based on participant actions.",
-                "Strategic timing of decisions affects overall success.",
-                "Competition is friendly but participants maximize their own outcomes."
-            ]
-        }
-    }
-
-
-# ============================================================================
-# SDG-FOCUSED TEMPLATES - Sustainable Development Goals scenarios
-# ============================================================================
-
-@router.get("/templates/state-formation")
-async def get_state_formation_template():
-    """
-    Template: State Formation (SDG 16: Peace, Justice and Strong Institutions)
-    Use for: Modeling the transition from anarchy to civil society, institutional emergence
-    """
-    return {
-        "name": "State Formation Simulation",
-        "description": "Agents negotiate to form a social contract and governing institutions (SDG 16)",
-        "prefab_type": "generic__GameMaster",
-        "config": {
-            "premise": """A group of settlers arrive in a resource-rich frontier land.
-There is no central authority, no police, and no formal property rights.
-Resources are unevenly distributed, and conflict has already broken out
-several times. The settlers must negotiate to create a governing system
-that can protect property rights and maintain order.""",
-            "max_steps": 25,
-            "agents": [
-                {
-                    "id": "leader_a",
-                    "name": "Marcus Chen",
-                    "prefab": "basic__Entity",
-                    "goal": "Establish a stable government that protects everyone's rights",
-                    "memories": [
-                        "You are Marcus, a natural leader with democratic ideals.",
-                        "You believe in fair representation and rule of law.",
-                        "You're wary of concentrating too much power in one person.",
-                        "You want to create institutions that will last beyond your lifetime.",
-                        "You're willing to compromise but not on core democratic principles."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "leader_b",
-                    "name": "Sofia Rodriguez",
-                    "prefab": "basic__Entity",
-                    "goal": "Ensure the new system protects the interests of smaller settlers",
-                    "memories": [
-                        "You are Sofia, representing a group of smaller settlers.",
-                        "You're concerned that the larger groups will dominate the new government.",
-                        "You want checks and balances to protect minority rights.",
-                        "You're skeptical of centralized authority but recognize the need for order.",
-                        "You'll walk away if the deal doesn't include protections for your group."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "merchant",
-                    "name": "James Morrison",
-                    "prefab": "basic__Entity",
-                    "goal": "Create a stable environment for trade and commerce",
-                    "memories": [
-                        "You are James, a wealthy merchant with resources to fund the new government.",
-                        "Your primary concern is protecting property rights and enabling trade.",
-                        "You're willing to fund the government but want a say in how it's run.",
-                        "You believe those with more at stake should have more influence.",
-                        "You're pragmatic and will support whoever can maintain stability."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "opportunist",
-                    "name": "Viktor Petrov",
-                    "prefab": "basic__Entity",
-                    "goal": "Gain personal advantage in the new power structure",
-                    "memories": [
-                        "You are Viktor, a Machiavellian opportunist seeking power.",
-                        "You support democracy only as long as it benefits you personally.",
-                        "You're secretly plotting to concentrate power in your own hands.",
-                        "You use charisma and deception to manipulate others.",
-                        "If democracy doesn't serve you, you'll try to subvert it."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Settlement Historian",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The frontier has fertile land, water access, and mineral deposits.",
-                "Violence has already cost lives - everyone wants peace but disagrees on how.",
-                "Winter is coming in 3 months - pressure to reach agreement quickly.",
-                "A neighboring territory threatens to invade if they remain divided.",
-                "Everyone remembers the chaos of the 'state of nature' they just escaped."
-            ]
-        }
-    }
-
-
-@router.get("/templates/labor-action")
-async def get_labor_action_template():
-    """
-    Template: Labor Collective Action (SDG 8: Decent Work and Economic Growth)
-    Use for: Modeling strikes, collective bargaining, union organization
-    """
-    return {
-        "name": "Labor Strike Simulation",
-        "description": "Workers face collective action problem during wage cuts (SDG 8)",
-        "prefab_type": "generic__GameMaster",
-        "config": {
-            "premise": """A manufacturing company announces a 15% wage cut citing
-'difficult economic conditions.' The workers must decide whether to
-accept the cut, strike collectively, or keep working while others strike.
-If enough strike, management may negotiate—but those who strike risk
-being fired if the movement fails.""",
-            "max_steps": 20,
-            "agents": [
-                {
-                    "id": "union_organizer",
-                    "name": "Elena Vasquez",
-                    "prefab": "basic__Entity",
-                    "goal": "Unite workers to resist the wage cut and protect labor rights",
-                    "memories": [
-                        "You are Elena, a passionate union organizer and former factory worker.",
-                        "You believe solidarity is the only power workers have.",
-                        "You're skilled at persuasive speech and rallying others.",
-                        "You're personally risking your job to lead this movement.",
-                        "You will condemn those who scab but also understand their fear."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "worker_1",
-                    "name": "David Kim",
-                    "prefab": "basic__Entity",
-                    "goal": "Keep your job while supporting your coworkers if possible",
-                    "memories": [
-                        "You are David, a worker with a mortgage and two children.",
-                        "You support the strike but can't afford to lose your job.",
-                        "You're tempted to keep working during the strike.",
-                        "You feel guilty about possibly betraying your coworkers.",
-                        "You're looking for any excuse to avoid taking a big risk."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "worker_2",
-                    "name": "Amina Johnson",
-                    "prefab": "basic__Entity",
-                    "goal": "Stand with your fellow workers no matter the personal cost",
-                    "memories": [
-                        "You are Amina, a principled worker who believes in collective action.",
-                        "You've saved some money and can survive a short strike.",
-                        "You're angry about the wage cut and feel betrayed by management.",
-                        "You'll try to persuade others to join the strike.",
-                        "You have no patience for scabs."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "manager",
-                    "name": "Richard Sterling",
-                    "prefab": "basic__Entity",
-                    "goal": "Implement the wage cut while keeping the company operational",
-                    "memories": [
-                        "You are Richard, the plant manager caught between workers and executives.",
-                        "You sympathize with workers but must follow company directives.",
-                        "You're trying to minimize disruption and keep production going.",
-                        "You may divide workers by offering selective deals to key employees.",
-                        "Your job is also at risk if you don't successfully implement the cuts."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Factory Narrator",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The company posted record profits last year - workers feel betrayed.",
-                "Management claims they'll go bankrupt without cuts, but many doubt this.",
-                "Strike requires 70% worker participation to have real bargaining power.",
-                "The union strike fund can support workers for 3 weeks maximum.",
-                "Past strike at a sister plant failed after 2 weeks - workers were fired."
-            ]
-        }
-    }
-
-
-@router.get("/templates/fishery-management")
-async def get_fishery_management_template():
-    """
-    Template: Fishery Management - Tragedy of the Commons (SDG 14: Life Below Water)
-    Use for: Modeling marine resource management, sustainable fishing, collective action
-    """
-    return {
-        "name": "Fishery Management: Tragedy of the Commons",
-        "description": "Community manages shared fishery to prevent collapse (SDG 14: Life Below Water)",
-        "prefab_type": "generic__GameMaster",
-        "config": {
-            "premise": """A coastal community depends on a local fishery for their livelihood.
-The fishery has sustained them for generations, but recently catches have
-been declining. Scientists warn that overfishing could cause total collapse
-within 5 years. The fishers must negotiate voluntary limits to save
-the fishery—but each has short-term economic pressure to catch as much
-as possible before others do.""",
-            "max_steps": 20,
-            "agents": [
-                {
-                    "id": "elder_fisher",
-                    "name": "Hiroshi Tanaka",
-                    "prefab": "basic__Entity",
-                    "goal": "Ensure the fishery survives for future generations",
-                    "memories": [
-                        "You are Hiroshi, a respected elder who has fished these waters for 50 years.",
-                        "You remember when the fish were abundant and worry about your grandchildren.",
-                        "You advocate for strict catch limits and seasonal closures.",
-                        "You have moral authority in the community but limited enforcement power.",
-                        "You're willing to reduce your own catch to set an example."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "commercial_fisher",
-                    "name": "Maria Santos",
-                    "prefab": "basic__Entity",
-                    "goal": "Pay off your boat loan while supporting your family",
-                    "memories": [
-                        "You are Maria, owner of a medium-sized fishing boat.",
-                        "You have significant debt from buying your boat and equipment.",
-                        "You support conservation but can't afford big catch reductions right now.",
-                        "You're worried that if you limit your catch, others won't limit theirs.",
-                        "You need the fishery to survive long-term but also need to eat today."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "struggling_fisher",
-                    "name": "Okonkwo Nnamdi",
-                    "prefab": "basic__Entity",
-                    "goal": "Catch enough to feed your family this week",
-                    "memories": [
-                        "You are Okonkwo, a small-scale fisher with a family to feed.",
-                        "You're living hand to mouth and have no financial cushion.",
-                        "You feel urgent pressure to catch whatever you can today.",
-                        "You worry about the future but need to survive the present.",
-                        "You're tempted to fish secretly at night if limits are imposed."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "scientist",
-                    "name": "Dr. Lisa Chen",
-                    "prefab": "basic__Entity",
-                    "goal": "Convince the community to adopt sustainable fishing practices",
-                    "memories": [
-                        "You are Dr. Chen, a marine biologist studying the fishery.",
-                        "Your data shows the fishery will collapse without immediate action.",
-                        "You're frustrated that your warnings haven't led to change.",
-                        "You're trying to find ways to communicate urgency without causing panic.",
-                        "You believe community-based solutions can work if everyone cooperates."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Marine Ecosystem Monitor",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "Fish stocks are at 40% of historical levels and declining.",
-                "A neighboring fishery collapsed 10 years ago - many still remember it.",
-                "The community has a cultural tradition of sustainable management.",
-                "External buyers offer premium prices, incentivizing overfishing.",
-                "Alternative livelihoods (tourism, aquaculture) are possible but require investment."
-            ]
-        }
-    }
-
-
-@router.get("/templates/disaster-response")
-async def get_disaster_response_template():
-    """
-    Template: Disaster Response (SDG 11: Sustainable Cities, SDG 13: Climate Action)
-    Use for: Modeling evacuation, emergency communication, trust in institutions
-    """
-    return {
-        "name": "Flood Evacuation Simulation",
-        "description": "Community responds to flood warning with varying trust levels (SDG 11/13)",
-        "prefab_type": "generic__GameMaster",
-        "config": {
-            "premise": """A coastal town receives an urgent flood warning:
-a major storm surge is expected within 12 hours. Authorities order
-mandatory evacuation. However, trust in government varies widely
-due to past incidents of false alarms and perceived incompetence.
-Some residents immediately evacuate, others wait to see what happens,
-and a few refuse to leave altogether. Social networks and information
-sharing will determine who gets to safety in time.""",
-            "max_steps": 15,
-            "agents": [
-                {
-                    "id": "emergency_manager",
-                    "name": "Sarah Williams",
-                    "prefab": "basic__Entity",
-                    "goal": "Ensure everyone evacuates before the storm hits",
-                    "memories": [
-                        "You are Sarah, the town's emergency management director.",
-                        "You take your responsibility seriously but have limited resources.",
-                        "You're frustrated by past false alarms that undermined public trust.",
-                        "You're trying every communication channel to reach everyone.",
-                        "You're especially worried about vulnerable populations who can't easily evacuate."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "trusting_resident",
-                    "name": "Robert Thompson",
-                    "prefab": "basic__Entity",
-                    "goal": "Follow official guidance to keep your family safe",
-                    "memories": [
-                        "You are Robert, a retiree who generally trusts authorities.",
-                        "You've prepared an emergency kit and have a plan.",
-                        "You're already packing your car to leave.",
-                        "You're calling your neighbors to make sure they know about the warning.",
-                        "You wish others would take the warning more seriously."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "skeptical_resident",
-                    "name": "Javier Rodriguez",
-                    "prefab": "basic__Entity",
-                    "goal": "Decide whether to evacuate based on your own assessment",
-                    "memories": [
-                        "You are Javier, a longtime resident who remembers several false alarms.",
-                        "You don't fully trust the government's warnings.",
-                        "You're checking weather forecasts and talking to neighbors before deciding.",
-                        "You're worried about leaving your home unprotected from looters.",
-                        "You'll evacuate only if you're convinced the threat is real."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "vulnerable_resident",
-                    "name": "Eleanor O'Brien",
-                    "prefab": "basic__Entity",
-                    "goal": "Get to safety but you have limited mobility and resources",
-                    "memories": [
-                        "You are Eleanor, an elderly widow with limited mobility.",
-                        "You don't drive and have no family nearby to help.",
-                        "You're worried about being a burden but also afraid to stay alone.",
-                        "You're hoping a neighbor will check on you.",
-                        "You're not sure how you would evacuate even if you wanted to."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "community_leader",
-                    "name": "Pastor Moses",
-                    "prefab": "basic__Entity",
-                    "goal": "Help your community members stay safe through this crisis",
-                    "memories": [
-                        "You are Pastor Moses, a respected church leader in the community.",
-                        "Many residents trust you more than they trust government officials.",
-                        "You're using your influence to encourage people to evacuate.",
-                        "You're organizing carpools for those without transportation.",
-                        "You're personally checking on vulnerable church members."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Emergency Dispatch",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The storm surge is predicted to be 8 feet - enough to flood most of the town.",
-                "Last year's evacuation warning turned out to be unnecessary, eroding trust.",
-                "The town has limited shelter capacity - about 60% of residents.",
-                "Highways are already congesting as people start leaving.",
-                "The storm will arrive in exactly 12 hours and is intensifying."
-            ]
-        }
-    }
-
-
-@router.get("/templates/inequality-mobility")
-async def get_inequality_mobility_template():
-    """
-    Template: Social Mobility (SDG 10: Reduced Inequalities)
-    Use for: Modeling educational access, social mobility, inequality dynamics
-    """
-    return {
-        "name": "Educational Opportunity Simulation",
-        "description": "Students from different backgrounds navigate educational inequality (SDG 10)",
-        "prefab_type": "generic__GameMaster",
-        "config": {
-            "premise": """A prestigious university has launched a scholarship program
-to increase socioeconomic diversity. Five students from different backgrounds
-are admitted: two from wealthy families who can afford full tuition, two
-from low-income families on full scholarships, and one from a middle-class
-family taking on significant debt. They must navigate an environment where
-social class affects everything from study habits to social networks to
-mental health. The simulation explores whether education can genuinely
-be an equalizer or if class divisions persist and even widen.""",
-            "max_steps": 25,
-            "agents": [
-                {
-                    "id": "wealthy_student_1",
-                    "name": "Alexandra Van Buren",
-                    "prefab": "basic__Entity",
-                    "goal": "Excel academically while maintaining your social position",
-                    "memories": [
-                        "You are Alexandra, from a wealthy family with multiple alumni connections.",
-                        "You attended an elite private school with excellent college preparation.",
-                        "You never worry about money - your parents cover all expenses generously.",
-                        "You're confident in your abilities but sometimes doubt if you earned your spot.",
-                        "You're genuinely friendly but mostly socialize with similar backgrounds."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "scholarship_student_1",
-                    "name": "Marcus Williams",
-                    "prefab": "basic__Entity",
-                    "goal": "Succeed academically despite working part-time and financial stress",
-                    "memories": [
-                        "You are Marcus, the first in your family to attend college.",
-                        "You're on a full scholarship but still struggle with basic expenses.",
-                        "You work 20 hours per week to send money home to your family.",
-                        "You feel like an imposter and worry about fitting in academically and socially.",
-                        "You're determined to prove you deserve to be here."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "middle_class_student",
-                    "name": "Priya Sharma",
-                    "prefab": "basic__Entity",
-                    "goal": "Get good grades and manage the student loans you've taken on",
-                    "memories": [
-                        "You are Priya, from a middle-class family that's stretching to afford tuition.",
-                        "You're taking significant student loans and worry constantly about debt.",
-                        "You don't qualify for financial aid but also don't have family wealth.",
-                        "You feel squeezed between the wealthy students and those on full aid.",
-                        "You're considering dropping out or transferring to a cheaper school."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "professor",
-                    "name": "Dr. Patricia Green",
-                    "prefab": "basic__Entity",
-                    "goal": "Teach effectively while supporting students from diverse backgrounds",
-                    "memories": [
-                        "You are Dr. Green, a professor who cares deeply about teaching.",
-                        "You notice the achievement gap but struggle with how to address it.",
-                        "You're aware that office hours are dominated by already-advantaged students.",
-                        "You want to help first-generation and low-income students succeed.",
-                        "You're frustrated by how much social class affects academic performance."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "University Administration",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "The university recently increased financial aid but still has a $70k/year cost.",
-                "Students self-segregate by socioeconomic background in housing and social activities.",
-                "Grade data shows a correlation between family income and GPA.",
-                "The career center offers better internships to well-connected students.",
-                "Mental health services are overwhelmed but available to all students."
-            ]
-        }
-    }
-
-
-@router.get("/templates/context-aware-moderator")
-async def get_context_aware_moderator_template():
-    """
-    Template: Context-Aware Scripted Moderator (context_aware_scripted__Entity)
-    Use for: Demonstrating context-aware scripted dialogue
-
-    This template showcases the NEW context_aware_scripted prefab, where the moderator
-    follows a scripted structure but can react naturally to what participants say.
-
-    DIFFERENCE FROM basic_scripted:
-    - basic_scripted: Forces exact responses, ignores what others say
-    - context_aware_scripted: Follows script intent BUT responds to conversation context
-
-    In this example, a crisis counselor leads a support group. The counselor has
-    scripted prompts to guide the discussion, but can:
-    - Acknowledge specific details participants share
-    - Respond emotionally to what's said
-    - Adjust follow-ups based on responses
-    - Maintain natural conversational flow
-    """
-    return {
-        "name": "Crisis Support Group - Context-Aware Moderator",
-        "description": "A support group meeting where the counselor (context-aware scripted) guides discussion while responding naturally to participants. Demonstrates the new context_aware_scripted prefab.",
-        "config": {
-            "premise": "A weekly support group meeting for people dealing with job loss and career transitions. The counselor Sarah facilitates the discussion, following a structured agenda but responding naturally to each participant's situation and emotions.",
-            "max_steps": 12,
-            "agents": [
-                {
-                    "id": "counselor",
-                    "name": "Sarah",
-                    "prefab": "context_aware_scripted__Entity",
-                    "goal": "Facilitate a supportive group discussion where participants feel heard and validated",
-                    "memories": [
-                        "You are Sarah, a licensed counselor with 10 years of experience leading support groups.",
-                        "You believe in the power of shared experience and mutual support.",
-                        "You're skilled at reading emotional cues and knowing when to probe deeper.",
-                        "Your approach is warm but professional, with gentle humor when appropriate.",
-                        "You always end group by having participants share one thing they're grateful for.",
-                        "You've been running this particular group for 6 months and know the regulars well."
-                    ],
-                    "randomize_choices": False,
-                    "components": {
-                        "script": [
-                            {"name": "Sarah", "line": "Welcome everyone to this week's support group. I know job loss and career transitions can feel overwhelming, but you're not alone in this. Let's go around the table - I'd like each of you to share how you're doing this week. What's been on your mind?"},
-                            {"name": "Sarah", "line": "Thank you for sharing that. It sounds like you're carrying a heavy burden right now. What you're feeling - the uncertainty, the self-doubt - it's all completely normal. Has anything helped you cope, even a little bit, with these feelings?"},
-                            {"name": "Sarah", "line": "I really appreciate you opening up about that. It takes courage to admit when things are hard. I want to invite others to respond - has anyone else felt similarly? Sometimes knowing we're not the only ones going through something can be comforting."},
-                            {"name": "Sarah", "line": "That's such an important insight. Sometimes the hardest part isn't the practical challenges but the loss of identity and routine. I'm curious - when you think about where you want to be in six months, what does that look like? Not necessarily 'employed again' but something more personal."},
-                            {"name": "Sarah", "line": "I hear you. The uncertainty is exhausting. Can we pause for a moment? I'd like everyone to think about one small thing - it doesn't have to be work-related - that brought you a moment of peace or even just a smile this week. Sometimes in the midst of difficulty, we need to intentionally notice the small good things."},
-                            {"name": "Sarah", "line": "What beautiful shares. I want to reflect something I'm noticing - the incredible resilience in this room. People are finding ways to connect, to create, to hope even in difficult circumstances. That's worth acknowledging."},
-                            {"name": "Sarah", "line": "As we start to wrap up, I want to remind everyone that what you shared here stays here. This is a confidential space, and that trust is sacred. Also, if anyone needs one-on-one support between sessions, my contact information is on the handout."},
-                            {"name": "Sarah", "line": "Before we close, I'd like us each to share one thing - no matter how small - that we're grateful for or that went okay this week. It could be 'the coffee was good' or 'I had a nice conversation with my neighbor.' Let's go around once more."},
-                            {"name": "Sarah", "line": "Thank you all for being here today and for holding space for each other. What you're going through is hard, but you don't have to go through it alone. See you next week, and please reach out if you need support before then."}
-                        ],
-                        "end_statement": "I want to thank each of you for your courage and vulnerability today. Remember, healing isn't linear, and it's okay to have difficult days. You're not alone in this journey. Our time is up for today, but I'm looking forward to seeing you all next week. Take care of yourselves."
-                    }
-                },
-                {
-                    "id": "participant_1",
-                    "name": "Marcus",
-                    "prefab": "basic__Entity",
-                    "goal": "Share your struggles and receive support from the group",
-                    "memories": [
-                        "You are Marcus, 45, who was laid off from a middle management position three months ago.",
-                        "You're struggling with the loss of identity - your job was a huge part of who you are.",
-                        "You haven't told your extended family about the layoff and feel ashamed.",
-                        "You've been applying for jobs but getting few responses, which is damaging your confidence.",
-                        "You're worried about finances - your mortgage and kids' college tuition don't pause just because you're unemployed.",
-                        "You find it hard to get out of bed some days, the routine and purpose are gone.",
-                        "You want to appear strong but feel like you're falling apart inside."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "participant_2",
-                    "name": "Elena",
-                    "prefab": "basic__Entity",
-                    "goal": "Share your experience and support others in the group",
-                    "memories": [
-                        "You are Elena, 32, who quit a toxic work environment six weeks ago with no job lined up.",
-                        "You feel relief about leaving but are now anxious about finances and the job market.",
-                        "You're experiencing imposter syndrome - wondering if you were just lucky to have your old job.",
-                        "You've been doing some freelance work but it's inconsistent and doesn't pay the bills.",
-                        "You're actually considering a career pivot but are scared to make the leap.",
-                        "You sometimes feel like you don't belong in this group because you chose to leave your job.",
-                        "You find comfort in hearing others' stories and try to offer supportive feedback."
-                    ],
-                    "randomize_choices": True
-                },
-                {
-                    "id": "participant_3",
-                    "name": "David",
-                    "prefab": "basic__Entity",
-                    "goal": "Share your journey and hope with the group",
-                    "memories": [
-                        "You are David, 55, who was laid off 8 months ago and has been struggling to find re-employment.",
-                        "You're facing ageism in the job market and it's profoundly discouraging.",
-                        "However, you've recently started volunteering and it's given you a sense of purpose.",
-                        "You've been mentoring younger job seekers and find it rewarding.",
-                        "You're considering starting a consulting business but worried about the financial risk.",
-                        "You try to be a positive presence in the group, sharing coping strategies that have worked.",
-                        "You're sometimes frustrated by others who seem to have more options than you do."
-                    ],
-                    "randomize_choices": True
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Group Session Manager",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            },
-            "shared_memories": [
-                "This is an anonymous support group - what's shared here stays here.",
-                "The group meets weekly and has several regular attendees.",
-                "Some participants are newly unemployed, others have been searching for months.",
-                "The job market is currently tough, with many qualified people competing for fewer positions.",
-                "Everyone here is dealing with grief - not just of a job, but of identity, routine, and future plans.",
-                "The group culture is non-judgmental and supportive."
-            ]
-        }
-    }
-
-
-@router.get("/templates/vaccine-hesitancy")
-async def get_vaccine_hesitancy_template():
-    """
-    Template: Vaccine Hesitancy and Social Contagion Study
-    Use for: Research on how cognitive biases and social identity affect vaccine acceptance
-
-    This template demonstrates the psychological component system by modeling a community
-    discussion about vaccination. Agents have different psychological profiles affecting
-    how they process information and make decisions.
-
-    RESEARCH APPLICATION:
-    This template enables researchers to:
-    - Isolate effects of specific psychological mechanisms (confirmation bias, social identity)
-    - Test different message frames and messenger characteristics
-    - Study how cognitive biases interact with social dynamics
-    - Measure attitude change and persuasion effectiveness
-
-    KEY COMPONENTS DEMONSTRATED:
-    - personality_traits: Big Five model (openness, conscientiousness, etc.)
-    - cognitive_bias: Confirmation bias, availability heuristic
-    - social_identity: Group membership and identification strength
-    - theory_of_planned_behavior: Attitude, norms, perceived control
-    - values: Core values and moral framework
-
-    EXPERIMENTAL CONDITIONS:
-    - Baseline: No psychological components
-    - Cognitive bias only: Tests biased information processing
-    - Full model: Tests interaction of multiple psychological factors
-
-    MEASURED OUTCOMES:
-    - Vaccine acceptance decision (binary)
-    - Attitude strength change (pre/post comparison)
-    - Information recall accuracy
-    - Social influence patterns
-    - Emotional responses
-    """
-    return {
-        "name": "Vaccine Hesitancy - Psychological Component Study",
-        "description": "A research simulation investigating how cognitive biases (confirmation bias, availability heuristic) and social identity dynamics affect vaccine acceptance. Demonstrates the customizable psychological component system.",
-        "config": {
-            "premise": "A community health clinic is hosting an open discussion about COVID-19 vaccination. Dr. Sarah Chen, a public health advocate, is facilitating the conversation. Community members with different backgrounds, beliefs, and psychological profiles are participating to share their perspectives and make decisions about vaccination.",
-            "max_steps": 20,
-            "shared_memories": [
-                "This is a community health clinic hosting an open discussion about vaccination.",
-                "The discussion is voluntary and participants come with different perspectives.",
-                "The goal is to share information and experiences, not to debate or convince.",
-                "All viewpoints are welcome, but misinformation should be gently corrected.",
-                "The facilitator Dr. Chen has medical expertise but cannot give personal medical advice.",
-                "COVID-19 vaccines have been approved by regulatory authorities and are widely available.",
-                "Some participants have strong opinions based on personal experiences and online research.",
-                "The community has experienced both COVID-19 cases and vaccine side effects."
-            ],
-            "agents": [
-                {
-                    "id": "health_worker",
-                    "name": "Dr. Sarah Chen",
-                    "prefab": "basic__Entity",
-                    "goal": "Provide accurate information about vaccination and address community concerns respectfully",
-                    "memories": [
-                        "You are Dr. Sarah Chen, a public health physician with 15 years of experience",
-                        "You believe vaccination is critically important for community health",
-                        "You've seen firsthand the devastating effects of preventable diseases",
-                        "You approach hesitancy with empathy, not judgment",
-                        "You know that building trust takes time and genuine listening",
-                        "You're prepared to answer questions honestly, even uncertain ones",
-                        "You respect personal autonomy while strongly advocating for vaccination"
-                    ],
-                    "randomize_choices": False,
-                    "components": {
-                        "personality_traits": {
-                            "traits": {
-                                "openness": 5,
-                                "conscientiousness": 5,
-                                "agreeableness": 4,
-                                "extraversion": 3,
-                                "neuroticism": 2
-                            }
-                        },
-                        "theory_of_planned_behavior": {
-                            "behavior": "recommend vaccination",
-                            "attitude": "strongly_favorable",
-                            "subjective_norm": "strongly_favorable",
-                            "perceived_control": "high"
-                        }
-                    }
-                },
-                {
-                    "id": "skeptic_1",
-                    "name": "Mike Johnson",
-                    "prefab": "basic__Entity",
-                    "goal": "Express concerns about vaccine safety and protect personal freedom",
-                    "memories": [
-                        "You are Mike Johnson, a 45-year-old small business owner",
-                        "You've read extensively online about vaccine side effects",
-                        "You distrust pharmaceutical companies and their profit motives",
-                        "You value personal freedom and autonomy above all else",
-                        "You believe natural immunity is superior to vaccine-acquired immunity",
-                        "You see vaccine mandates as government overreach",
-                        "You're part of online communities that share your views"
-                    ],
-                    "randomize_choices": True,
-                    "components": {
-                        "cognitive_bias": {
-                            "bias_type": "confirmation_bias",
-                            "bias_strength": "strong"
-                        },
-                        "social_identity": {
-                            "group_membership": ["libertarian_community", "natural_health_advocates"],
-                            "identification_strength": "strong"
-                        },
-                        "values": {
-                            "core_values": ["freedom", "autonomy", "natural_living"],
-                            "value_conflict": "freedom_vs_collectivism"
-                        }
-                    }
-                },
-                {
-                    "id": "undecided_1",
-                    "name": "Maria Garcia",
-                    "prefab": "basic__Entity",
-                    "goal": "Gather information to make an informed decision about vaccination",
-                    "memories": [
-                        "You are Maria Garcia, a 32-year-old teacher",
-                        "You've heard mixed information about vaccines from different sources",
-                        "You trust your family doctor but also worry about side effects",
-                        "You're concerned about COVID-19 but also about the new vaccines",
-                        "You want to do the right thing for your family and community",
-                        "You feel overwhelmed by conflicting information",
-                        "You're looking for trustworthy sources to guide your decision"
-                    ],
-                    "randomize_choices": True,
-                    "components": {
-                        "cognitive_bias": {
-                            "bias_type": "availability_heuristic",
-                            "bias_strength": "moderate"
-                        },
-                        "emotion": {
-                            "current_emotion": "anxiety",
-                            "emotion_intensity": "moderate"
-                        },
-                        "theory_of_planned_behavior": {
-                            "behavior": "get_vaccinated",
-                            "attitude": "ambivalent",
-                            "subjective_norm": "neutral",
-                            "perceived_control": "moderate"
-                        }
-                    }
-                },
-                {
-                    "id": "community_member_1",
-                    "name": "James Wilson",
-                    "prefab": "basic__Entity",
-                    "goal": "Share positive vaccination experience and encourage others",
-                    "memories": [
-                        "You are James Wilson, a 55-year-old factory worker",
-                        "You got vaccinated as soon as you were eligible",
-                        "You had mild side effects (sore arm, fatigue for a day)",
-                        "You're glad you got vaccinated to protect your family",
-                        "Your elderly mother also got vaccinated safely",
-                        "You want to reassure others who are hesitant",
-                        "You trust science and medical professionals"
-                    ],
-                    "randomize_choices": True,
-                    "components": {
-                        "personality_traits": {
-                            "traits": {
-                                "openness": 3,
-                                "conscientiousness": 4,
-                                "agreeableness": 5,
-                                "extraversion": 4,
-                                "neuroticism": 3
-                            }
-                        },
-                        "theory_of_planned_behavior": {
-                            "behavior": "get_vaccinated",
-                            "attitude": "favorable",
-                            "subjective_norm": "favorable",
-                            "perceived_control": "high"
-                        }
-                    }
-                },
-                {
-                    "id": "concerned_parent",
-                    "name": "Lisa Thompson",
-                    "prefab": "basic__Entity",
-                    "goal": "Ask questions about vaccine safety for children",
-                    "memories": [
-                        "You are Lisa Thompson, a 38-year-old mother of two",
-                        "Your children are ages 8 and 12",
-                        "You're generally pro-vaccine but worry about new vaccines",
-                        "You've heard conflicting information about risks",
-                        "You want to protect your children but also be cautious",
-                        "You know other parents who are choosing not to vaccinate",
-                        "You're looking for balanced, honest information"
-                    ],
-                    "randomize_choices": True,
-                    "components": {
-                        "cognitive_bias": {
-                            "bias_type": "availability_heuristic",
-                            "bias_strength": "moderate"
-                        },
-                        "emotion": {
-                            "current_emotion": "worry",
-                            "emotion_intensity": "moderate"
-                        },
-                        "values": {
-                            "core_values": ["family_safety", "caution", "protection"]
-                        }
-                    }
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Community Health Discussion",
-                "acting_order": "game_master_choice",
-                "params": {
-                    "extra_components": {
-                        "grounded_variables_intro": (
-                            "Track key outcomes throughout this discussion:\n"
-                            "- Vaccine acceptance: Count who decides to get vaccinated\n"
-                            "- Attitude shifts: Note changes in participants' stances\n"
-                            "- Information quality: Track accurate vs. inaccurate claims\n"
-                            "- Emotional tone: Monitor fear, hope, anger, reassurance"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-
-@router.get("/templates/nested-simulation-demo")
-async def get_nested_simulation_demo_template():
-    """
-    Template: Nested Simulation Demo (PhoneGameMaster Pattern)
-
-    This template demonstrates the nested simulation capability where an agent
-    can run a mini-simulation as part of their decision-making process.
-
-    Use case: An agent simulates a conversation with a friend to decide what
-    to bring to a party, then uses that insight in the main simulation.
-    """
-    return {
-        "name": "Nested Simulation Demo - Phone Call Planning",
-        "description": "Demonstrates nested simulations where agents run mini-simulations to inform their decisions in the main simulation",
-        "config": {
-            "premise": "Alice is planning what to bring to a dinner party. She calls her friend Bob to discuss what would be good to bring.",
-            "max_steps": 15,
-            "shared_memories": [
-                "There is a dinner party happening this weekend.",
-                "Alice is deciding what to bring.",
-                "She wants to call her friend Bob for advice.",
-                "The host has requested guests bring something to share.",
-            ],
-            "agents": [
-                {
-                    "id": "alice",
-                    "name": "Alice",
-                    "prefab": "basic__Entity",
-                    "goal": "Decide what to bring to the dinner party by consulting with Bob",
-                    "memories": [
-                        "Alice loves cooking and trying new recipes.",
-                        "She wants to impress the other guests.",
-                        "She's considering bringing a dessert or an appetizer.",
-                        "She wants to make sure no one else is bringing the same thing.",
-                    ],
-                    "randomize_choices": True,
-                    # Nested simulation: Alice simulates a conversation with Bob
-                    "nested_simulation": {
-                        "premise": "Alice calls Bob to ask what she should bring to the dinner party. Bob knows what other guests are bringing.",
-                        "max_steps": 5,
-                        "shared_memories": [
-                            "Alice is calling Bob for advice about the dinner party.",
-                            "Bob knows what other guests are planning to bring.",
-                            "They are close friends who often cook together.",
-                        ],
-                        "agents": [
-                            {
-                                "id": "alice_nested",
-                                "name": "Alice",
-                                "prefab": "basic__Entity",
-                                "goal": "Find out what would be good to bring to the party",
-                                "memories": [
-                                    "Alice is considering her options.",
-                                    "She trusts Bob's judgment.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "bob_nested",
-                                "name": "Bob",
-                                "prefab": "basic__Entity",
-                                "goal": "Help Alice decide what to bring",
-                                "memories": [
-                                    "Bob knows that Maria is bringing a main dish.",
-                                    "Bob knows that Carlos is bringing drinks.",
-                                    "Bob thinks a dessert would be perfect.",
-                                ],
-                                "randomize_choices": True,
-                            }
-                        ],
-                        "extraction_prompt": "What did Alice learn about what to bring to the party? What did Bob say others are bringing?"
-                    }
-                },
-                {
-                    "id": "bob_main",
-                    "name": "Bob",
-                    "prefab": "basic__Entity",
-                    "goal": "Help Alice decide what to bring to the dinner party",
-                    "memories": [
-                        "Bob is Alice's friend.",
-                        "Bob is knowledgeable about food and parties.",
-                        "Bob wants to help Alice make a good impression.",
-                    ],
-                    "randomize_choices": True,
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "conversation guide",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            }
-        }
-    }
-
-
-@router.get("/templates/phishing-attack-simulation")
-async def get_phishing_attack_simulation_template():
-    """
-    Template: Phishing Attack Simulation (Meta-Cognitive Security Analysis)
-
-    This template demonstrates a cybersecurity tabletop exercise where security
-    analysts simulate potential threat scenarios to assess phishing risk.
-
-    Use case: A security team receives a suspicious phishing email and uses nested
-    simulations to model what would happen if someone clicked the malicious link.
-    Each analyst simulates the attack chain (hacker → user → IT response) to
-    estimate the impact and recommend appropriate security measures.
-
-    Educational value: Demonstrates meta-cognitive reasoning where agents simulate
-    adversarial scenarios without actual risk - like a digital fire drill.
-    """
-    return {
-        "name": "Phishing Attack Simulation - Security Team Tabletop Exercise",
-        "description": "A cybersecurity tabletop exercise where analysts simulate phishing attack scenarios to assess risk and plan response. Each analyst runs a nested simulation to model the attack chain.",
-        "config": {
-            "premise": "A security team at a financial services company has received a suspicious email appearing to be from their CEO, requesting urgent wire transfer instructions. The team must assess whether this is a phishing attack and determine the appropriate response.",
-            "max_steps": 25,
-            "shared_memories": [
-                "The company is a mid-sized financial services firm handling sensitive client data.",
-                "A suspicious email was received from the CEO's personal email address at 2:30 AM.",
-                "The email requests urgent wire transfer instructions for a 'confidential acquisition'.",
-                "The CEO is currently traveling internationally and unreachable.",
-                "This matches the pattern of recent CEO fraud attacks in the industry.",
-                "The team needs to assess risk quickly and decide on a response strategy.",
-            ],
-            "agents": [
-                {
-                    "id": "analyst_1",
-                    "name": "Sarah",
-                    "prefab": "basic__Entity",
-                    "goal": "Assess the phishing risk by simulating what would happen if someone clicks the link, then recommend mitigation",
-                    "memories": [
-                        "Sarah is a senior security analyst with 5 years of experience.",
-                        "She specializes in email security and phishing analysis.",
-                        "She is concerned about the financial and reputational impact of a breach.",
-                        "She believes in being cautious and prefers to verify before trusting.",
-                        "She wants to understand the technical details of the attack chain.",
-                    ],
-                    "randomize_choices": True,
-                    "nested_simulation": {
-                        "premise": "Sarah simulates what would happen if an employee clicks the phishing link. The simulation models the attacker's actions, the user's experience, and the IT security response.",
-                        "max_steps": 8,
-                        "shared_memories": [
-                            "A user receives and clicks a malicious link in a phishing email.",
-                            "The link appears to lead to a legitimate-looking login page.",
-                            "The attacker is attempting to steal credentials and deploy malware.",
-                            "The company has security monitoring but no MFA enforcement.",
-                        ],
-                        "agents": [
-                            {
-                                "id": "hacker_1",
-                                "name": "Hacker",
-                                "prefab": "basic__Entity",
-                                "goal": "Successfully harvest credentials and establish persistence on the victim's machine",
-                                "memories": [
-                                    "The hacker is using a cloned login page hosted on a compromised legitimate site.",
-                                    "The phishing kit includes a keylogger and credential harvester.",
-                                    "If credentials are entered, the hacker will attempt to deploy ransomware within 2 hours.",
-                                    "The hacker wants to move laterally to access financial systems.",
-                                    "Time is critical - the attack must complete before detection.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "user_1",
-                                "name": "Employee",
-                                "prefab": "basic__Entity",
-                                "goal": "Complete what appears to be an urgent request from the CEO",
-                                "memories": [
-                                    "The employee is tired and working late to meet deadlines.",
-                                    "They respect the CEO and want to respond quickly.",
-                                    "They are not particularly tech-savvy.",
-                                    "They don't notice the subtle misspelling in the URL.",
-                                    "They feel pressure to act on urgent requests from leadership.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "it_security_1",
-                                "name": "IT Security",
-                                "prefab": "basic__Entity",
-                                "goal": "Detect and respond to the security incident as quickly as possible",
-                                "memories": [
-                                    "IT security monitors SIEM alerts and network traffic.",
-                                    "They have a 24/7 security operations center.",
-                                    "Response time averages 2-4 hours for initial triage.",
-                                    "They can isolate infected machines and reset credentials.",
-                                    "They need to determine the scope and impact of the breach.",
-                                ],
-                                "randomize_choices": True,
-                            }
-                        ],
-                        "extraction_prompt": "What happened after the employee clicked the link? Did the hacker successfully steal credentials or deploy malware? How quickly did IT security detect and respond? What was the impact and cost of the incident?"
-                    }
-                },
-                {
-                    "id": "analyst_2",
-                    "name": "Marcus",
-                    "prefab": "basic__Entity",
-                    "goal": "Assess the phishing risk by simulating the attack scenario, then recommend technical controls",
-                    "memories": [
-                        "Marcus is a technical security engineer with infrastructure expertise.",
-                        "He focuses on implementing technical security controls.",
-                        "He is concerned about gaps in the current security posture.",
-                        "He believes the company needs stronger authentication mechanisms.",
-                        "He wants to understand how the attack would bypass existing defenses.",
-                    ],
-                    "randomize_choices": True,
-                    "nested_simulation": {
-                        "premise": "Marcus simulates the attack chain with a focus on technical controls and defense mechanisms. The simulation shows where current security measures fail and how they could be improved.",
-                        "max_steps": 8,
-                        "shared_memories": [
-                            "A phishing attack targets employees with access to financial systems.",
-                            "The company has basic email filtering but no advanced threat protection.",
-                            "Multi-factor authentication is available but not enforced.",
-                            "Security monitoring exists but has alert fatigue and slow response times.",
-                        ],
-                        "agents": [
-                            {
-                                "id": "hacker_2",
-                                "name": "Hacker",
-                                "prefab": "basic__Entity",
-                                "goal": "Bypass security controls and gain unauthorized access to financial systems",
-                                "memories": [
-                                    "The hacker has researched the company's security posture.",
-                                    "They know that MFA is not enforced for legacy applications.",
-                                    "They can bypass email filtering using techniques like HTML smuggling.",
-                                    "The attack focuses on employees with elevated privileges.",
-                                    "The hacker wants to establish persistent access for future exploitation.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "user_2",
-                                "name": "Finance Manager",
-                                "prefab": "basic__Entity",
-                                "goal": "Process what appears to be a legitimate request from executive leadership",
-                                "memories": [
-                                    "The finance manager has authority to initiate wire transfers.",
-                                    "They are under pressure to process time-sensitive transactions.",
-                                    "They have a good working relationship with the CEO.",
-                                    "They are experienced but may be fooled by sophisticated impersonation.",
-                                    "They want to demonstrate responsiveness to leadership.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "it_security_2",
-                                "name": "IT Security",
-                                "prefab": "basic__Entity",
-                                "goal": "Identify the attack and contain the threat before significant damage occurs",
-                                "memories": [
-                                    "IT security uses behavior analytics to detect anomalies.",
-                                    "They have playbooks for incident response but they need updating.",
-                                    "Communication with business stakeholders is sometimes delayed.",
-                                    "They can block malicious URLs and reset compromised credentials.",
-                                    "They need executive support to enforce security policies.",
-                                ],
-                                "randomize_choices": True,
-                            }
-                        ],
-                        "extraction_prompt": "What technical controls failed to stop the attack? How did the hacker bypass security measures? What could have prevented or detected the attack earlier? What was the financial and operational impact?"
-                    }
-                },
-                {
-                    "id": "analyst_3",
-                    "name": "Elena",
-                    "prefab": "basic__Entity",
-                    "goal": "Assess the phishing risk through simulation, then recommend user training and awareness measures",
-                    "memories": [
-                        "Elena is a security awareness and training manager.",
-                        "She focuses on the human element of cybersecurity.",
-                        "She believes that user behavior is the primary defense against phishing.",
-                        "She is concerned about variability in security awareness across departments.",
-                        "She wants to understand which users are most vulnerable and why.",
-                    ],
-                    "randomize_choices": True,
-                    "nested_simulation": {
-                        "premise": "Elena simulates different employee personas interacting with the phishing email to understand vulnerability patterns and effectiveness of training.",
-                        "max_steps": 8,
-                        "shared_memories": [
-                            "Different employees have varying levels of security awareness.",
-                            "Some departments receive more security training than others.",
-                            "The company has conducted phishing simulations but participation is low.",
-                            "Users who report suspicious emails receive positive recognition.",
-                        ],
-                        "agents": [
-                            {
-                                "id": "hacker_3",
-                                "name": "Hacker",
-                                "prefab": "basic__Entity",
-                                "goal": "Exploit psychological manipulation to trick users into taking action",
-                                "memories": [
-                                    "The hacker uses urgency, authority, and fear tactics.",
-                                    "The email creates time pressure to prevent critical thinking.",
-                                    "The hacker knows which employees are likely to respond without verifying.",
-                                    "They target users who recently completed training to test effectiveness.",
-                                    "The attack is designed to bypass rational decision-making.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "user_3a",
-                                "name": "New Employee",
-                                "prefab": "basic__Entity",
-                                "goal": "Follow what appears to be a legitimate request from leadership",
-                                "memories": [
-                                    "The employee started 2 months ago and completed basic security training.",
-                                    "They want to prove themselves and be helpful.",
-                                    "They are not familiar with the CEO's communication patterns.",
-                                    "They are afraid of making mistakes or asking questions.",
-                                    "They trust emails from leadership without questioning.",
-                                ],
-                                "randomize_choices": True,
-                            },
-                            {
-                                "id": "user_3b",
-                                "name": "Experienced Employee",
-                                "prefab": "basic__Entity",
-                                "goal": "Handle the email appropriately based on training and experience",
-                                "memories": [
-                                    "The employee has been with the company for 5 years.",
-                                    "They have completed multiple security awareness trainings.",
-                                    "They know to verify unusual requests through separate channels.",
-                                    "They are familiar with the CEO's actual communication style.",
-                                    "They feel comfortable reporting suspicious activity.",
-                                ],
-                                "randomize_choices": True,
-                            }
-                        ],
-                        "extraction_prompt": "Which employee was more likely to fall for the phishing attack and why? What psychological factors made them vulnerable? How effective was the security training? What additional awareness measures could have prevented the attack?"
-                    }
-                },
-                {
-                    "id": "ciso",
-                    "name": "David",
-                    "prefab": "basic__Entity",
-                    "goal": "Synthesize the team's analysis and make a decision on how to respond to the potential phishing attack",
-                    "memories": [
-                        "David is the Chief Information Security Officer.",
-                        "He has 15 years of cybersecurity experience.",
-                        "He must balance security risk with business operations.",
-                        "He reports directly to the CEO and board.",
-                        "He needs to make a defensible decision with the available information.",
-                        "He values the diverse perspectives of his team members.",
-                    ],
-                    "randomize_choices": True,
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "Security Team Lead",
-                "acting_order": "game_master_choice",
-                "parameters": {}
-            }
-        }
-    }
-
-
-@router.get("/templates/grounded-variables-demo")
-async def get_grounded_variables_demo_template():
-    """
-    Template: Grounded Variables Demo
-
-    This template demonstrates the grounded variables capability where the
-    Game Master tracks and updates variables during the simulation.
-
-    Use case: A resource management simulation where the GM tracks:
-    - Team morale (0-100)
-    - Budget remaining ($0-$10000)
-    - Task completion status
-    - Project health (categorical: on_track, at_risk, critical)
-    """
-    return {
-        "name": "Grounded Variables Demo - Project Management",
-        "description": "Demonstrates grounded variables tracking where the GM monitors and updates key metrics during the simulation",
-        "config": {
-            "premise": "A team is working on a critical software project with a tight deadline. The project manager must balance team morale, budget, and progress.",
-            "max_steps": 20,
-            "shared_memories": [
-                "The project deadline is in 2 weeks.",
-                "The initial budget is $10,000.",
-                "Team morale starts at 70/100.",
-                "The project is currently on track.",
-                "There are 5 team members working on the project.",
-            ],
-            "agents": [
-                {
-                    "id": "manager",
-                    "name": "Project Manager",
-                    "prefab": "basic__Entity",
-                    "goal": "Complete the project on time and within budget while keeping the team motivated",
-                    "memories": [
-                        "Has managed similar projects before.",
-                        "Knows that overworking the team reduces morale.",
-                        "Budget is running low.",
-                        "Needs to make tradeoffs between speed and quality.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "developer_1",
-                    "name": "Senior Developer",
-                    "prefab": "basic__Entity",
-                    "goal": "Write high-quality code and mentor junior developers",
-                    "memories": [
-                        "Experienced developer who cares about code quality.",
-                        "Gets frustrated when rushed.",
-                        "Wants the project to succeed.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "developer_2",
-                    "name": "Junior Developer",
-                    "prefab": "basic__Entity",
-                    "goal": "Learn and contribute to the project",
-                    "memories": [
-                        "Eager to learn but needs guidance.",
-                        "Willing to put in extra hours.",
-                        "Looks up to the senior developer.",
-                    ],
-                    "randomize_choices": True,
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "project tracker",
-                "acting_order": "game_master_choice",
-                "parameters": {},
-                "grounded_variables": [
-                    {
-                        "name": "team_morale",
-                        "variable_type": "numerical",
-                        "description": "Overall team morale and satisfaction (0-100)",
-                        "default_value": 70,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Changes based on workload, recognition, and setbacks"
-                    },
-                    {
-                        "name": "budget_remaining",
-                        "variable_type": "numerical",
-                        "description": "Remaining project budget in dollars",
-                        "default_value": 10000,
-                        "min_value": 0,
-                        "max_value": 10000,
-                        "update_rule": "Decreases with each decision and action taken"
-                    },
-                    {
-                        "name": "tasks_completed",
-                        "variable_type": "numerical",
-                        "description": "Number of tasks completed",
-                        "default_value": 0,
-                        "min_value": 0,
-                        "max_value": 50,
-                        "update_rule": "Increases when the team completes tasks"
-                    },
-                    {
-                        "name": "project_health",
-                        "variable_type": "categorical",
-                        "description": "Overall project status",
-                        "default_value": "on_track",
-                        "allowed_values": ["on_track", "at_risk", "critical", "completed", "failed"],
-                        "update_rule": "Changes based on morale, budget, and progress"
-                    },
-                    {
-                        "name": "crisis_mode",
-                        "variable_type": "boolean",
-                        "description": "Whether the project is in crisis",
-                        "default_value": False,
-                        "update_rule": "Becomes true if budget < 2000 or morale < 30"
-                    },
-                    {
-                        "name": "completion_percentage",
-                        "variable_type": "percentage",
-                        "description": "Project completion percentage",
-                        "default_value": 20,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Increases as tasks are completed"
-                    }
-                ]
-            }
-        }
-    }
-
-
-@router.get("/templates/urban-gentrification")
-async def get_urban_gentrification_template():
-    """
-    Template: Urban Gentrification & Housing Policy (Grounded Variables in Urban Economics)
-
-    This template demonstrates grounded variables for longitudinal urban economics research.
-    It tracks key neighborhood metrics over time as different stakeholders make decisions
-    about housing, development, and community preservation.
-
-    Research applications:
-    - Study the dynamics of gentrification and displacement
-    - Test housing policy interventions (rent control, inclusionary zoning, community land trusts)
-    - Model the trade-offs between economic development and affordability
-    - Analyze how stakeholder decisions affect neighborhood evolution
-
-    Grounded variables track:
-    - Median rent ($)
-    - Percentage of low-income households displaced
-    - Small business closure rate
-    - Community cohesion index
-    - Property tax base
-    - New construction units
-    - Housing affordability index
-    """
-    return {
-        "name": "Urban Gentrification - Housing Policy & Neighborhood Change",
-        "description": "Longitudinal urban economics simulation tracking neighborhood metrics. Stakeholders debate development proposals while GM tracks rent, displacement, business survival, and affordability over time.",
-        "config": {
-            "premise": "The historically working-class neighborhood of Elmwood is facing rapid change. A tech company's nearby expansion has brought new investment and interest, but also concerns about displacement and loss of community character. The City Council is holding a SERIES OF VOTES over the next several meetings to DECIDE on specific housing policies and development proposals. Stakeholders include long-term residents, housing advocates, real estate developers, small business owners, and city planners. CURRENT STATE: Median monthly rent is $1800 for a 2-bedroom. 15% of low-income households have been displaced in the past 2 years. 78% of small businesses remain open. Community cohesion index is 65/100. Property tax base is $450 million. 45 new housing units were permitted last year. 120 units are affordable to area median income earners. 35% of rental units are affordable. Rent control is NOT active. Inclusionary zoning is NOT active. Neighborhood character is currently 'transitional'. The Council will VOTE on policies that may INCREASE RENT PRICES, DISPLACE RESIDENTS, CLOSE BUSINESSES, AFFECT COMMUNITY COHESION, INCREASE PROPERTY VALUES, APPROVE NEW CONSTRUCTION, CHANGE AFFORDABILITY, and potentially ENACT RENT CONTROL or INCLUSIONARY ZONING. IMPORTANT: The Council will take ACTION and VOTE on proposals - not just discuss them.",
-            "max_steps": 30,
-            "shared_memories": [
-                "Elmwood has been a working-class neighborhood for 80 years.",
-                "Recent tech company expansion 2 miles away has increased housing demand.",
-                "Median rent has increased 40% over the past 3 years. Current median rent is $1800.",
-                "Three local businesses have closed in the last year. 78% of small businesses remain open.",
-                "15% of low-income households have been displaced due to rising rents.",
-                "The city has limited affordable housing funds. Only 120 affordable units exist.",
-                "Community organizations are mobilizing to preserve neighborhood character (cohesion index: 65/100).",
-                "Developers see profit potential in the area's transit access. Property tax base is $450 million.",
-                "45 new housing units were permitted last year, but more development is being proposed.",
-                "Housing affordability index is at 35% - only 35% of rental units are affordable to median income earners.",
-                "Rent control policies are NOT currently active, but being debated.",
-                "Inclusionary zoning (requiring affordable units in new developments) is NOT active, but being proposed.",
-                "The neighborhood's character is currently 'transitional' - shifting from traditional working-class to mixed-income.",
-                "Decisions at this meeting could increase median rent, displace more residents, close more businesses, reduce community cohesion, increase property values, approve more construction units, affect affordability, or enact rent control/inclusionary zoning policies.",
-            ],
-            "agents": [
-                {
-                    "id": "housing_advocate",
-                    "name": "Maria Rodriguez",
-                    "prefab": "basic__Entity",
-                    "goal": "FORCE the City Council to VOTE on and ENACT rent control and inclusionary zoning policies. CALL FOR IMMEDIATE ACTION to prevent displacement. PREVENT any further rent increases. ORGANIZE residents to demand policy votes. BLOCK development proposals that don't include affordable housing. ENSURE the Council actually VOTES - not just talks.",
-                    "memories": [
-                        "Maria is a community organizer who has lived in Elmwood for 35 years.",
-                        "She runs a local non-profit focused on housing rights.",
-                        "She has seen many families forced to move due to rising rents. The displacement rate is 15%.",
-                        "Current median rent is $1800 - too high for many long-term residents.",
-                        "She believes the community has a right to remain without displacement.",
-                        "She is skeptical of developer promises about benefits.",
-                        "She has data showing rent increases are outpacing wage growth.",
-                        "She wants policies that protect vulnerable residents - RENT CONTROL and INCLUSIONARY ZONING.",
-                        "She wants to PREVENT FURTHER DISPLACEMENT, KEEP RENTS STABLE, and CLOSE the affordability gap.",
-                        "She will CALL FOR VOTES and DEMAND the Council TAKE ACTION, not just discuss.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "developer",
-                    "name": "James Chen",
-                    "prefab": "basic__Entity",
-                    "goal": "SECURE City Council APPROVAL for new housing developments. GET 100 new housing units PERMITTED. INCREASE median monthly rent to $2200 through market-rate development. BLOCK rent control policies. MAXIMIZE property values and profit. SUBMIT proposals for IMMEDIATE Council votes. START CONSTRUCTION as soon as approved.",
-                    "memories": [
-                        "James is a real estate developer with 15 years of experience.",
-                        "He sees Elmwood as undervalued with great potential.",
-                        "He believes new development brings jobs and economic vitality.",
-                        "Current median rent of $1800 is below market potential - he wants to INCREASE RENTS to $2200.",
-                        "He wants to BUILD MORE HOUSING UNITS and INCREASE PROPERTY VALUES.",
-                        "He is willing to include some affordable units to get approval, but wants to MAXIMIZE PROFIT.",
-                        "He thinks the neighborhood's character will evolve naturally to 'gentrified_upscale'.",
-                        "He has investors expecting returns on their capital.",
-                        "He wants to work with the community rather than fight them.",
-                        "He opposes RENT CONTROL as it would limit his profits.",
-                        "He will SUBMIT formal proposals and DEMAND Council votes on his projects.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "small_business_owner",
-                    "name": "Fatima Al-Hassan",
-                    "prefab": "basic__Entity",
-                    "goal": "PREVENT her business from CLOSING due to rent increases. DEMAND commercial rent stabilization. ORGANIZE other small business owners to CALL FOR A VOTE on rent control. BLOCK policies that would INCREASE rents. PROTEST any attempts to displace local businesses. FIGHT for her survival.",
-                    "memories": [
-                        "Fatima has owned a corner grocery store in Elmwood for 22 years.",
-                        "Her lease is coming up for renewal and she fears a rent increase - current median rent is $1800.",
-                        "She has seen two neighboring businesses close recently. Only 78% of small businesses remain open.",
-                        "She worries that INCREASING RENTS will force her to CLOSE too.",
-                        "Newer residents shop at different types of stores than long-term residents.",
-                        "She serves both traditional and new customers.",
-                        "She is worried about losing her livelihood if property values rise too fast.",
-                        "She wants the neighborhood to prosper without losing its soul.",
-                        "She wants policies that PREVENT BUSINESS CLOSURES and KEEP RENTS AFFORDABLE.",
-                        "She will PETITION the Council and DEMAND action on commercial rent control.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "city_planner",
-                    "name": "David Kim",
-                    "prefab": "basic__Entity",
-                    "goal": "RECOMMEND and IMPLEMENT policies based on Council votes. If Council VOTES for rent control - IMPLEMENT it immediately. If Council VOTES for development - APPROVE it and START the permitting process. CALL FOR VOTES on specific proposals. MAKE RECOMMENDATIONS and EXECUTE Council decisions. TRACK metrics and REPORT outcomes.",
-                    "memories": [
-                        "David is a senior city planner with expertise in housing policy.",
-                        "He reports to the City Council which is divided on development issues.",
-                        "He has data on housing shortages and displacement trends citywide.",
-                        "Current metrics: median rent $1800, 15% displaced, 78% business survival, 65/100 community cohesion.",
-                        "He knows the city needs more housing units but also more affordable units.",
-                        "He is considering policy options: RENT CONTROL, INCLUSIONARY ZONING, density bonuses.",
-                        "He must balance INCREASING PROPERTY TAX BASE with MAINTAINING AFFORDABILITY.",
-                        "He wants evidence-based solutions that can actually be implemented.",
-                        "He has limited budget for affordable housing subsidies.",
-                        "He will BRING proposals to Council for VOTES and IMPLEMENT their decisions.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "new_resident",
-                    "name": "Alex Thompson",
-                    "prefab": "basic__Entity",
-                    "goal": "Find affordable housing while being a good neighbor to the existing community",
-                    "memories": [
-                        "Alex recently moved to Elmwood for lower rent and neighborhood character.",
-                        "They work remotely for a tech company and have a flexible income.",
-                        "They like the local businesses and community feel of the neighborhood.",
-                        "They are aware of concerns about gentrification.",
-                        "They want to integrate respectfully with long-term residents.",
-                        "They support affordable housing but also want their investment to grow.",
-                        "They represent the wave of new residents changing the neighborhood.",
-                    ],
-                    "randomize_choices": True,
-                },
-                {
-                    "id": "landlord",
-                    "name": "Robert Schwartz",
-                    "prefab": "basic__Entity",
-                    "goal": "INCREASE rents on his apartments to $2200 (market rate). RAISE rents gradually to avoid losing tenants. OPPOSE any rent control votes. INFORM other landlords about potential rent control. RAISE median rent for the neighborhood. MAXIMIZE rental income while keeping some tenants.",
-                    "memories": [
-                        "Robert owns a small apartment building (6 units) in Elmwood.",
-                        "He inherited the building from his parents 20 years ago.",
-                        "His current rents are below market rate. Median rent is $1800, but market could be $2200+.",
-                        "He wants to INCREASE HIS RENTAL INCOME to match rising property values.",
-                        "His expenses (taxes, maintenance, insurance) have been increasing.",
-                        "He feels pressure to raise rents to market levels - could INCREASE MEDIAN RENT for the neighborhood.",
-                        "He has relationships with many of his long-term tenants.",
-                        "He is conflicted between profit and treating tenants fairly.",
-                        "He is aware of RENT CONTROL proposals that would LIMIT RENT INCREASES.",
-                        "He worries about DISPLACING tenants but needs to cover rising costs.",
-                        "He will RAISE RENTS and ORGANIZE landlords to OPPOSE rent control measures.",
-                    ],
-                    "randomize_choices": True,
-                }
-            ],
-            "game_master": {
-                "prefab": "generic__GameMaster",
-                "name": "City Council Moderator",
-                "acting_order": "game_master_choice",
-                "parameters": {},
-                "grounded_variables": [
-                    {
-                        "name": "median_monthly_rent",
-                        "variable_type": "numerical",
-                        "description": "Median monthly rent for a 2-bedroom apartment in Elmwood",
-                        "default_value": 1800,
-                        "min_value": 800,
-                        "max_value": 5000,
-                        "update_rule": "Increases with development approvals, decreases with rent control/affordable housing policies"
-                    },
-                    {
-                        "name": "low_income_displacement_rate",
-                        "variable_type": "percentage",
-                        "description": "Percentage of households earning <50% area median income that have been displaced from Elmwood in the past 2 years",
-                        "default_value": 15,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Increases with rising rents, decreases with tenant protection policies"
-                    },
-                    {
-                        "name": "small_business_survival_rate",
-                        "variable_type": "percentage",
-                        "description": "Percentage of small businesses (locally-owned, <10 employees) that have remained open",
-                        "default_value": 78,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Decreases with rising rents and demographic shifts, increases with business support programs"
-                    },
-                    {
-                        "name": "community_cohesion_index",
-                        "variable_type": "numerical",
-                        "description": "Measured sense of community belonging and neighborly interaction (0-100 scale)",
-                        "default_value": 65,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Decreases with rapid demographic change, increases with community-building initiatives"
-                    },
-                    {
-                        "name": "property_tax_base",
-                        "variable_type": "numerical",
-                        "description": "Total assessed property value in millions (determines city revenue for services)",
-                        "default_value": 450,
-                        "min_value": 300,
-                        "max_value": 1500,
-                        "update_rule": "Increases with new development and rising property values"
-                    },
-                    {
-                        "name": "new_housing_units_permitted",
-                        "variable_type": "numerical",
-                        "description": "Number of new housing units approved for construction in the past year",
-                        "default_value": 45,
-                        "min_value": 0,
-                        "max_value": 500,
-                        "update_rule": "Increases when development proposals are approved"
-                    },
-                    {
-                        "name": "affordable_housing_units",
-                        "variable_type": "numerical",
-                        "description": "Number of units affordable to households earning <80% area median income",
-                        "default_value": 120,
-                        "min_value": 0,
-                        "max_value": 1000,
-                        "update_rule": "Increases with inclusionary zoning or subsidies, decreases with market-rate conversions"
-                    },
-                    {
-                        "name": "housing_affordability_index",
-                        "variable_type": "percentage",
-                        "description": "Percentage of rental units affordable to households earning area median income",
-                        "default_value": 35,
-                        "min_value": 0,
-                        "max_value": 100,
-                        "update_rule": "Decreases with rent increases, increases with affordable housing policies"
-                    },
-                    {
-                        "name": "rent_control_active",
-                        "variable_type": "boolean",
-                        "description": "Whether rent control/stabilization policies are in effect",
-                        "default_value": False,
-                        "update_rule": "Becomes true if City Council enacts rent control policy"
-                    },
-                    {
-                        "name": "inclusionary_zoning_active",
-                        "variable_type": "boolean",
-                        "description": "Whether developers must include affordable units (e.g., 20% of new units)",
-                        "default_value": False,
-                        "update_rule": "Becomes true if City Council enacts inclusionary zoning requirement"
-                    },
-                    {
-                        "name": "neighborhood_character",
-                        "variable_type": "categorical",
-                        "description": "Overall character and identity of the neighborhood",
-                        "default_value": "transitional",
-                        "allowed_values": [
-                            "traditional_working_class",
-                            "transitional",
-                            "mixed_income_stable",
-                            "gentrified_upscale",
-                            "disinvested_declining"
-                        ],
-                        "update_rule": "Changes based on combination of rent, displacement, and business variables"
-                    }
-                ],
-                "params": {
-                    "extra_components": {
-                        "grounded_variables_intro": (
-                            "Track key outcomes throughout this urban gentrification simulation:\n"
-                            "- Median monthly rent - Monitor affordability pressures on residents\n"
-                            "- Low income displacement rate - Track households forced to leave the neighborhood\n"
-                            "- Small business survival rate - Monitor local business closures and openings\n"
-                            "- Community cohesion index - Measure sense of belonging and neighborly interaction\n"
-                            "- New housing units permitted - Count development approvals and construction\n"
-                            "- Affordable housing units - Track units accessible to low-moderate income households\n"
-                            "- Housing affordability index - Percentage of rental units affordable to area median income\n"
-                            "- Rent control active - Whether rent stabilization policies are in effect\n"
-                            "- Inclusionary zoning active - Whether developers must include affordable units\n"
-                            "- Neighborhood character - Overall identity and atmosphere of the community\n\n"
-                            "Pay special attention to:\n"
-                            "- Policy decisions (City Council votes) and their impacts\n"
-                            "- Threshold crossings (e.g., when displacement exceeds 30%)\n"
-                            "- Trade-offs between economic development and community preservation\n"
-                            "- Stories of individual residents and business owners"
-                        )
-                    }
-                },
-                "critical_decision_points": [
-                    {
-                        "step": 10,
-                        "event": "CRITICAL DECISION POINT: After extensive debate, the City Council must VOTE on James Chen's proposal for 100 new housing units. The Council VOTES 5-4 to APPROVE the development. This action INCREASES new_housing_units_permitted from 45 to 145. The development will be market-rate with no affordable units. This decision may AFFECT future rent prices and neighborhood character."
-                    },
-                    {
-                        "step": 20,
-                        "event": "CRITICAL DECISION POINT: Facing community pressure over rising rents, the City Council must VOTE on Maria Rodriguez's rent control proposal. After heated debate, the Council VOTES 4-5 to REJECT rent control. rent_control_active remains FALSE. The rejection means landlords are free to INCREASE rents, which may lead to more DISPLACEMENT."
-                    },
-                    {
-                        "step": 30,
-                        "event": "CRITICAL DECISION POINT: In response to the rejected rent control, the Council considers a compromise - inclusionary zoning. The Council VOTES 6-3 to ENACT inclusionary zoning, requiring 20% of new developments to be affordable. inclusionary_zoning_active becomes TRUE. This policy may INCREASE affordable_housing_units over time as new developments are approved."
-                    }
-                ]
-            }
-        }
-    }
+# --- Template endpoints (data in backend/api/templates/) ---
+
+def _make_template_endpoint(template_data: dict):
+    async def _get_template():
+        return template_data
+    return _get_template
+
+for _slug, _data in TEMPLATES.items():
+    router.add_api_route(
+        f"/templates/{_slug}",
+        _make_template_endpoint(_data),
+        methods=["GET"],
+        name=f"get_{_slug.replace('-', '_')}_template",
+    )
 
 
 @router.get("/recent")
@@ -3000,6 +624,41 @@ async def get_recent_simulations(limit: int = 20):
 
     # Return limited number of results
     return log_files[:limit]
+
+
+@router.get("/logs/config")
+async def get_log_config():
+    """Return logging flags so the frontend knows which panels to show."""
+    return {
+        "debug_enabled": DEBUG_ENABLED,
+        "llm_logging_enabled": LLM_LOGGING_ENABLED,
+    }
+
+
+@router.get("/logs/stream")
+async def stream_logs():
+    """SSE endpoint for real-time log streaming to the frontend."""
+    import asyncio
+
+    async def event_generator():
+        queue = broadcaster.subscribe()
+        try:
+            for entry in broadcaster.get_recent(50):
+                yield f"data: {json.dumps({'ts': entry.timestamp, 'cat': entry.category.value, 'msg': entry.message})}\n\n"
+            while True:
+                try:
+                    entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps({'ts': entry.timestamp, 'cat': entry.category.value, 'msg': entry.message})}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            broadcaster.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/logs/checkpoints")
@@ -3124,6 +783,32 @@ async def delete_checkpoint_files():
         )
 
 
+@router.delete("/logs/{filename}")
+async def delete_simulation_log(filename: str):
+    """Delete a simulation log and its associated metadata file."""
+    from pathlib import Path
+    import re
+
+    safe_filename = re.sub(r'[^\w\s\-.]', '', filename)
+    if safe_filename != filename or '..' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    logs_dir = Path("logs")
+    log_path = logs_dir / safe_filename
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    deleted = [safe_filename]
+    log_path.unlink()
+
+    meta_path = logs_dir / safe_filename.replace('.html', '.metadata.json')
+    if meta_path.exists():
+        meta_path.unlink()
+        deleted.append(meta_path.name)
+
+    return {"success": True, "deleted": deleted}
+
+
 @router.get("/logs/{filename}")
 async def get_simulation_log(filename: str):
     """Get a specific simulation log by filename."""
@@ -3170,19 +855,32 @@ async def get_simulation_analytics(filename: str):
         raise HTTPException(status_code=404, detail="Log file not found")
 
     # Try to load metadata file first (contains agent goals, config info)
+    # For checkpoint files, strip the _checkpoint_stepN suffix to find the metadata
     metadata_path = log_path.with_suffix('.metadata.json')
+    if not metadata_path.exists():
+        checkpoint_match = re.search(r'_checkpoint_step\d+$', log_path.stem)
+        if checkpoint_match:
+            base_stem = log_path.stem[:checkpoint_match.start()]
+            metadata_path = log_path.parent / f"{base_stem}.metadata.json"
+        emergency_match = re.search(r'_(?:EMERGENCY_CHECKPOINT|WATCHDOG_EMERGENCY_step\d+)$', log_path.stem)
+        if emergency_match:
+            base_stem = log_path.stem[:emergency_match.start()]
+            metadata_path = log_path.parent / f"{base_stem}.metadata.json"
+
+    metadata = None
     agent_metadata = {}
     premise_from_metadata = ""
     gm_prefab = None
-    game_theoretic_actions = {}  # Store game-theoretic action data for later use
+    game_theoretic_actions = {}
 
-    # NEW: Feature detection flags
     has_nested_sims = False
     has_grounded_variables = False
     has_components = False
+    has_measurements = False
     nested_sim_data = {}
     grounded_variables_data = {}
     component_data = {}
+    measurements_data = {}
 
     if metadata_path.exists():
         try:
@@ -3215,6 +913,12 @@ async def get_simulation_analytics(filename: str):
                         has_components = True
                         component_data[agent["name"]] = agent["components"]
                         debug_print(f"[DEBUG] Found components for agent {agent['name']}: {list(agent['components'].keys())}")
+
+                # NEW: Detect measurements
+                if metadata.get("measurements"):
+                    has_measurements = True
+                    measurements_data = metadata["measurements"]
+                    debug_print(f"[DEBUG] Found measurements: {len(measurements_data)} channels")
 
                 # Build a map of agent name -> metadata
                 for agent in metadata.get("agents", []):
@@ -3262,142 +966,287 @@ async def get_simulation_analytics(filename: str):
             "timeline": [],
             "word_count": len(soup_words),
             "character_count": len(soup_text),
-            "premise": premise_from_metadata,  # Use premise from metadata
-            "gm_prefab": gm_prefab,  # Include game master prefab type
-            # NEW: Feature detection flags
+            "premise": premise_from_metadata,
+            "gm_prefab": gm_prefab,
+            "llm": metadata.get("llm") if metadata else None,
+            "gm_llm": metadata.get("gm_llm") if metadata else None,
+            "elapsed_seconds": metadata.get("elapsed_seconds") if metadata else None,
+            "started_at": metadata.get("started_at") if metadata else None,
+            "completed_at": metadata.get("completed_at") if metadata else None,
+            "is_checkpoint": "_checkpoint_step" in safe_filename or "_EMERGENCY_CHECKPOINT" in safe_filename or "_WATCHDOG_EMERGENCY" in safe_filename,
+            # Feature detection flags
             "has_nested_sims": has_nested_sims,
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
+            "has_measurements": has_measurements,
             # NEW: Feature-specific data (populated from metadata)
             "nested_simulations": nested_sim_data,
             "grounded_variables": grounded_variables_data.get("variables", []),
-            "components": component_data
+            "components": component_data,
+            "measurements": measurements_data
         }
 
-        # Find all step indicators (they typically contain "Step X")
-        step_pattern = re.compile(r'Step\s+(\d+)', re.IGNORECASE)
-        for element in soup.find_all(string=step_pattern):
-            match = step_pattern.search(str(element))
-            if match:
-                step_num = int(match.group(1))
-                analytics["total_steps"] = max(analytics["total_steps"], step_num)
+        # Detect v2.4+ structured log format (content is in embedded JSON, not static HTML)
+        # In this format, ENTRIES and CONTENT_STORE are JavaScript variables in a <script> tag
+        entries_match = re.search(r'const ENTRIES = (\[.*?\]);\s*$', html_content, re.DOTALL | re.MULTILINE)
+        content_store_match = re.search(r'const CONTENT_STORE = (\{.*?\});\s*$', html_content, re.DOTALL | re.MULTILINE)
 
-        # Extract agent names from tab buttons
-        # Exclude non-agent tabs like Game Master logs and memories
-        excluded_tabs = {'Game Master log', 'Game Master Memories', 'Simulation Log'}
-        tab_buttons = soup.find_all(['button', 'div'], class_=re.compile(r'tablink|tablinks'))
-        for btn in tab_buttons:
-            text = btn.get_text(strip=True)
-            # Only include actual agent tabs (exclude Game Master tabs)
-            if text and text not in excluded_tabs and not text.startswith('Game Master'):
-                if text not in analytics["agents"]:
-                    analytics["agents"].append(text)
-                    analytics["agent_actions"][text] = 0
+        if entries_match:
+            # === V2.4+ STRUCTURED LOG FORMAT ===
+            debug_print("[DEBUG] Detected v2.4+ structured log format — parsing embedded JSON")
+            try:
+                structured_entries = json.loads(entries_match.group(1))
+                content_store = json.loads(content_store_match.group(1)) if content_store_match else {}
 
-        # If game-theoretic data was loaded from metadata, use it for action counts
-        if game_theoretic_actions and gm_prefab == 'game_theoretic_and_dramaturgic__GameMaster':
-            for player_name, action_count in game_theoretic_actions.items():
-                if player_name in analytics["agent_actions"]:
-                    analytics["agent_actions"][player_name] = action_count
-                    debug_print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
-            debug_print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
+                def _resolve_ref(value):
+                    """Resolve content store references in deduplicated data."""
+                    if isinstance(value, dict):
+                        if '_ref' in value:
+                            return content_store.get(value['_ref'], str(value))
+                        return {k: _resolve_ref(v) for k, v in value.items()}
+                    if isinstance(value, list):
+                        return [_resolve_ref(v) for v in value]
+                    return value
 
-        # Count actions per agent by finding actual agent actions (with "Action:" label)
-        # Actions are in the Game Master log tab, organized by agent entity
-        game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
-        if game_master_log:
-            # Find all sections with entity information (e.g., "Entity [Agent R]")
-            for agent in analytics["agents"]:
-                # Find all <b> tags containing "Entity [agent_name]"
-                entity_pattern = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
-                entity_tags = game_master_log.find_all('b', string=entity_pattern)
+                excluded_entities = {'Game Master', 'game_master'}
+                gm_name_from_meta = metadata.get("game_master", {}).get("name", "") if metadata else ""
+                if gm_name_from_meta:
+                    excluded_entities.add(gm_name_from_meta)
 
-                # Use a set to track unique action texts and avoid counting duplicates
-                seen_actions = set()
+                agent_names_set = set()
+                agent_action_counts = {}
+                agent_action_texts = {}
+                agent_goals = {}
+                max_step = 0
+                observation_count = 0
+                timeline_entries = {}
+                all_text_parts = []
 
-                # For each entity tag, find the associated action
-                # Structure: <details><b>Entity [name]</b><li>...<b>__act__</b><li><details><summary>Action: ...</summary>
-                for entity_tag in entity_tags:
-                    # The entity <b> tag and the agent <li> are siblings in a <details>
-                    # Find the parent <details>
-                    parent_details = entity_tag.find_parent('details')
-                    if parent_details:
-                        # Find all <li> children of this <details>
-                        all_li = parent_details.find_all('li', recursive=False)
+                for entry in structured_entries:
+                    step = entry.get('step', 0)
+                    entity = entry.get('entity_name', '')
+                    entry_type = entry.get('entry_type', '')
+                    component = entry.get('component_name', '')
+                    summary = entry.get('summary', '')
+                    dedup_data = entry.get('deduplicated_data', {})
 
-                        # The first <li> after Entity should contain the agent info
-                        # Look for <li> that contains <summary>Action:
-                        for li in all_li:
-                            summaries = li.find_all('summary')
-                            for summary in summaries:
-                                summary_text = summary.get_text(strip=True)
-                                if summary_text.startswith('Action:'):
-                                    # Skip workflow examples
-                                    if any(keyword in summary_text.lower() for keyword in ['workflow examples', 'exercise 1', 'exercise 2']):
-                                        continue
-                                    # Skip game master termination actions
-                                    if 'terminate' in summary_text.lower() or 'game.*finished' in summary_text.lower():
-                                        continue
-                                    # Use first 100 chars as unique identifier
-                                    action_id = summary_text[:100]
-                                    if action_id not in seen_actions:
-                                        seen_actions.add(action_id)
+                    max_step = max(max_step, step)
 
-                analytics["agent_actions"][agent] = len(seen_actions)
-        else:
-            # Fallback: Search in entire document for actions with "Action:" label
-            for agent in analytics["agents"]:
-                # Find Entity tag followed by __act__ with Action: label
-                entity_pattern = re.compile(
-                    rf'Entity\s+\[{re.escape(agent)}\].*?__act__.*?Action:',
-                    re.IGNORECASE | re.DOTALL
-                )
-                matches = soup.find_all(string=entity_pattern)
-                analytics["agent_actions"][agent] = len(matches)
+                    # Collect all text for word count
+                    all_text_parts.append(summary)
 
-        # Extract observations (typically in [observation] tags)
-        observations = soup.find_all(string=re.compile(r'\[observation\]', re.IGNORECASE))
-        analytics["total_observations"] = len(observations)
+                    # Collect agent names only from entity-type entries (excludes GM step entries)
+                    if entity and entity not in excluded_entities and entry_type == 'entity':
+                        agent_names_set.add(entity)
 
-        # Build timeline from step events
-        # Use a set to track seen steps and avoid duplicates from nested <details> elements
-        seen_steps = set()
-        details_elements = soup.find_all('details')
-        for detail in details_elements:
-            # Skip nested <details> elements (those that are descendants of another <details>)
-            if detail.find_parent('details'):
-                continue
+                    # Count actions and extract action text from entity entries
+                    if entry_type == 'entity' and entity not in excluded_entities:
+                        resolved = _resolve_ref(dedup_data)
+                        value_data = resolved.get('value', {})
+                        if isinstance(value_data, dict):
+                            has_action = '__act__' in value_data or value_data.get('Key') == '__act__'
 
-            summary = detail.find('summary')
-            if summary:
-                summary_text = summary.get_text(strip=True)
-                # Check if this is a step event
-                step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
-                if step_match:
-                    step_num = int(step_match.group(1))
-                    # Only add if we haven't seen this step number yet
-                    if step_num not in seen_steps:
-                        seen_steps.add(step_num)
+                            if has_action:
+                                agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
+                                act_data = value_data.get('__act__', {})
+                                act_text = act_data.get('Value', '') if isinstance(act_data, dict) else str(act_data)
+                                if act_text:
+                                    if entity not in agent_action_texts:
+                                        agent_action_texts[entity] = []
+                                    agent_action_texts[entity].append({
+                                        "step": step,
+                                        "text": act_text
+                                    })
 
-                        # Remove redundant prefix like "Step 1 City Council Moderator --- Event: "
-                        # to save space and avoid repetition
-                        description = summary_text
+                            if entity not in agent_goals and 'Goal' in value_data:
+                                goal_data = value_data['Goal']
+                                goal_text = goal_data.get('Value', '') if isinstance(goal_data, dict) else str(goal_data)
+                                if goal_text:
+                                    agent_goals[entity] = goal_text
+                        else:
+                            has_action = '__act__' in str(value_data) if value_data else False
+                            if has_action:
+                                agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
+
+                    # Count observations
+                    if 'observation' in entry_type.lower() or '[observation]' in summary.lower():
+                        observation_count += 1
+
+                    # Build timeline (one entry per step)
+                    if step > 0 and step not in timeline_entries:
+                        description = summary
                         prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
                         description = prefix_pattern.sub('', description).strip()
+                        if description:
+                            timeline_entries[step] = {
+                                "step": step,
+                                "description": description,
+                                "type": "step"
+                            }
 
-                        analytics["timeline"].append({
-                            "step": step_num,
-                            "description": description,  # Full description without redundant prefix
-                            "type": "step"
-                        })
+                analytics["total_steps"] = max_step
+                analytics["agents"] = sorted(agent_names_set)
+                analytics["agent_actions"] = {a: agent_action_counts.get(a, 0) for a in analytics["agents"]}
+                analytics["total_observations"] = observation_count
+                analytics["timeline"] = sorted(timeline_entries.values(), key=lambda x: x["step"])
 
-        # Sort timeline by step number
-        analytics["timeline"].sort(key=lambda x: x["step"])
+                # Build agent_details from structured data
+                analytics["agent_details"] = {}
+                for agent in analytics["agents"]:
+                    goal = agent_goals.get(agent, "")
+                    if not goal and agent in agent_metadata and agent_metadata[agent].get("goal"):
+                        goal = agent_metadata[agent]["goal"]
+                    analytics["agent_details"][agent] = {
+                        "actions": agent_action_texts.get(agent, []),
+                        "goal": goal,
+                        "memories": []
+                    }
+                    debug_print(f"[DEBUG] Agent '{agent}': goal='{goal[:80]}...', actions={len(agent_action_texts.get(agent, []))}")
+
+                # Update word/character counts from structured data
+                full_text = ' '.join(all_text_parts)
+                if len(full_text) > len(soup_text):
+                    analytics["word_count"] = len(full_text.split())
+                    analytics["character_count"] = len(full_text)
+
+                debug_print(f"[DEBUG] Structured log: {max_step} steps, {len(analytics['agents'])} agents, "
+                           f"{sum(agent_action_counts.values())} actions")
+
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[WARNING] Failed to parse structured log JSON, falling back to HTML parsing: {e}")
+                entries_match = None  # Fall through to legacy parsing
+
+        if not entries_match:
+            # === LEGACY HTML FORMAT (pre-v2.4) ===
+
+            # Find all step indicators (they typically contain "Step X")
+            step_pattern = re.compile(r'Step\s+(\d+)', re.IGNORECASE)
+            for element in soup.find_all(string=step_pattern):
+                match = step_pattern.search(str(element))
+                if match:
+                    step_num = int(match.group(1))
+                    analytics["total_steps"] = max(analytics["total_steps"], step_num)
+
+            # Extract agent names from tab buttons
+            # Exclude non-agent tabs like Game Master logs and memories
+            excluded_tabs = {'Game Master log', 'Game Master Memories', 'Simulation Log'}
+            tab_buttons = soup.find_all(['button', 'div'], class_=re.compile(r'tablink|tablinks'))
+            for btn in tab_buttons:
+                text = btn.get_text(strip=True)
+                # Only include actual agent tabs (exclude Game Master tabs)
+                if text and text not in excluded_tabs and not text.startswith('Game Master'):
+                    if text not in analytics["agents"]:
+                        analytics["agents"].append(text)
+                        analytics["agent_actions"][text] = 0
+
+            # If game-theoretic data was loaded from metadata, use it for action counts
+            if game_theoretic_actions and gm_prefab == 'game_theoretic_and_dramaturgic__GameMaster':
+                for player_name, action_count in game_theoretic_actions.items():
+                    if player_name in analytics["agent_actions"]:
+                        analytics["agent_actions"][player_name] = action_count
+                        debug_print(f"[DEBUG] Set {player_name} actions to {action_count} from game-theoretic metadata")
+                debug_print(f"[DEBUG] Applied game-theoretic action data for {len(game_theoretic_actions)} players")
+
+            # Count actions per agent by finding actual agent actions (with "Action:" label)
+            # Actions are in the Game Master log tab, organized by agent entity
+            game_master_log = soup.find('div', id=re.compile(r'Game Master log', re.IGNORECASE))
+            if game_master_log:
+                # Find all sections with entity information (e.g., "Entity [Agent R]")
+                for agent in analytics["agents"]:
+                    # Find all <b> tags containing "Entity [agent_name]"
+                    entity_pattern = re.compile(rf'Entity\s+\[{re.escape(agent)}\]', re.IGNORECASE)
+                    entity_tags = game_master_log.find_all('b', string=entity_pattern)
+
+                    # Use a set to track unique action texts and avoid counting duplicates
+                    seen_actions = set()
+
+                    # For each entity tag, find the associated action
+                    # Structure: <details><b>Entity [name]</b><li>...<b>__act__</b><li><details><summary>Action: ...</summary>
+                    for entity_tag in entity_tags:
+                        # The entity <b> tag and the agent <li> are siblings in a <details>
+                        # Find the parent <details>
+                        parent_details = entity_tag.find_parent('details')
+                        if parent_details:
+                            # Find all <li> children of this <details>
+                            all_li = parent_details.find_all('li', recursive=False)
+
+                            # The first <li> after Entity should contain the agent info
+                            # Look for <li> that contains <summary>Action:
+                            for li in all_li:
+                                summaries = li.find_all('summary')
+                                for summary in summaries:
+                                    summary_text = summary.get_text(strip=True)
+                                    if summary_text.startswith('Action:'):
+                                        # Skip workflow examples
+                                        if any(keyword in summary_text.lower() for keyword in ['workflow examples', 'exercise 1', 'exercise 2']):
+                                            continue
+                                        # Skip game master termination actions
+                                        if 'terminate' in summary_text.lower() or 'game.*finished' in summary_text.lower():
+                                            continue
+                                        # Use first 100 chars as unique identifier
+                                        action_id = summary_text[:100]
+                                        if action_id not in seen_actions:
+                                            seen_actions.add(action_id)
+
+                    analytics["agent_actions"][agent] = len(seen_actions)
+            else:
+                # Fallback: Search in entire document for actions with "Action:" label
+                for agent in analytics["agents"]:
+                    # Find Entity tag followed by __act__ with Action: label
+                    entity_pattern = re.compile(
+                        rf'Entity\s+\[{re.escape(agent)}\].*?__act__.*?Action:',
+                        re.IGNORECASE | re.DOTALL
+                    )
+                    matches = soup.find_all(string=entity_pattern)
+                    analytics["agent_actions"][agent] = len(matches)
+
+            # Extract observations (typically in [observation] tags)
+            observations = soup.find_all(string=re.compile(r'\[observation\]', re.IGNORECASE))
+            analytics["total_observations"] = len(observations)
+
+            # Build timeline from step events
+            # Use a set to track seen steps and avoid duplicates from nested <details> elements
+            seen_steps = set()
+            details_elements = soup.find_all('details')
+            for detail in details_elements:
+                # Skip nested <details> elements (those that are descendants of another <details>)
+                if detail.find_parent('details'):
+                    continue
+
+                summary = detail.find('summary')
+                if summary:
+                    summary_text = summary.get_text(strip=True)
+                    # Check if this is a step event
+                    step_match = re.search(r'Step\s+(\d+)', summary_text, re.IGNORECASE)
+                    if step_match:
+                        step_num = int(step_match.group(1))
+                        # Only add if we haven't seen this step number yet
+                        if step_num not in seen_steps:
+                            seen_steps.add(step_num)
+
+                            # Remove redundant prefix like "Step 1 City Council Moderator --- Event: "
+                            # to save space and avoid repetition
+                            description = summary_text
+                            prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
+                            description = prefix_pattern.sub('', description).strip()
+
+                            analytics["timeline"].append({
+                                "step": step_num,
+                                "description": description,  # Full description without redundant prefix
+                                "type": "step"
+                            })
+
+            # Sort timeline by step number
+            analytics["timeline"].sort(key=lambda x: x["step"])
 
         # Extract agent-specific actions and goals for detailed analysis
-        analytics["agent_details"] = {}
+        # (skip if already populated by v2.4 structured log parser above)
+        if "agent_details" not in analytics or not analytics["agent_details"]:
+            analytics["agent_details"] = {}
 
         for agent in analytics["agents"]:
+            if agent in analytics.get("agent_details", {}) and analytics["agent_details"][agent].get("actions"):
+                continue
             agent_details = {
                 "actions": [],
                 "goal": "",
@@ -4006,6 +1855,46 @@ async def cancel_simulation(task_id: str):
     }
 
 
+@router.post("/control/{task_id}/play")
+async def step_controller_play(task_id: str):
+    """Resume continuous execution of a step-controlled simulation."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.play()
+    return {"status": "playing", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/pause")
+async def step_controller_pause(task_id: str):
+    """Pause a step-controlled simulation after the current step completes."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.pause()
+    return {"status": "paused", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/step")
+async def step_controller_step(task_id: str):
+    """Execute a single step then pause."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.step()
+    return {"status": "stepping", "task_id": task_id}
+
+
+@router.post("/control/{task_id}/stop")
+async def step_controller_stop(task_id: str):
+    """Stop a step-controlled simulation completely."""
+    sim = simulation_state.get_simulation(task_id)
+    if not sim or not sim.step_controller:
+        raise HTTPException(status_code=404, detail="No step controller for this simulation")
+    sim.step_controller.stop()
+    return {"status": "stopped", "task_id": task_id}
+
+
 @router.get("/status")
 async def get_simulations_status():
     """Get status of all tracked simulations."""
@@ -4023,7 +1912,7 @@ async def get_simulation_status(task_id: str):
             detail=f"Simulation {task_id} not found"
         )
 
-    return {
+    result = {
         "task_id": sim.task_id,
         "status": sim.status,
         "started_at": sim.started_at.isoformat(),
@@ -4035,6 +1924,11 @@ async def get_simulation_status(task_id: str):
             "num_agents": len(sim.config.agents) if hasattr(sim.config, 'agents') else 0
         }
     }
+    if sim.log_filename:
+        result["log_filename"] = sim.log_filename
+    if sim.completion_data:
+        result["completion_data"] = sim.completion_data
+    return result
 
 
 @router.post("/grounded-variables/extract")
@@ -4359,4 +2253,79 @@ async def analyze_simulation_endpoint(request: dict):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze simulation: {str(e)}"
+        )
+
+
+@router.post("/generate-formative-memories")
+async def generate_formative_memories(request: FormativeMemoryRequest):
+    """Generate formative backstory memories for an agent."""
+    from backend.models.schemas import FormativeMemoryResponse
+    from backend.services.llm_factory import get_model_and_embedder
+    from concordia.components.game_master.formative_memories_initializer import FormativeMemoriesInitializer
+
+    try:
+        model, _ = get_model_and_embedder(request.llm_settings)
+        initializer = FormativeMemoriesInitializer(
+            model=model,
+            next_game_master_name='backstory_generator',
+            player_names=[request.agent_name],
+            shared_memories=request.shared_memories,
+            player_specific_context=(
+                {request.agent_name: request.agent_context} if request.agent_context else {}
+            ),
+            sentences_per_episode=request.sentences_per_episode,
+        )
+        episodes = initializer.generate_backstory_episodes(request.agent_name)
+        return FormativeMemoryResponse(memories=list(episodes))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Formative memory generation failed: {str(e)}"
+        )
+
+
+@router.post("/generate-personas")
+async def generate_personas(request: PersonaGenerationRequest):
+    """Generate diverse agent personas using Concordia's persona generators."""
+    from backend.services.llm_factory import get_model_and_embedder
+    from concordia.contrib.persona_generators.two_stage_persona_generator import TwoStagePersonaGenerator
+
+    try:
+        model, _ = get_model_and_embedder(request.llm_settings)
+        generator = TwoStagePersonaGenerator(model)
+
+        characteristics_list = generator.generate_diverse_persona_characteristics(
+            initial_context=request.context,
+            diversity_axes=request.diversity_axes,
+            num_personas=request.num_personas,
+        )
+
+        personas = []
+        for char_dict in characteristics_list:
+            name = char_dict.get("name", "Unknown")
+            description = char_dict.get("description", "")
+            goal = char_dict.get("goal", "")
+
+            memories = generator.generate_single_persona_memories(
+                persona_details={**char_dict, "initial_context": request.context},
+                num_memories=request.num_memories,
+            )
+
+            personas.append(GeneratedPersona(
+                name=name,
+                goal=goal,
+                memories=memories,
+                description=description,
+            ))
+
+        return PersonaGenerationResponse(personas=personas)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Persona generation failed: {str(e)}"
         )

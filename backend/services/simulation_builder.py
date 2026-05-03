@@ -20,7 +20,6 @@ from concordia.prefabs import game_master as game_master_prefabs
 from concordia.prefabs.simulation import generic as simulation
 from concordia.typing import prefab as prefab_lib
 from concordia.associative_memory import basic_associative_memory
-from concordia.clocks import game_clock
 from concordia.language_model import language_model
 
 from backend.models.schemas import (
@@ -36,13 +35,18 @@ from backend.prefabs import context_aware_scripted
 
 
 def load_available_prefabs() -> dict:
-    """Load all available prefabs from Concordia and custom prefabs."""
+    """Load all available prefabs from Concordia (core + contrib) and custom prefabs."""
+    from concordia.contrib.prefabs import entity as contrib_entity_prefabs
+    from concordia.contrib.prefabs import game_master as contrib_gm_prefabs
+
     prefabs = {
         **helper_functions.get_package_classes(entity_prefabs),
         **helper_functions.get_package_classes(game_master_prefabs),
+        **helper_functions.get_package_classes(contrib_entity_prefabs),
+        **helper_functions.get_package_classes(contrib_gm_prefabs),
     }
 
-    # Add custom context-aware scripted prefab - instantiate with default params
+    # Add custom context-aware scripted prefab
     prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity()
 
     return prefabs
@@ -61,7 +65,8 @@ def create_memory_bank(embedder, memories: list[str]) -> basic_associative_memor
 def build_simulation(
     config: SimulationConfig,
     model: language_model.LanguageModel,
-    embedder
+    embedder,
+    gm_model: language_model.LanguageModel | None = None,
 ) -> simulation.Simulation:
     """
     Build a Concordia simulation from configuration.
@@ -70,6 +75,7 @@ def build_simulation(
         config: SimulationConfig object
         model: Language model instance
         embedder: Sentence embedder instance
+        gm_model: Optional separate model for game master decisions
 
     Returns:
         Built simulation object ready to run
@@ -114,7 +120,71 @@ def build_simulation(
 
         # Add additional components if specified
         if agent_config.components:
-            entity_params.update(agent_config.components)
+            components_copy = dict(agent_config.components)
+
+            # Handle reasoning_steps: instantiate for minimal__Entity
+            reasoning_steps = components_copy.pop('reasoning_steps', None)
+            if reasoning_steps and agent_config.prefab == 'minimal__Entity':
+                from backend.prefabs.reasoning_steps import create_reasoning_step_component
+                extra = components_copy.get('extra_components', {})
+                for i, step_config in enumerate(reasoning_steps):
+                    comp = create_reasoning_step_component(
+                        model=model,
+                        agent_name=agent_config.name,
+                        config=step_config,
+                        index=i,
+                    )
+                    extra[f'reasoning_step_{i}'] = comp
+                components_copy['extra_components'] = extra
+
+            # Handle emotional_stance: instantiate for minimal__Entity
+            emotional_stance = components_copy.pop('emotional_stance', None)
+            if emotional_stance and agent_config.prefab == 'minimal__Entity':
+                from concordia.contrib.components.agent import emotional_stance as es_module
+                extra = components_copy.get('extra_components', {})
+                extra['emotional_stance'] = es_module.EmotionalStance(
+                    model=model,
+                    name=agent_config.name,
+                    emotion_options=emotional_stance.get('emotion_options', ['happy', 'sad', 'neutral']),
+                    num_observations_to_select=emotional_stance.get('num_observations_to_select', 5),
+                )
+                components_copy['extra_components'] = extra
+
+            entity_params.update(components_copy)
+
+        # Wire nested simulation component if configured
+        if agent_config.nested_simulation:
+            from backend.prefabs.nested_simulation import NestedSimulationComponent
+            from backend.models.schemas import SimulationConfig as SC, AgentConfig as AC, GameMasterConfig as GMC
+
+            nested_agents = [
+                AC(id=f'nested-{i}', name=a.name if hasattr(a, 'name') else a.get('name', f'Agent{i}'),
+                   prefab=a.prefab if hasattr(a, 'prefab') else a.get('prefab', 'basic__Entity'),
+                   goal=a.goal if hasattr(a, 'goal') else a.get('goal'),
+                   memories=a.memories if hasattr(a, 'memories') else a.get('memories', []))
+                for i, a in enumerate(agent_config.nested_simulation.agents)
+            ] if agent_config.nested_simulation.agents else []
+
+            nested_sc = SC(
+                premise=agent_config.nested_simulation.premise,
+                max_steps=min(agent_config.nested_simulation.max_steps or 5, 10),
+                agents=nested_agents if nested_agents else [AC(id='n-1', name='Observer', prefab='basic__Entity')],
+                game_master=GMC(prefab='generic__GameMaster', name='nested rules'),
+                shared_memories=agent_config.nested_simulation.shared_memories or [],
+            )
+
+            nested_component = NestedSimulationComponent(
+                model=model,
+                parent_context=config.premise,
+                nested_config=nested_sc,
+                max_steps=min(agent_config.nested_simulation.max_steps or 5, 10),
+                extraction_prompt=agent_config.nested_simulation.extraction_prompt or 'What were the key observations from this simulation?',
+                embedder=embedder,
+            )
+            extra = entity_params.get('extra_components', {})
+            extra['nested_simulation'] = nested_component
+            entity_params['extra_components'] = extra
+            debug_print(f"[DEBUG] Added nested simulation component to agent: {agent_config.name}")
 
         instance_config = prefab_lib.InstanceConfig(
             prefab=agent_config.prefab,
@@ -127,6 +197,7 @@ def build_simulation(
     gm_params = {
         'name': config.game_master.name,
         'acting_order': config.game_master.acting_order.value,
+        'can_terminate_simulation': config.game_master.allow_early_termination,
     }
 
     # Note: Don't use gm_params.update() here because we need to convert
@@ -291,6 +362,24 @@ def build_simulation(
         debug_print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
         debug_print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
 
+    # Add contrib GM components if provided
+    if config.game_master.contrib_components:
+        from backend.prefabs.contrib_gm_components import create_contrib_gm_component
+
+        agent_names = [a.name for a in config.agents]
+        if 'extra_components' not in gm_params:
+            gm_params['extra_components'] = {}
+
+        for cc in config.game_master.contrib_components:
+            component = create_contrib_gm_component(
+                component_id=cc.component_id,
+                model=model,
+                config=cc.params,
+                agent_names=agent_names,
+            )
+            gm_params['extra_components'][f'contrib_{cc.component_id}'] = component
+            debug_print(f"[DEBUG] Added contrib GM component: {cc.component_id}")
+
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
         role=prefab_lib.Role.GAME_MASTER,
@@ -319,6 +408,20 @@ def build_simulation(
     else:
         debug_print(f"[DEBUG] No critical decision points found")
 
+    # Inject Measurements into all instances for data capture
+    if config.engine_type == EngineType.ASYNCHRONOUS:
+        from concordia.utils import async_measurements
+        measurements = async_measurements.ReactiveMeasurements()
+        debug_print(f"[DEBUG] Injected ReactiveMeasurements into instances for async engine")
+    else:
+        from concordia.utils.measurements import Measurements
+        measurements = Measurements()
+        debug_print(f"[DEBUG] Injected Measurements into instances for {config.engine_type.value} engine")
+
+    for inst in instances:
+        if 'measurements' not in inst.params:
+            inst.params['measurements'] = measurements
+
     # Create simulation configuration
     sim_config = prefab_lib.Config(
         default_premise=premise_text,
@@ -327,24 +430,34 @@ def build_simulation(
         instances=instances
     )
 
-    # Select the appropriate engine based on game master prefab
-    # Interviewer prefab requires ParallelQuestionnaireEngine
+    # Select engine based on config or GM prefab
     if config.game_master.prefab == 'interviewer__GameMaster':
         from concordia.environment.engines import parallel
         engine = parallel.ParallelQuestionnaireEngine()
         debug_print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
+    elif config.engine_type == EngineType.SIMULTANEOUS:
+        from concordia.environment.engines import simultaneous
+        engine = simultaneous.Simultaneous()
+        debug_print(f"[DEBUG] Using Simultaneous engine")
+    elif config.engine_type == EngineType.ASYNCHRONOUS:
+        from concordia.environment.engines import asynchronous
+        engine = asynchronous.Asynchronous()
+        debug_print(f"[DEBUG] Using Asynchronous engine")
     else:
         from concordia.environment.engines import sequential
         engine = sequential.Sequential()
-        debug_print(f"[DEBUG] Using Sequential engine for {config.game_master.prefab}")
+        debug_print(f"[DEBUG] Using Sequential engine")
 
     # Build and return simulation using the Simulation class
     sim = simulation.Simulation(
         config=sim_config,
         model=model,
         embedder=embedder,
-        engine=engine
+        engine=engine,
+        override_game_master_model=gm_model,
     )
+
+    sim._measurements = measurements
 
     return sim
 
@@ -358,28 +471,42 @@ def get_available_prefabs_info() -> list[dict]:
     initializer_prefabs_info = []
 
     prefab_descriptions = {
-        # Entity prefabs
-        'basic__Entity': 'Standard agent with decision-making components',
-        'basic_with_plan__Entity': 'Entity with planning capabilities',
-        'basic_scripted__Entity': 'Scripted behavior agent (exact responses)',
-        'context_aware_scripted__Entity': 'Scripted agent that adapts to conversation context',
-        'minimal__Entity': 'Simplest entity implementation',
-        'fake_assistant_with_configurable_system_prompt__Entity': 'Customizable system prompt',
+        # Entity prefabs — core
+        'basic__Entity': 'Standard agent with "three key questions" decision framework (situation, self-perception, action)',
+        'basic_with_plan__Entity': 'Agent with strategic planning and time horizons for complex coordination',
+        'basic_scripted__Entity': 'Follows predefined scripts exactly; goes silent when script is exhausted',
+        'context_aware_scripted__Entity': 'Adapts script to conversation context; auto-closes when script ends',
+        'minimal__Entity': 'Bare-minimum agent for lightweight simulations',
+        'fake_assistant_with_configurable_system_prompt__Entity': 'AI assistant persona with custom system prompt',
+        'conversational__Entity': 'Dialogue-focused agent optimized for conversation simulations',
+        'rational__Entity': 'Expected utility maximizer for game-theoretic scenarios',
+        'puppet__Entity': 'Externally controlled agent for wizard-of-oz or human-in-the-loop experiments',
 
-        # Game master prefabs
-        'generic__GameMaster': 'General-purpose narrative GM',
-        'dialogic__GameMaster': 'Conversation-focused GM',
-        'dialogic_and_dramaturgic__GameMaster': 'Enhanced dialogue GM',
-        'game_theoretic_and_dramaturgic__GameMaster': 'Structured games with payoffs',
-        'interviewer__GameMaster': 'Interview scenarios',
-        'marketplace__GameMaster': 'Economic simulations',
-        'psychology_experiment__GameMaster': 'Experimental setups',
-        'scripted__GameMaster': 'Predefined narrative',
-        'situated__GameMaster': 'Context-specific GM',
-        'situated_in_time_and_place__GameMaster': 'Temporal context GM',
+        # Entity prefabs — contrib
+        'basic_with_image__Entity': 'Multimodal agent that generates images alongside text responses',
+        'conversations_with_ai_companions__AICompanionEntity': 'AI companion for tutoring and conversational scenarios',
+        'conversations_with_ai_companions__HumanUserEntity': 'Human user entity for AI companion conversations',
+
+        # Game master prefabs — core
+        'generic__GameMaster': 'General-purpose narrative GM for most simulation types',
+        'dialogic__GameMaster': 'Conversation-focused GM with auto-termination for dialogue-heavy scenarios',
+        'dialogic_and_dramaturgic__GameMaster': 'Enhanced dialogue GM with dramatic scene structure',
+        'game_theoretic_and_dramaturgic__GameMaster': 'Matrix games with payoffs, scores, and strategic decisions',
+        'interviewer__GameMaster': 'Structured questionnaire administration for surveys and interviews',
+        'open_ended_interviewer__GameMaster': 'Unstructured interview format with free-form questioning',
+        'marketplace__GameMaster': 'Economic trading simulation with buy/sell/hold dynamics',
+        'psychology_experiment__GameMaster': 'Experimental protocol management for research scenarios',
+        'scripted__GameMaster': 'Follows predetermined narrative sequences',
+        'situated__GameMaster': 'Location-aware GM for spatially grounded scenarios',
+        'situated_in_time_and_place__GameMaster': 'Temporal and spatial context with time progression',
+        'physically_situated_and_dramaturgic__GameMaster': 'Physical environment with dramatic scene structure',
+        'async_social_media__GameMaster': 'Social media simulation with forums, posts, and asynchronous interaction',
+
+        # Game master prefabs — contrib
+        'space_ship__GameMaster': 'Spaceship simulation with location tracking and system health/failure states',
 
         # Initializer
-        'formative_memories_initializer__GameMaster': 'Setup initializer with formative memories',
+        'formative_memories_initializer__GameMaster': 'Creates character backgrounds from player-specific context before main simulation',
     }
 
     for prefab_name, prefab_class in prefabs.items():

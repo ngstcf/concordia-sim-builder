@@ -1,14 +1,11 @@
 # Production Requirements - Pinned for Reproducibility
-# Generated: 2025-01-07
-# Python: 3.11+
+# Updated: 2026-05-03
+# Python: 3.13+
 #
 # For development with unpinned dependencies, see requirements-dev.bak
 #
-# CONCORDIA VERSION IS PINNED - Do not update without testing
-# See CHANGELOG.md for upgrade procedure
-
-# Core Framework - PINNED VERSION
-gdm-concordia==2.1.0
+# Concordia framework (pinned — test all templates before upgrading)
+gdm-concordia==2.4.0
 
 # NLP / Embeddings
 sentence-transformers==5.2.0

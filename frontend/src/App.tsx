@@ -1,11 +1,13 @@
 /**
  * Main Application Component
  */
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SimulationProvider } from './contexts/SimulationContext';
 import SimulationBuilder from './components/SimulationBuilder/SimulationBuilder';
 import SimulationRunner from './components/SimulationRunner/SimulationRunner';
+import { shutdownServer } from './utils/api';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +21,18 @@ function Header() {
   const location = useLocation();
   const isBuilder = location.pathname === '/';
   const isRunner = location.pathname === '/runner';
+  const [killState, setKillState] = useState<'idle' | 'killing' | 'killed'>('idle');
+
+  const handleKillServer = async () => {
+    if (!confirm('Kill the backend server process? You will need to restart it manually.')) return;
+    setKillState('killing');
+    try {
+      await shutdownServer();
+    } catch {
+      // Expected — server dies before responding
+    }
+    setKillState('killed');
+  };
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -51,6 +65,18 @@ function Header() {
               </Link>
             </nav>
           </div>
+          <button
+            onClick={handleKillServer}
+            disabled={killState !== 'idle'}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-50 ${
+              killState === 'killed'
+                ? 'text-gray-500 bg-gray-100 border-gray-200'
+                : 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100 hover:text-red-700'
+            }`}
+            title="Kill backend server process"
+          >
+            {killState === 'idle' ? 'Kill Server' : killState === 'killing' ? 'Killing...' : 'Server Killed'}
+          </button>
         </div>
       </div>
     </header>
@@ -76,7 +102,7 @@ function App() {
             <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 z-50">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>Simulation Engine v2.1.0 | Built on Google DeepMind Concordia</span>
+                  <span>Simulation Builder v2.4.0 | Built on Google DeepMind Concordia</span>
                   <span>Developed by Ng Chong</span>
                 </div>
               </div>

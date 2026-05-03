@@ -1,115 +1,129 @@
 # Logging Configuration
 
-This document explains how to control the verbosity of console output in the Concordia Simulation Builder.
+Controls for console output and live log streaming in the Concordia Simulation Builder.
+
+## How Logging Works
+
+All `print()` output passes through a **stdout tee interceptor** (`stdout_tee.py`) that:
+
+1. Writes to the original terminal (unchanged behavior)
+2. Strips ANSI escape codes (from Concordia's `termcolor.colored()` output)
+3. Categorizes each line by content pattern
+4. Broadcasts to connected frontend clients via SSE
+
+This means the same env vars control **both** terminal output and the frontend log panels.
+
+### Message Categories
+
+| Category | Detection | Examples |
+|----------|-----------|---------|
+| **LLM** | Contains `[LLM]` | API calls, response times, timeouts, retries |
+| **DEBUG** | Contains `[DEBUG]` | Configuration details, component initialization |
+| **SYSTEM** | Everything else | Runner ops, Concordia engine narrative, completions |
+
+### Gating
+
+- `debug_print()` checks `DEBUG_ENABLED` before calling `print()` → if disabled, nothing reaches stdout → nothing is broadcast
+- `llm_print()` checks `LLM_LOGGING_ENABLED` before calling `print()` → same behavior
+- SYSTEM messages (raw `print()` calls in runner and Concordia engine) always pass through
 
 ## Environment Variables
 
-Add these to your `.env` file to control logging behavior:
-
-### `DEBUG_ENABLED` (default: `true`)
-
-Controls general debug messages tagged with `[DEBUG]`.
+Add to your `.env` file:
 
 ```bash
-# Enable DEBUG messages (default)
+# Control [DEBUG] messages in terminal and frontend (default: true)
 DEBUG_ENABLED=true
 
-# Disable DEBUG messages (quieter console output)
-DEBUG_ENABLED=false
-```
-
-### `LLM_LOGGING_ENABLED` (default: `true`)
-
-Controls LLM-specific debug messages tagged with `[LLM]`.
-
-```bash
-# Enable LLM logging (default)
-LLM_LOGGING_ENABLED=true
-
-# Disable LLM logging (hides API call details, response times, errors)
-LLM_LOGGING_ENABLED=false
-```
-
-## Usage Examples
-
-### Quiet Mode (Minimal Output)
-
-```bash
-# In your .env file
-DEBUG_ENABLED=false
-LLM_LOGGING_ENABLED=false
-```
-
-This will suppress most console output, showing only critical errors and simulation progress messages.
-
-### Debug Mode (Verbose Output - Default)
-
-```bash
-# In your .env file
-DEBUG_ENABLED=true
+# Control [LLM] API call details in terminal and frontend (default: true)
 LLM_LOGGING_ENABLED=true
 ```
 
-This shows all debug messages including:
-- Configuration details
-- LLM API calls and response times
-- Component initialization
-- Simulation progress
+### Profiles
 
-### Selective Logging
+| Profile | Settings | Terminal Output | Frontend |
+|---------|----------|----------------|----------|
+| **Verbose** (default) | Both `true` | Everything | Main Log (system+debug) + LLM Log panel |
+| **Quiet** | Both `false` | Runner progress only | Main Log (system only), no LLM panel |
+| **Debug only** | `DEBUG=true`, `LLM=false` | Config + progress | Main Log (system+debug), no LLM panel |
+| **LLM only** | `DEBUG=false`, `LLM=true` | Progress + API calls | Main Log (system only) + LLM Log panel |
 
-```bash
-# Show general debug but hide LLM details
-DEBUG_ENABLED=true
-LLM_LOGGING_ENABLED=false
+## Frontend Log Panels
+
+The frontend fetches `/api/simulations/logs/config` on mount to learn which flags are enabled, then connects to `/api/simulations/logs/stream` (SSE) for real-time entries.
+
+- **Main Log** — Always shown. Displays SYSTEM messages (runner ops + Concordia narrative). Also includes DEBUG messages when `DEBUG_ENABLED=true`.
+- **LLM Log** — Separate panel, only rendered when `LLM_LOGGING_ENABLED=true`. Shows API call traces.
+
+### Color Coding
+
+The frontend `LogViewer` applies colors by message content:
+
+| Color | Message Pattern |
+|-------|----------------|
+| Cyan | Entity observations (`Entity X observed: ...`) |
+| Emerald | Entity actions (`Entity X chose action: ...`) |
+| Yellow | Warnings (`[WARNING]`, `⚠️`) |
+| Orange | Watchdog messages (`[WATCHDOG]`) |
+| Purple | Analyzer messages (`[Analyzer]`) |
+| Amber | Progress messages (`🔄`, `▶`, `Starting`, `Initializing`) |
+| Green | Completions (`✓`, `Completed`, `complete`) |
+| Blue | LLM messages (entire LLM panel) |
+| Gray (dim) | Debug messages |
+| Gray (light) | Default system messages |
+
+## Architecture
+
+```
+debug_print() ──┐
+llm_print()  ──┐│    checks env var
+               ││        │
+               ▼▼        ▼
+            print()  (suppressed if disabled)
+               │
+               ▼
+         TeeStdout.write()
+          ├── original stdout (terminal)
+          └── LogBroadcaster.emit()
+                 ├── buffer (500 entries, deque)
+                 └── SSE subscribers (asyncio.Queue per client)
+                        │
+                        ▼
+                  EventSource (frontend)
+                        │
+                   ┌────┴────┐
+                   ▼         ▼
+              Main Log    LLM Log
 ```
 
-This shows configuration and simulation progress but hides verbose LLM API details.
+**Files:**
+- `backend/utils/debug_print.py` — `debug_print()` and `llm_print()` with env var gating
+- `backend/utils/stdout_tee.py` — `TeeStdout` wrapper, ANSI stripping, line categorization, `install_tee()`
+- `backend/utils/log_broadcaster.py` — Thread-safe `LogBroadcaster` singleton with buffer and SSE fan-out
+- `backend/api/simulations.py` — `GET /logs/config` and `GET /logs/stream` endpoints
 
 ## Programmatic Control
 
-You can also control logging at runtime:
+```python
+from backend.utils.debug_print import debug_print, llm_print
+
+debug_print("Configuration loaded")        # Shows if DEBUG_ENABLED=true
+llm_print("Calling gpt-4o with timeout=120s")  # Shows if LLM_LOGGING_ENABLED=true
+```
+
+Runtime toggle (affects terminal and frontend):
 
 ```python
 from backend.utils.logger import set_debug_enabled, set_llm_logging_enabled
 
-# Disable debug messages programmatically
 set_debug_enabled(False)
-
-# Disable LLM logging programmatically
 set_llm_logging_enabled(False)
-
-# Check current settings
-from backend.utils.logger import is_debug_enabled, is_llm_logging_enabled
-print(f"Debug enabled: {is_debug_enabled()}")
-print(f"LLM logging enabled: {is_llm_logging_enabled()}")
 ```
-
-## Using the Logger in Code
-
-```python
-from backend.utils.logger import debug_print
-
-# Print DEBUG message (respects DEBUG_ENABLED)
-debug_print("This is a debug message", "DEBUG")
-
-# Print LLM message (respects LLM_LOGGING_ENABLED)
-debug_print("API call to OpenAI", "LLM")
-
-# Print custom category message
-debug_print("Custom info", "INFO")
-```
-
-## Impact on Different Message Types
-
-| Setting | Messages Affected |
-|---------|-------------------|
-| `DEBUG_ENABLED=false` | `[DEBUG]` configuration details, component initialization, variable extraction |
-| `LLM_LOGGING_ENABLED=false` | `[LLM]` API calls, response times, timeouts, retries, model info |
-| Both `false` | Only critical errors and simulation progress (✓ Completed, Step X/Y) shown |
 
 ## Notes
 
-- These settings only affect **console output**, not log files
-- Simulation results are always saved to `logs/` directory regardless of logging settings
-- Critical errors are always shown even when debug logging is disabled
+- The tee is installed once at server startup in `backend/main.py` (after `load_dotenv()`)
+- Terminal output is identical to pre-streaming behavior — the tee writes to original stdout first
+- The frontend buffer holds 500 lines; older entries are dropped from the DOM
+- SSE keepalive sent every 30s to prevent connection timeout
+- Simulation HTML logs are always saved to `logs/` regardless of logging settings

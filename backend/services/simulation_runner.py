@@ -5,6 +5,7 @@ import asyncio
 import json
 import datetime
 import os
+import re
 import sys
 import time
 import uuid
@@ -16,7 +17,8 @@ from backend.models.schemas import (
     SimulationConfig,
     LLMSettings,
     SimulationEvent,
-    EventType
+    EventType,
+    EngineType,
 )
 from backend.services.simulation_builder import build_simulation
 
@@ -35,9 +37,90 @@ LOGS_DIR = Path("logs")
 LOGS_DIR.mkdir(exist_ok=True)
 
 
+class SimulationCancelled(Exception):
+    """Raised from within a step callback to stop the simulation loop."""
+    pass
+
+
+def _raw_log_to_html(raw_log) -> str:
+    """Convert a raw simulation log to HTML using v2.4's structured logging."""
+    from concordia.utils.structured_logging import SimulationLog
+    sim_log = SimulationLog.from_raw_log(raw_log)
+    return sim_log.to_html()
+
+
+def _simulation_log_to_html(sim_log_or_result) -> str:
+    """Convert a SimulationLog (or legacy result) to HTML string.
+
+    In Concordia v2.4.0, sim.play() returns a SimulationLog object.
+    In older versions it returned HTML strings directly.
+    """
+    from concordia.utils.structured_logging import SimulationLog
+    if isinstance(sim_log_or_result, SimulationLog):
+        return sim_log_or_result.to_html()
+    return str(sim_log_or_result)
+
+
+def _save_checkpoint_metadata(
+    checkpoint_path: Path,
+    config: SimulationConfig,
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None,
+    start_time: float,
+    current_step: int,
+    max_steps: int,
+):
+    """Save partial metadata alongside a checkpoint so analytics tabs work."""
+    import json
+
+    metadata = {
+        "timestamp": datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "started_at": datetime.datetime.fromtimestamp(start_time).isoformat(),
+        "completed_at": None,
+        "elapsed_seconds": round(time.time() - start_time, 1),
+        "is_checkpoint": True,
+        "checkpoint_step": current_step,
+        "max_steps": max_steps,
+        "llm": {
+            "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+            "model": llm_settings.model_name,
+        },
+        "gm_llm": {
+            "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+            "model": gm_llm_settings.model_name,
+        } if gm_llm_settings else None,
+        "premise": config.premise,
+        "game_master": {
+            "prefab": config.game_master.prefab,
+            "name": config.game_master.name,
+        },
+        "agents": [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "prefab": agent.prefab,
+                "goal": agent.goal or "",
+                "memories_count": len(agent.memories) if agent.memories else 0,
+            }
+            for agent in config.agents
+        ],
+    }
+
+    if hasattr(config.game_master, 'grounded_variables') and config.game_master.grounded_variables:
+        metadata["game_master"]["grounded_variables"] = [
+            var.model_dump() if hasattr(var, 'model_dump') else var
+            for var in config.game_master.grounded_variables
+        ]
+
+    metadata_path = checkpoint_path.with_suffix('.metadata.json')
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2)
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
-    llm_settings: LLMSettings
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Run a simulation and yield SSE events.
@@ -45,6 +128,7 @@ async def run_simulation_stream(
     Args:
         config: Simulation configuration
         llm_settings: LLM provider settings
+        gm_llm_settings: Optional separate LLM settings for the Game Master
 
     Yields:
         SSE-formatted event strings
@@ -56,30 +140,64 @@ async def run_simulation_stream(
 
         from backend.services.llm_factory import get_model_and_embedder
 
+        # Check for GM LLM settings from env if not provided via request
+        if not gm_llm_settings:
+            gm_provider = os.getenv('GM_LLM_PROVIDER')
+            gm_model_name = os.getenv('GM_LLM_MODEL')
+            if gm_provider and gm_model_name:
+                gm_llm_settings = LLMSettings(
+                    provider=gm_provider,
+                    model_name=gm_model_name,
+                    api_key=os.getenv('GM_LLM_API_KEY'),
+                    base_url=os.getenv('GM_LLM_BASE_URL'),
+                    temperature=float(os.getenv('GM_LLM_TEMPERATURE', '0.3')),
+                    max_tokens=int(os.getenv('GM_LLM_MAX_TOKENS', '3500')),
+                    request_timeout=int(os.getenv('GM_LLM_TIMEOUT', str(llm_settings.request_timeout))),
+                    embedder_model=llm_settings.embedder_model,
+                )
+                print(f"[GM LLM] Using env-configured GM model: {gm_provider}/{gm_model_name}")
+
         # Log start
         print(f"\n{'='*60}")
         print(f"Starting Simulation Execution")
         print(f"{'='*60}")
         print(f"Provider: {llm_settings.provider}")
         print(f"Model: {llm_settings.model_name}")
+        if gm_llm_settings:
+            print(f"GM Provider: {gm_llm_settings.provider}")
+            print(f"GM Model: {gm_llm_settings.model_name}")
         print(f"Max Steps: {config.max_steps}")
         print(f"Agents: {', '.join([a.name for a in config.agents])}")
+        print(f"Early Termination: {'enabled' if config.game_master.allow_early_termination else 'disabled'}")
         print(f"{'='*60}\n")
+
+        # Generate task_id for cancellation support
+        task_id = str(uuid.uuid4())
+        simulation_state.register_simulation(task_id, config)
 
         # Get model and embedder
         print("🔄 Initializing LLM and embedder...")
         model, embedder = get_model_and_embedder(llm_settings)
-        print("✓ Model and embedder ready\n")
+        print("✓ Model and embedder ready")
 
-        # Send start event
+        # Create separate GM model if configured
+        gm_model = None
+        if gm_llm_settings:
+            print(f"🔄 Initializing separate GM LLM ({gm_llm_settings.provider}/{gm_llm_settings.model_name})...")
+            gm_model, _ = get_model_and_embedder(gm_llm_settings)
+            print("✓ GM model ready")
+        print()
+
+        # Send start event with task_id so frontend can cancel
         yield _format_sse(EventType.SIMULATION_START, {
             'message': 'Building simulation...',
+            'task_id': task_id,
             'config': config.model_dump(mode='json')
         })
 
         # Build simulation
         print("🔨 Building simulation from configuration...")
-        sim = build_simulation(config, model, embedder)
+        sim = build_simulation(config, model, embedder, gm_model=gm_model)
         print("✓ Simulation built successfully\n")
 
         yield _format_sse(EventType.SIMULATION_START, {
@@ -97,7 +215,7 @@ async def run_simulation_stream(
 
         # Variables for partial checkpointing
         last_checkpoint_step = [0]  # Use list for mutable access
-        checkpoint_interval = 5  # Save partial results every N steps
+        checkpoint_interval = getattr(config, 'checkpoint_interval', 5) or 5
 
         print("🎮 Running simulation...")
         print(f"   (This may take a while depending on {max_steps} steps and {len(config.agents)} agents)")
@@ -117,15 +235,21 @@ async def run_simulation_stream(
 
             Args:
                 checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+
+            Raises:
+                SimulationCancelled: If cancellation was requested, stops the engine loop.
             """
+            if simulation_state.should_cancel(task_id):
+                print(f"[CANCEL] Cancellation requested — stopping after step {step_count_tracker[0]}")
+                raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
+
             try:
-                # Extract step number from checkpoint data
-                step = checkpoint_data.get('checkpoint_counter', 0)
+                # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
+                step = checkpoint_data.get('checkpoint_counter', 0) + 1
                 step_count_tracker[0] = step
                 elapsed = time.time() - start_time_progress[0]
 
                 # Log timestamp for debugging hangs
-                import datetime
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[HEARTBEAT] {current_time} - Step {step}/{max_steps} callback received")
 
@@ -167,16 +291,10 @@ async def run_simulation_stream(
                         last_checkpoint_step[0] = step
                         print(f"[CHECKPOINT] Saving partial results at step {step}/{max_steps}...")
                         try:
-                            # Get partial results from simulation object's raw log
-                            from concordia.utils import html as html_lib
-
                             raw_log = sim.get_raw_log()
-
-                            # Convert raw log to HTML using the same method as final results
-                            partial_log_html = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
+                            partial_log_html = _raw_log_to_html(raw_log)
 
                             # Create partial checkpoint filename
-                            import re
                             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                             safe_premise = re.sub(r'[^\w\s-]', '', config.premise[:50])
                             safe_premise = re.sub(r'[-\s]+', '_', safe_premise.strip())
@@ -193,6 +311,12 @@ async def run_simulation_stream(
                             with open(checkpoint_path, 'w', encoding='utf-8') as f:
                                 f.write(styled_partial)
 
+                            # Save partial metadata so analytics tabs work on checkpoints
+                            _save_checkpoint_metadata(
+                                checkpoint_path, config, llm_settings, gm_llm_settings,
+                                start_time, step, max_steps
+                            )
+
                             print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename} ({len(styled_partial):,} chars)")
                         except Exception as checkpoint_error:
                             print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
@@ -208,11 +332,43 @@ async def run_simulation_stream(
         # Run simulation in a thread to not block async loop
         import concurrent.futures
 
+        # Step controller for interactive step-by-step execution
+        step_ctrl = None
+        if config.engine_type == EngineType.STEP_CONTROLLER:
+            from concordia.environment.step_controller import StepController, StepData
+
+            step_ctrl = StepController(start_paused=True)
+            sim_record = simulation_state.get_simulation(task_id)
+            if sim_record:
+                sim_record.step_controller = step_ctrl
+
+            def step_data_callback(data: StepData):
+                event_loop.call_soon_threadsafe(
+                    progress_queue.put_nowait,
+                    {
+                        'type': 'step_data',
+                        'step': data.step,
+                        'acting_entity': data.acting_entity,
+                        'action': data.action,
+                        'entity_actions': dict(data.entity_actions) if data.entity_actions else {},
+                    }
+                )
+
+            yield _format_sse(EventType.CONTROLLER_STATE, {
+                'state': 'paused',
+                'message': 'Simulation ready. Use Play/Step/Pause/Stop to control execution.',
+                'task_id': task_id,
+            })
+
         def run_simulation_blocking():
-            return sim.play(
+            kwargs = dict(
                 max_steps=max_steps,
-                get_state_callback=sync_progress_callback
+                get_state_callback=sync_progress_callback,
             )
+            if step_ctrl is not None:
+                kwargs['step_controller'] = step_ctrl
+                kwargs['step_callback'] = step_data_callback
+            return sim.play(**kwargs)
 
         # Watchdog settings - detect when simulation hangs
         # Can be overridden via WATCHDOG_TIMEOUT_SECONDS environment variable
@@ -230,19 +386,30 @@ async def run_simulation_stream(
                 try:
                     # Get progress with timeout to check if simulation is done
                     progress_data = await asyncio.wait_for(progress_queue.get(), timeout=5.0)
-                    debug_print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
-                    yield _format_sse(EventType.STEP_PROGRESS, progress_data)
+                    if progress_data.get('type') == 'step_data':
+                        debug_print(f"[DEBUG] Yielding SSE step_data event: step {progress_data.get('step')}")
+                        yield _format_sse(EventType.STEP_DATA, progress_data)
+                        yield _format_sse(EventType.CONTROLLER_STATE, {'state': 'paused', 'task_id': task_id})
+                    else:
+                        debug_print(f"[DEBUG] Yielding SSE progress event: {progress_data}")
+                        yield _format_sse(EventType.STEP_PROGRESS, progress_data)
                     # Update last progress time
                     last_progress_time[0] = time.time()
                 except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
                     # No progress update for 5 seconds, check for hang
                     time_since_progress = time.time() - last_progress_time[0]
 
                     # Log periodic watchdog status every minute
                     if int(time_since_progress) % 60 == 0 and time_since_progress > 0:
-                        import datetime
+                        from backend.services.llm_factory import get_llm_activity
+                        activity = get_llm_activity()
                         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
+                        if activity['calls_in_flight'] > 0:
+                            waiting = time.time() - activity['last_call_start']
+                            print(f"[WATCHDOG] {current_time} - Step {step_count_tracker[0]}/{max_steps} | LLM call in progress ({waiting:.0f}s) | {activity['total_calls']} calls total")
+                        else:
+                            print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
                     if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
                         print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
@@ -252,17 +419,26 @@ async def run_simulation_stream(
                         # Try to save emergency checkpoint if hung
                         try:
                             print(f"[WATCHDOG] Attempting emergency checkpoint save...")
-                            from concordia.utils import html as html_lib
                             hung_raw_log = sim.get_raw_log()
-                            hung_html = html_lib.PythonObjectToHTMLConverter(hung_raw_log).convert()
+                            hung_html = _raw_log_to_html(hung_raw_log)
                             hung_styled = _inject_html_styles(hung_html)
 
                             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                            hung_filename = f"{timestamp}_WATCHDOG_EMERGENCY_step{step_count_tracker[0]}.html"
+                            safe_premise_wd = re.sub(r'[^\w\s-]', '', config.premise[:50])
+                            safe_premise_wd = re.sub(r'[-\s]+', '_', safe_premise_wd.strip())[:50]
+                            agent_names_wd = '_'.join([agent.name[:15] for agent in config.agents[:3]])
+                            if len(config.agents) > 3:
+                                agent_names_wd += f"_and_{len(config.agents) - 3}_more"
+                            hung_filename = f"{timestamp}_{agent_names_wd}_{safe_premise_wd}_WATCHDOG_EMERGENCY_step{step_count_tracker[0]}.html"
                             hung_path = LOGS_DIR / hung_filename
 
                             with open(hung_path, 'w', encoding='utf-8') as f:
                                 f.write(hung_styled)
+
+                            _save_checkpoint_metadata(
+                                hung_path, config, llm_settings, gm_llm_settings,
+                                start_time, step_count_tracker[0], max_steps
+                            )
 
                             print(f"[WATCHDOG] ✓ Emergency checkpoint saved: {hung_filename} ({len(hung_styled):,} chars)")
                         except Exception as hung_error:
@@ -278,11 +454,24 @@ async def run_simulation_stream(
             simulation_error_type = None
 
             # Use a try-except to handle Concordia errors while still saving partial results
+            was_cancelled = False
             try:
                 debug_print(f"[DEBUG] Waiting for future.result() to get simulation results...")
                 results = future.result()
                 debug_print(f"[DEBUG] Simulation completed successfully, got results (type: {type(results).__name__})")
                 debug_print(f"[DEBUG] Results length: {len(str(results)) if results else 0} characters")
+            except SimulationCancelled:
+                was_cancelled = True
+                print(f"[CANCEL] Simulation cancelled after step {step_count_tracker[0]}/{max_steps}")
+                simulation_error = f"Cancelled by user after step {step_count_tracker[0]}"
+                simulation_error_type = "SimulationCancelled"
+                simulation_state.update_simulation_status(task_id, status="cancelled")
+                try:
+                    raw_log = sim.get_raw_log()
+                    results = _raw_log_to_html(raw_log)
+                    print(f"[CANCEL] Saved partial results ({len(results)} chars)")
+                except Exception:
+                    results = f"<html><body><h1>Simulation Cancelled</h1><p>Cancelled after step {step_count_tracker[0]}</p></body></html>"
             except Exception as sim_error:
                 # Simulation failed, but try to save partial results
                 simulation_error = str(sim_error)
@@ -296,10 +485,9 @@ async def run_simulation_stream(
                 # Try to get partial results from the simulation object
                 # The simulation object may have partial state that can be salvaged
                 try:
-                    from concordia.utils import html as html_lib
                     raw_log = sim.get_raw_log()
                     debug_print(f"[DEBUG] Retrieved raw_log with {len(raw_log)} entries")
-                    results = html_lib.PythonObjectToHTMLConverter(raw_log).convert()
+                    results = _raw_log_to_html(raw_log)
                     print(f"[WARNING] Saved partial results due to simulation error ({len(results)} chars)")
                 except Exception as partial_error:
                     # If we can't even get partial results, create a minimal error log
@@ -326,17 +514,26 @@ async def run_simulation_stream(
         # This ensures we have a saved copy even if HTML conversion fails
         try:
             print("[CHECKPOINT] Saving emergency checkpoint before HTML processing...")
-            from concordia.utils import html as html_lib
             emergency_raw_log = sim.get_raw_log()
-            emergency_html = html_lib.PythonObjectToHTMLConverter(emergency_raw_log).convert()
+            emergency_html = _raw_log_to_html(emergency_raw_log)
             emergency_styled = _inject_html_styles(emergency_html)
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            emergency_filename = f"{timestamp}_EMERGENCY_CHECKPOINT.html"
+            safe_premise_ec = re.sub(r'[^\w\s-]', '', config.premise[:50])
+            safe_premise_ec = re.sub(r'[-\s]+', '_', safe_premise_ec.strip())[:50]
+            agent_names_ec = '_'.join([agent.name[:15] for agent in config.agents[:3]])
+            if len(config.agents) > 3:
+                agent_names_ec += f"_and_{len(config.agents) - 3}_more"
+            emergency_filename = f"{timestamp}_{agent_names_ec}_{safe_premise_ec}_EMERGENCY_CHECKPOINT.html"
             emergency_path = LOGS_DIR / emergency_filename
 
             with open(emergency_path, 'w', encoding='utf-8') as f:
                 f.write(emergency_styled)
+
+            _save_checkpoint_metadata(
+                emergency_path, config, llm_settings, gm_llm_settings,
+                start_time, step_count_tracker[0], max_steps
+            )
 
             print(f"[CHECKPOINT] ✓ Emergency checkpoint saved: {emergency_filename} ({len(emergency_styled):,} chars)")
         except Exception as emergency_error:
@@ -754,13 +951,13 @@ async def run_simulation_stream(
                 traceback.print_exc()
 
         try:
-            results_html = str(results)
+            results_html = _simulation_log_to_html(results)
             debug_print(f"[DEBUG] Results converted to HTML (length: {len(results_html)})")
         except Exception as e:
             print(f"[ERROR] Failed to convert results to HTML: {e}")
             import traceback
             traceback.print_exc()
-            results_html = str(results)  # Try again
+            results_html = str(results)
 
         # Inject CSS styles for better readability
         styled_html = _inject_html_styles(results_html)
@@ -769,8 +966,6 @@ async def run_simulation_stream(
         print("💾 Saving simulation log...")
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Create safe filename from premise (first 50 chars, alphanumeric and basic symbols only)
-        import re
         safe_premise = re.sub(r'[^\w\s-]', '', config.premise[:50])
         safe_premise = re.sub(r'[-\s]+', '_', safe_premise.strip())
         safe_premise = safe_premise[:50]  # Truncate again after sanitization
@@ -791,8 +986,26 @@ async def run_simulation_stream(
         metadata_filename = log_path.stem + '.metadata.json'
         metadata_path = LOGS_DIR / metadata_filename
 
+        start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
+        end_time_iso = datetime.datetime.now().isoformat()
+
+        gm_llm_info = None
+        if gm_llm_settings:
+            gm_llm_info = {
+                "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+                "model": gm_llm_settings.model_name,
+            }
+
         agent_metadata = {
             "timestamp": timestamp,
+            "started_at": start_time_iso,
+            "completed_at": end_time_iso,
+            "elapsed_seconds": round(elapsed, 1),
+            "llm": {
+                "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+                "model": llm_settings.model_name,
+            },
+            "gm_llm": gm_llm_info,
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,
@@ -860,6 +1073,27 @@ async def run_simulation_stream(
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
+        # Extract measurements channel data if available
+        if hasattr(sim, '_measurements') and sim._measurements:
+            try:
+                all_channels = sim._measurements.get_all_channels()
+                if all_channels:
+                    measurements_data = {}
+                    for ch_name, ch_data in all_channels.items():
+                        serialized = []
+                        for datum in ch_data:
+                            if hasattr(datum, '__dict__'):
+                                serialized.append({k: str(v) for k, v in datum.__dict__.items()})
+                            elif isinstance(datum, dict):
+                                serialized.append({k: str(v) for k, v in datum.items()})
+                            else:
+                                serialized.append(str(datum))
+                        measurements_data[ch_name] = serialized
+                    agent_metadata["measurements"] = measurements_data
+                    debug_print(f"[DEBUG] Added measurements: {len(all_channels)} channels")
+            except Exception as meas_err:
+                debug_print(f"[WARNING] Failed to extract measurements: {meas_err}")
+
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(agent_metadata, f, indent=2)
@@ -874,14 +1108,17 @@ async def run_simulation_stream(
         print("[DEBUG] About to yield SIMULATION_COMPLETE event")
 
         # Determine completion status and message
-        if simulation_error:
+        if was_cancelled:
+            completion_message = f'Simulation cancelled after step {step_count_tracker[0]}/{max_steps} (partial results saved)'
+            completed = False
+        elif simulation_error:
             completion_message = f'Simulation failed: {simulation_error}'
             completed = False
         else:
             completion_message = 'Simulation completed successfully'
             completed = True
 
-        completion_event = _format_sse(EventType.SIMULATION_COMPLETE, {
+        completion_data = {
             'message': completion_message,
             'steps_completed': step_count_tracker[0],
             'timestamp': datetime.datetime.now().isoformat(),
@@ -889,9 +1126,15 @@ async def run_simulation_stream(
             'log_filename': log_filename,
             'completed': completed,
             'error': simulation_error,
-            'error_type': simulation_error_type
-            # NOTE: 'results' field removed - frontend will load from log file
-        })
+            'error_type': simulation_error_type,
+            'elapsed_seconds': round(elapsed, 1),
+            'llm_provider': llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+            'llm_model': llm_settings.model_name,
+            'gm_llm_provider': (gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider)) if gm_llm_settings else None,
+            'gm_llm_model': gm_llm_settings.model_name if gm_llm_settings else None,
+        }
+        simulation_state.complete_simulation(task_id, log_filename=log_filename, completion_data=completion_data)
+        completion_event = _format_sse(EventType.SIMULATION_COMPLETE, completion_data)
         debug_print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
         yield completion_event
         print("[DEBUG] SIMULATION_COMPLETE event yielded")
@@ -929,7 +1172,6 @@ async def run_simulation_simple(
         Dictionary with simulation results
     """
     import os
-    import re
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
     from backend.services.llm_factory import get_model_and_embedder
@@ -990,9 +1232,16 @@ async def run_simulation_simple(
 
             Args:
                 checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+
+            Raises:
+                SimulationCancelled: If cancellation was requested, stops the engine loop.
             """
-            # Extract step number from checkpoint data
-            step = checkpoint_data.get('checkpoint_counter', 0)
+            if simulation_state.should_cancel(task_id):
+                print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
+                raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
+
+            # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
+            step = checkpoint_data.get('checkpoint_counter', 0) + 1
             step_count[0] = step
             elapsed = time.time() - start_time_progress[0]
 
@@ -1023,11 +1272,20 @@ async def run_simulation_simple(
         for gm in sim.game_masters:
             debug_print(f"[DEBUG] Game Master: {gm.name}, type: {type(gm).__name__}")
 
-        results = sim.play(
-            max_steps=config.max_steps,
-            get_state_callback=progress_callback,
-            verbose=True
-        )
+        was_cancelled = False
+        try:
+            results = sim.play(
+                max_steps=config.max_steps,
+                get_state_callback=progress_callback,
+                verbose=True
+            )
+        except SimulationCancelled:
+            was_cancelled = True
+            print(f"[CANCEL] Simulation cancelled after step {step_count[0]}/{config.max_steps}")
+            simulation_state.update_simulation_status(task_id, status="cancelled")
+            raw_log = sim.get_raw_log()
+            results = _raw_log_to_html(raw_log)
+            print(f"[CANCEL] Saved partial results ({len(str(results))} chars)")
         debug_print(f"[DEBUG] Simulation play completed, results type: {type(results).__name__}")
 
         # Try to get step count from results
@@ -1067,7 +1325,7 @@ async def run_simulation_simple(
         )
 
         # Convert to HTML string
-        results_html = str(results)
+        results_html = _simulation_log_to_html(results)
 
         # Declare variable at function scope for game-theoretic data
         game_theoretic_data = None
@@ -1390,8 +1648,26 @@ async def run_simulation_simple(
         metadata_filename = log_path.stem + '.metadata.json'
         metadata_path = LOGS_DIR / metadata_filename
 
+        start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
+        end_time_iso = datetime.datetime.now().isoformat()
+
+        gm_llm_info = None
+        if gm_llm_settings:
+            gm_llm_info = {
+                "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+                "model": gm_llm_settings.model_name,
+            }
+
         agent_metadata = {
             "timestamp": timestamp,
+            "started_at": start_time_iso,
+            "completed_at": end_time_iso,
+            "elapsed_seconds": round(elapsed, 1),
+            "llm": {
+                "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+                "model": llm_settings.model_name,
+            },
+            "gm_llm": gm_llm_info,
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,
@@ -1446,6 +1722,27 @@ async def run_simulation_simple(
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
+        # Extract measurements channel data if available
+        if hasattr(sim, '_measurements') and sim._measurements:
+            try:
+                all_channels = sim._measurements.get_all_channels()
+                if all_channels:
+                    measurements_data = {}
+                    for ch_name, ch_data in all_channels.items():
+                        serialized = []
+                        for datum in ch_data:
+                            if hasattr(datum, '__dict__'):
+                                serialized.append({k: str(v) for k, v in datum.__dict__.items()})
+                            elif isinstance(datum, dict):
+                                serialized.append({k: str(v) for k, v in datum.items()})
+                            else:
+                                serialized.append(str(datum))
+                        measurements_data[ch_name] = serialized
+                    agent_metadata["measurements"] = measurements_data
+                    debug_print(f"[DEBUG] Added measurements: {len(all_channels)} channels")
+            except Exception as meas_err:
+                debug_print(f"[WARNING] Failed to extract measurements: {meas_err}")
+
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(agent_metadata, f, indent=2)
@@ -1454,39 +1751,40 @@ async def run_simulation_simple(
         print(f"   Size: {len(styled_html):,} characters")
         print(f"✓ Metadata saved to: {metadata_filename}\n")
 
-        # Cleanup state
-        simulation_state.cleanup_simulation(task_id)
-
-        # Return results with log path
-        return {
+        result_data = {
             'config': config.model_dump(mode='json'),
-            'completed': True,
+            'completed': not was_cancelled,
+            'cancelled': was_cancelled,
             'timestamp': datetime.datetime.now().isoformat(),
-            'results': results_html,  # Return original for in-app viewing (styles injected separately in frontend)
+            'results': results_html,
             'log_path': str(log_path),
             'log_filename': log_filename,
-            'task_id': task_id
+            'task_id': task_id,
+            'message': f'Cancelled after step {step_count[0]}' if was_cancelled else 'Simulation completed successfully'
         }
+        simulation_state.complete_simulation(task_id, log_filename=log_filename, completion_data=result_data)
+        return result_data
 
     except asyncio.CancelledError:
-        # Handle cancellation
         simulation_state.update_simulation_status(task_id, status="cancelled")
-        simulation_state.cleanup_simulation(task_id)
+        simulation_state.complete_simulation(task_id)
         raise
 
     except Exception as e:
-        # Handle errors
         simulation_state.update_simulation_status(
             task_id,
             status="error",
             error=str(e)
         )
-        simulation_state.cleanup_simulation(task_id)
+        simulation_state.complete_simulation(task_id)
         raise
 
 
 def _inject_html_styles(html: str) -> str:
-    """Inject CSS styles into Concordia HTML logs for better readability."""
+    """Inject CSS styles into Concordia HTML logs for better readability.
+    Skips injection for v2.4+ structured logs which have their own styling."""
+    if 'const ENTRIES =' in html and 'const CONTENT_STORE =' in html:
+        return html
     styles = """
     <style type="text/css">
       /* Reset and base improvements */
@@ -1628,8 +1926,6 @@ def _inject_html_styles(html: str) -> str:
         # Best case: inject before closing head tag
         return html.replace('</head>', styles + '</head>')
     elif '<html' in html:
-        # Has html tag but no head - add head
-        import re
         return re.sub(r'(<html[^>]*>)', r'\1<head>' + styles + '</head>', html)
     elif '<body>' in html:
         # Has body but no html - inject at start of body

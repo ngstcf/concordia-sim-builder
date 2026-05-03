@@ -1,11 +1,11 @@
 # Concordia Framework Issues
 
-This document tracks known issues with the Concordia framework that affect this simulation builder.
+Known issues with the Concordia framework that affect this simulation builder. Originally documented against gdm-concordia 2.1.0; updated notes indicate status on 2.4.0.
 
 ## Issue: Simulation Hangs on Long-Running Simulations
 
 **Severity**: Medium
-**Status**: Partially Mitigated - Added Timeouts and Checkpointing
+**Status**: Mitigated — timeouts, checkpointing, watchdog, live log streaming
 **First Reported**: 2026-01-09
 **Affected Component**: LLM API calls, simulation execution
 
@@ -20,42 +20,34 @@ Long-running simulations (6+ agents, 30+ steps) can hang indefinitely due to:
 ### Mitigations Implemented
 
 1. **Per-Request Timeout Enforcement**
-   - Standard models: 180 seconds (3 minutes) max per request (configurable via `LLM_TIMEOUT`)
-   - Reasoning models (O1, O3, GPT-5): 300 seconds (5 minutes) max per request (configurable via `LLM_REASONING_TIMEOUT`)
-   - Timeout enforced at request level via `timeout` parameter
-   - **Waits full timeout duration** - does NOT interrupt long-running requests prematurely
-   - See: [backend/models/llm_wrappers.py:124-176](backend/models/llm_wrappers.py#L124-L176)
+   - Standard models: 180s max per request (configurable via `LLM_TIMEOUT`)
+   - Reasoning models (O3, GPT-5): 300s max per request (configurable via `LLM_REASONING_TIMEOUT`)
+   - Waits full timeout duration — does NOT interrupt long-running requests prematurely
 
 2. **Reduced Retry Count**
-   - Reduced from 3 to 2 retries to prevent long hangs (configurable via `LLM_MAX_RETRIES`)
-   - Faster backoff: 3s, 6s (instead of 5s, 10s, 20s)
-   - See: [backend/models/llm_wrappers.py:125](backend/models/llm_wrappers.py#L125)
+   - 2 retries (configurable via `LLM_MAX_RETRIES`) with 3s/6s backoff
 
 3. **Progress Checkpointing**
-   - Partial results saved every 5 steps
-   - Checkpoint files named: `*_checkpoint_step{N}.html`
-   - If simulation hangs, results up to last checkpoint are preserved
-   - See: [backend/services/simulation_runner.py:93-178](backend/services/simulation_runner.py#L93-L178)
+   - Partial results + metadata saved every N steps (configurable via `checkpoint_interval`, default 5)
+   - Checkpoint files named: `{timestamp}_{agents}_{premise}_checkpoint_step{N}.html`
+   - Companion `.metadata.json` saved alongside for analytics
 
 4. **Hang Detection Watchdog**
    - Monitors for 10 minutes without progress (configurable via `WATCHDOG_TIMEOUT_SECONDS`)
-   - Logs warning with last completed step
-   - Provides helpful hints for troubleshooting
-   - Does NOT kill simulation - only warns and continues monitoring
-   - See: [backend/services/simulation_runner.py:200-224](backend/services/simulation_runner.py#L200-L224)
+   - Saves emergency checkpoint with metadata on detection
+   - Does NOT kill simulation — warns and continues monitoring
 
-5. **Enhanced Logging**
-   - Each LLM call logs model name, timeout, and response time
-   - Timeout errors include elapsed time and helpful hints
-   - Rate limit errors have longer backoff (10s, 20s)
-   - See: [backend/models/llm_wrappers.py:140-229](backend/models/llm_wrappers.py#L140-L229)
+5. **Live Log Streaming**
+   - All terminal output (including LLM calls and Concordia engine) streamed to frontend via SSE
+   - Color-coded messages make timeout/retry/watchdog events immediately visible
+   - See [LOGGING_README.md](LOGGING_README.md) for details
 
 ### Expected Behavior
 
 With mitigations in place:
 - Each LLM API call completes within 180s (standard) or 300s (reasoning models)
 - If a timeout occurs, it retries up to 2 times with 3s/6s backoff
-- Progress is saved every 5 steps to checkpoint files
+- Progress is saved every N steps (configurable) to checkpoint files with metadata
 - If no progress for 10 minutes, a watchdog warning is logged
 - On timeout after retries, simulation fails with clear error message
 
@@ -84,7 +76,7 @@ For very long simulations:
 ## Issue: `NextActingFromSceneSpec` Not Cycling Through Participants Correctly
 
 **Severity**: High
-**Status**: Confirmed - Concordia Framework Bug
+**Status**: Confirmed — Concordia framework bug, still present in 2.4.0
 **First Reported**: 2026-01-06
 **Affected Component**: `concordia.components.game_master.next_acting.NextActingFromSceneSpec`
 
@@ -210,7 +202,7 @@ See simulation log: `logs/20260106_023240_Alex_Sam_Two_players_engage_in_an_iter
 ## Issue: Scene Premise Type Mismatch
 
 **Severity**: High
-**Status**: Fixed in templates, but prone to user error
+**Status**: Fixed in all 31 templates, but prone to user error in custom configs
 **First Reported**: 2026-01-06
 **Affected Component**: `concordia.components.game_master.scene_tracker.SceneTracker`
 
@@ -287,23 +279,22 @@ Concordia doesn't expose component access API after simulation completion. Compo
 
 ### Workaround Implemented
 
-Parse HTML logs using BeautifulSoup and regex to extract:
-- Agent actions from `__act__` tags
-- Choices from action summaries
-- Goals from entity sections
+**v2.1.0:** Parsed HTML logs using BeautifulSoup and regex to extract agent actions from `__act__` tags, choices from action summaries, and goals from entity sections.
 
-This three-tier extraction strategy is robust and works across different LLM outputs.
+**v2.4.0:** Concordia's structured log format now embeds `ENTRIES` (JSON array) and `CONTENT_STORE` (deduplicated content) as JavaScript constants in the HTML. The analytics parser extracts steps, agents, actions, and goals directly from this structured data, with legacy HTML parsing as fallback for older logs.
+
+Game-theoretic scores and payoff matrices are still not accessible post-simulation via API.
 
 ### Recommendation
 
-Concordia should expose a `get_components()` API or save game-theoretic data to metadata during simulation for later retrieval.
+Concordia should expose a `get_components()` API or serialize game-theoretic data into the `SimulationLog` object for post-simulation inspection.
 
 ---
 
 ## Issue: GLM Model Incompatibility
 
-**Severity**: High for GLM users
-**Status**: Documented, not recommended
+**Severity**: Medium for GLM users
+**Status**: Partially improved with newer GLM models
 **First Reported**: 2026-01-06
 
 ### Description
@@ -314,22 +305,20 @@ GLM (Zhipu AI) models frequently return empty responses for Concordia prompts, c
 
 - GLM works for basic text generation
 - GLM fails for Concordia agent observations and decisions
-- Failure rate: ~30-50% depending on prompt type
+- Failure rate: ~30-50% depending on prompt type and model generation
 - No clear pattern to which prompts fail
 
 ### Likely Root Cause
 
-GLM's training data and prompt format expectations differ from OpenAI-style prompts. Concordia's prompt engineering may be optimized for GPT-family models.
+GLM's training data and prompt format expectations differ from OpenAI-style prompts. Concordia's prompt engineering is optimized for GPT-family models.
+
+### Current Status (v2.4.0)
+
+GLM model list updated to current generation (GLM-5.1, GLM-5, GLM-4.7). Newer models may have improved compatibility but have not been systematically tested against all templates. `llm_print()` logging now covers GLM calls for easier debugging.
 
 ### Workaround
 
-**Use DeepSeek instead**:
-- Fully compatible with Concordia
-- Broadly reported to be 20×–50× cheaper than GPT-4 (often quoted as orders of magnitude cheaper in many API pricing benchmarks)
-- Similar quality for most tasks
-- More reliable than GLM
-
-GLM remains available for experimentation but is documented as "not recommended" in the UI.
+**Use DeepSeek or OpenAI instead** for reliable simulations. GLM remains available for experimentation.
 
 ---
 

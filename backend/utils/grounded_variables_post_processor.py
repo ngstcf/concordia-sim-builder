@@ -47,61 +47,127 @@ class GroundedVariablesPostProcessor:
     def extract_events_from_html(self, html_path: str) -> List[Dict[str, Any]]:
         """Extract events from simulation HTML log.
 
+        Supports both v2.4+ structured logs (ENTRIES JSON) and legacy HTML (<details> tags).
+
         Args:
             html_path: Path to simulation HTML file
 
         Returns:
             List of events with step numbers and descriptions
         """
+        try:
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+        except Exception as e:
+            print(f"[WARNING] Error reading HTML file: {e}")
+            return []
+
+        events = self._extract_events_from_entries(html_content)
+        if events:
+            return events
+
+        return self._extract_events_from_html_tags(html_content)
+
+    def _extract_entries_json(self, html_content: str) -> tuple:
+        """Extract ENTRIES and CONTENT_STORE JSON from script tags."""
+        entries_match = re.search(r'const ENTRIES = (\[.*?\]);\s*$', html_content, re.DOTALL | re.MULTILINE)
+        content_store_match = re.search(r'const CONTENT_STORE = (\{.*?\});\s*$', html_content, re.DOTALL | re.MULTILINE)
+        if not entries_match:
+            return [], {}
+        try:
+            entries = json.loads(entries_match.group(1))
+            content_store = json.loads(content_store_match.group(1)) if content_store_match else {}
+            return entries, content_store
+        except (json.JSONDecodeError, ValueError):
+            return [], {}
+
+    def _resolve_ref(self, value, content_store: Dict) -> Any:
+        """Resolve _ref pointers in deduplicated data."""
+        if isinstance(value, dict):
+            if '_ref' in value:
+                return content_store.get(value['_ref'], str(value))
+            return {k: self._resolve_ref(v, content_store) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._resolve_ref(v, content_store) for v in value]
+        return value
+
+    def _extract_events_from_entries(self, html_content: str) -> List[Dict[str, Any]]:
+        """Extract events from v2.4+ ENTRIES JSON format."""
+        entries, content_store = self._extract_entries_json(html_content)
+        if not entries:
+            return []
+
+        events_by_step: Dict[int, List[str]] = {}
+
+        for entry in entries:
+            step = entry.get('step', 0)
+            if step <= 0:
+                continue
+
+            entry_type = entry.get('entry_type', '')
+            summary = entry.get('summary', '')
+            dedup_data = entry.get('deduplicated_data', {})
+
+            if entry_type == 'step':
+                text = summary.strip()
+                prefix_pattern = re.compile(r'Step\s+\d+\s+.*?---\s*Event:\s*', re.IGNORECASE)
+                text = prefix_pattern.sub('', text).strip()
+                if len(text) > 20:
+                    events_by_step.setdefault(step, []).append(text)
+
+            elif entry_type == 'entity':
+                resolved = self._resolve_ref(dedup_data, content_store)
+                value_data = resolved.get('value', {})
+                if isinstance(value_data, dict):
+                    act_data = value_data.get('__act__', {})
+                    act_text = act_data.get('Value', '') if isinstance(act_data, dict) else str(act_data) if act_data else ''
+                    entity_name = entry.get('entity_name', '')
+                    if act_text and entity_name:
+                        events_by_step.setdefault(step, []).append(f"{entity_name}: {act_text}")
+
+        events = []
+        for step_num in sorted(events_by_step.keys()):
+            combined = " | ".join(events_by_step[step_num])
+            if combined:
+                events.append({"step": step_num, "description": combined})
+
+        return events
+
+    def _extract_events_from_html_tags(self, html_content: str) -> List[Dict[str, Any]]:
+        """Legacy fallback: extract events from <details> HTML tags (pre-v2.4)."""
         events = []
         events_by_step: Dict[int, List[str]] = {}
 
         try:
-            with open(html_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-
             soup = BeautifulSoup(html_content, 'html.parser')
-
-            # Find all <details> tags - each contains a step in Concordia logs
             details_tags = soup.find_all('details')
 
             for details in details_tags:
-                # Get the summary which contains "Step X" info
                 summary = details.find('summary')
                 if not summary:
                     continue
 
                 summary_text = summary.get_text()
-
-                # Extract step number from summary
                 step_match = re.search(r'[Ss]tep\s+(\d+)', summary_text)
                 if not step_match:
                     continue
 
                 step_num = int(step_match.group(1))
-
-                # Get the full content including the summary text
                 full_text = summary.get_text(separator=' ', strip=True)
 
-                # Filter out empty or very short events
-                if len(full_text) > 50:  # Minimum length for meaningful event
+                if len(full_text) > 50:
                     if step_num not in events_by_step:
                         events_by_step[step_num] = []
                     events_by_step[step_num].append(full_text)
 
-            # Now merge events from the same step and deduplicate
             for step_num in sorted(events_by_step.keys()):
-                # Use the longest event text for this step (likely the GM event)
                 step_events = events_by_step[step_num]
-                # Sort by length (descending) and take the longest one
                 step_events.sort(key=len, reverse=True)
 
-                # Remove duplicates (events that are very similar)
                 unique_events = []
                 for event in step_events:
                     is_duplicate = False
                     for existing in unique_events:
-                        # Check if events are very similar (>90% overlap)
                         similarity = len(set(event.split()) & set(existing.split())) / max(len(set(event.split())), len(set(existing.split())))
                         if similarity > 0.9:
                             is_duplicate = True
@@ -109,48 +175,30 @@ class GroundedVariablesPostProcessor:
                     if not is_duplicate:
                         unique_events.append(event)
 
-                # Take the longest unique event as the representative for this step
                 if unique_events:
                     event_text = unique_events[0]
 
-                    # Remove the premise/context that gets repeated in every event
-                    # The premise starts with "The historically working-class neighborhood..."
-                    # and ends with "IMPORTANT: The Council will take ACTION..."
-                    # We want to extract only what happened at THIS step
-
-                    # First, try to find the "Step X: CRITICAL DECISION POINT" marker
                     critical_decision_pattern = rf'Step\s+{step_num}:\s*CRITICAL\s+DECISION\s+POINT'
                     match = re.search(critical_decision_pattern, event_text, re.IGNORECASE)
 
                     if match:
-                        # Extract text starting from the critical decision point
                         start_idx = match.start()
                         remaining = event_text[start_idx:]
-
-                        # Stop at the next step's critical decision point
                         next_step_pattern = rf'-\s*Step\s+{step_num + 1}:\s*CRITICAL\s+DECISION'
                         next_match = re.search(next_step_pattern, remaining, re.IGNORECASE)
                         if next_match:
                             remaining = remaining[:next_match.start()]
-
                         event_text = remaining.strip()
                     else:
-                        # If no CRITICAL DECISION POINT marker, remove the premise
-                        # The premise ends around "IMPORTANT: The Council will take ACTION"
-                        # or "CRITICAL DECISION POINTS:"
                         premise_end_patterns = [
                             r'IMPORTANT:\s+The\s+Council\s+will\s+take\s+ACTION',
                             r'CRITICAL\s+DECISION\s+POINTS:\s*-',
                             r'Step\s+1:\s*CRITICAL\s+DECISION\s+POINT'
                         ]
-
                         for pattern in premise_end_patterns:
                             match = re.search(pattern, event_text, re.IGNORECASE)
                             if match:
-                                # Remove everything before the match
                                 event_text = event_text[match.end():].strip()
-                                # Also remove any remaining CRITICAL DECISION POINTS for future steps
-                                # Keep only content for current step
                                 event_text = re.split(rf'-\s*Step\s+{step_num + 1}:', event_text, flags=re.IGNORECASE)[0].strip()
                                 break
 
@@ -160,7 +208,7 @@ class GroundedVariablesPostProcessor:
                     })
 
         except Exception as e:
-            print(f"[WARNING] Error extracting events from HTML: {e}")
+            print(f"[WARNING] Error extracting events from HTML tags: {e}")
 
         return events
 

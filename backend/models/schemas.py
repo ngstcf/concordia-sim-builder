@@ -10,6 +10,8 @@ class EngineType(str, Enum):
     """Available simulation engine types."""
     SEQUENTIAL = "sequential"
     SIMULTANEOUS = "simultaneous"
+    ASYNCHRONOUS = "asynchronous"
+    STEP_CONTROLLER = "step_controller"
     INTERVIEW = "interview"
     SURVEY = "survey"
 
@@ -29,6 +31,7 @@ class LLMProvider(str, Enum):
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    OLLAMA_REMOTE = "ollama_remote"
     GLM = "glm"  # Zhipu AI (GLM models)
 
 
@@ -93,6 +96,12 @@ class VariableConfig(BaseModel):
     update_rule: Optional[str] = Field(None, description="Description of how variable updates")
 
 
+class ContribComponentConfig(BaseModel):
+    """Configuration for a contrib GM component."""
+    component_id: str = Field(..., description="Registry ID (e.g. 'death', 'npc_event_generator')")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Component-specific parameters")
+
+
 class GameMasterConfig(BaseModel):
     """Configuration for the game master."""
     prefab: str = Field(..., description="Game master prefab type")
@@ -112,6 +121,14 @@ class GameMasterConfig(BaseModel):
     critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
         None,
         description="Optional critical decision points that trigger variable changes at specific steps"
+    )
+    contrib_components: Optional[List[ContribComponentConfig]] = Field(
+        None,
+        description="Optional contrib GM components to add (Death, GMWorkingMemory, etc.)"
+    )
+    allow_early_termination: bool = Field(
+        True,
+        description="If False, simulation always runs to max_steps (disables LLM-driven early termination)"
     )
 
     class Config:
@@ -146,6 +163,12 @@ class SimulationConfig(BaseModel):
     player_specific_context: Optional[Dict[str, str]] = Field(
         None,
         description="Character-specific context (for formative memories initializer)"
+    )
+    checkpoint_interval: int = Field(
+        5,
+        ge=1,
+        le=100,
+        description="Save partial checkpoint every N steps (0 to disable)"
     )
 
     class Config:
@@ -186,8 +209,9 @@ class LLMSettings(BaseModel):
     base_url: Optional[str] = Field(None, description="Custom base URL for OpenAI-compatible APIs. For Azure OpenAI, use AZURE_OAI_ENDPOINT")
     embedder_model: str = Field("all-MiniLM-L6-v2", description="Sentence transformer model")
     temperature: float = Field(0.5, ge=0, le=2, description="Sampling temperature")  # Match Concordia's DEFAULT_TEMPERATURE
-    max_tokens: int = Field(3500, ge=1, le=32000, description="Maximum tokens to generate")  # Increased for better response quality
+    max_tokens: int = Field(9000, ge=1, le=32000, description="Maximum tokens to generate")
     api_version: Optional[str] = Field(None, description="API version for Azure OpenAI (e.g., '2024-02-15-preview'). Env: AZURE_OAI_API_VERSION")
+    request_timeout: int = Field(120, ge=10, le=600, description="Per-request timeout in seconds for LLM calls")
 
     # Validators to strip whitespace from string fields
     @field_validator('model_name', 'base_url', 'api_key', mode='before')
@@ -204,8 +228,8 @@ class LLMSettings(BaseModel):
                 "provider": "openai",
                 "model_name": "gpt-4",
                 "embedder_model": "all-MiniLM-L6-v2",
-                "temperature": 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
-                "max_tokens": 3500  # Increased for better response quality
+                "temperature": 0.5,
+                "max_tokens": 9000
             }
         }
 
@@ -214,6 +238,10 @@ class ExecutionRequest(BaseModel):
     """Request to execute a simulation."""
     config: SimulationConfig
     llm_settings: LLMSettings
+    gm_llm_settings: Optional[LLMSettings] = Field(
+        None,
+        description="Optional separate LLM settings for the Game Master. If not set, uses llm_settings."
+    )
 
     class Config:
         json_schema_extra = {
@@ -255,6 +283,8 @@ class EventType(str, Enum):
     OBSERVATION = "observation"
     STEP_END = "step_end"
     SIMULATION_COMPLETE = "simulation_complete"
+    STEP_DATA = "step_data"
+    CONTROLLER_STATE = "controller_state"
     ERROR = "error"
 
 
@@ -310,6 +340,42 @@ class GroundedVariablesExtractionRequest(BaseModel):
                 }
             }
         }
+
+
+class FormativeMemoryRequest(BaseModel):
+    """Request to generate formative memories for an agent."""
+    agent_name: str = Field(..., description="Name of the agent")
+    agent_context: str = Field("", description="Character-specific context")
+    shared_memories: List[str] = Field(default_factory=list, description="Shared world knowledge")
+    sentences_per_episode: int = Field(5, ge=1, le=20, description="Sentences per memory episode")
+    llm_settings: LLMSettings
+
+
+class FormativeMemoryResponse(BaseModel):
+    """Response containing generated formative memories."""
+    memories: List[str]
+
+
+class PersonaGenerationRequest(BaseModel):
+    """Request to generate diverse agent personas."""
+    context: str = Field(..., description="Shared scenario context for all personas")
+    diversity_axes: List[str] = Field(..., min_length=1, description="Axes along which to vary personas")
+    num_personas: int = Field(5, ge=1, le=20, description="Number of personas to generate")
+    num_memories: int = Field(5, ge=1, le=15, description="Memories per persona")
+    llm_settings: LLMSettings = Field(..., description="LLM settings for generation")
+
+
+class GeneratedPersona(BaseModel):
+    """A generated persona."""
+    name: str
+    goal: str = ""
+    memories: List[str] = Field(default_factory=list)
+    description: str = ""
+
+
+class PersonaGenerationResponse(BaseModel):
+    """Response containing generated personas."""
+    personas: List[GeneratedPersona]
 
 
 # Resolve forward references

@@ -1,239 +1,147 @@
 # Simulation Analyzer
 
-LLM-powered deep content analysis tool for Concordia simulation logs.
+LLM-powered analysis tool for Concordia simulation logs. Uses simulation metadata (agents, goals, components, memories) alongside the HTML log to produce analysis grounded in the simulation's design intent.
 
 ## Overview
 
-The Simulation Analyzer automatically analyzes simulation logs and generates comprehensive reports similar to manual expert analysis. It uses Large Language Models to:
+The analyzer generates comprehensive reports covering:
 
-- Extract structured data from HTML simulation logs
-- Generate executive summaries
-- Analyze team effectiveness
-- Identify key insights and patterns
-- Provide actionable recommendations
-- Create professional markdown reports
+- **Executive Summary** — Scenario, key events, goal attainment, emergent dynamics
+- **Agent Effectiveness** — Per-agent goal achievement, behavioral consistency with configured components, interaction dynamics
+- **Insights** — Decision-making patterns, psychological component effects, information dynamics, emergent social phenomena, game-theoretic outcomes (when applicable), grounded variable trajectories, nested simulation integration
+- **Recommendations** — Re-run variations with specific hypotheses, design improvements, research extensions
 
-## Installation
-
-Install the required dependencies:
-
-```bash
-pip install beautifulsoup4 lxml
-```
-
-Or install all backend dependencies:
-
-```bash
-pip install -r requirements.txt
-```
+Reports are context-aware: prompts adapt based on what data is available (game-theoretic scores, grounded variables, nested simulations, psychological components). When a simulation produces no step data, the analyzer generates a diagnostic report with setup review and concrete fixes instead of fabricating results.
 
 ## Usage
 
-### Command Line Interface
+### Web UI (Recommended)
 
-The easiest way to use the analyzer is via the CLI script:
+In the Results page, open the **Analysis** tab and click **Analyze**. The report renders in-browser with markdown formatting and can be downloaded.
 
-```bash
-python backend/scripts/analyze_simulation.py <log_path> [output_path]
+### Web API
+
+```
+POST /api/simulations/analyze-simulation
+Content-Type: application/json
+
+{"log_filename": "20260503_200122_Agent_R_Agent_U_Peace_Negotiation.html"}
 ```
 
-**Examples:**
+### CLI
 
 ```bash
 # Analyze a simulation log (auto-generates output filename)
-python backend/scripts/analyze_simulation.py logs/20260109_224705_simulation.html
+python backend/scripts/analyze_simulation.py logs/20260503_200122_simulation.html
 
 # Specify custom output path
 python backend/scripts/analyze_simulation.py logs/simulation.html reports/my_analysis.md
-
-# Analyze the phishing simulation
-python backend/scripts/analyze_simulation.py logs/20260109_224705_Sarah_Marcus_Elena_and_1_more_A_security_team_at_a_financial_services_company_ha.html
 ```
 
 ### Python API
 
-You can also use the analyzer programmatically:
-
 ```python
 from backend.utils.simulation_analyzer import SimulationAnalyzer
-from backend.models.llm_wrappers import GLMModel
+from backend.services.llm_factory import create_llm_client
 
-# Initialize LLM client
-llm_client = GLMModel(api_key="your-api-key", model_name="glm-4.7")
-
-# Create analyzer
+llm_client = create_llm_client(provider="openai", model="gpt-4o", api_key="sk-xxx")
 analyzer = SimulationAnalyzer(llm_client)
 
-# Run analysis
 analysis = analyzer.analyze_simulation(
     log_path="logs/simulation.html",
-    metadata_path="logs/simulation.metadata.json"  # Optional
+    metadata_path="logs/simulation.metadata.json"  # Optional — auto-resolved from log path
 )
 
-# Save report
 analyzer.save_report(analysis, "reports/analysis.md")
 ```
 
-### Quick Analysis Function
+## How It Works
 
-For one-off analyses:
-
-```python
-from backend.utils.simulation_analyzer import analyze_simulation_from_api
-
-analysis = analyze_simulation_from_api(
-    llm_client,
-    simulation_id="20260109_224705",
-    log_path="logs/simulation.html"
-)
 ```
+HTML Log + Metadata JSON
+        │
+        ├── Parse v2.4 structured log (ENTRIES/CONTENT_STORE in <script> tags)
+        ├── Extract steps, agent actions, outcomes, nested simulations
+        ├── Load metadata (agents, goals, components, grounded variables, game-theoretic data)
+        │
+        ├── Generate Executive Summary (scenario, events, goal attainment, emergent dynamics)
+        ├── Analyze Agent Effectiveness (per-agent assessment with component consistency)
+        ├── Generate Insights (adapted to available data: game theory, grounded vars, etc.)
+        ├── Generate Recommendations (re-run variations, design improvements, research extensions)
+        │
+        └── Format Markdown Report
+```
+
+The analyzer adapts its prompts based on what data is present:
+- **Psychological components configured** → Assesses whether cognitive biases, personality, emotions, and values manifested in behavior
+- **Game-theoretic simulation** → Compares outcomes to Nash equilibrium and Pareto optimality
+- **Grounded variables tracked** → Evaluates variable trajectories against simulation events
+- **Nested simulations run** → Checks whether inner simulation findings influenced outer behavior
+- **No step data** → Generates diagnostic report with setup review and troubleshooting steps
 
 ## Report Structure
 
-The generated report includes:
+### Executive Summary
+- Scenario and stakes (premise, agent goals)
+- Key events and turning points (with step numbers)
+- Per-agent goal attainment assessment
+- Emergent dynamics (alliances, betrayals, creative solutions, deadlocks)
 
-### 1. Executive Summary
-- What scenario was simulated and why
-- Key events and outcomes
-- Team effectiveness and decision quality
-- Critical insights or recommendations
-
-### 2. Timeline of Events
-- Step-by-step breakdown of the simulation
-- Agent actions and decisions
-- Multi-phase developments (e.g., Wave One/Wave Two attacks)
-
-### 3. Team Effectiveness Analysis
+### Agent Effectiveness
 For each agent:
-- Role and primary focus
-- Key contributions
-- Effectiveness rating (1-5 stars) with justification
-- Strengths demonstrated
-- Key insights provided
+- **Design Intent** — Goal and configured components
+- **Goal Achievement** — Specific assessment with evidence
+- **Behavioral Consistency** — Did components (biases, personality, emotions, values) manifest?
+- **Key Contributions** — Specific actions that shaped outcomes
+- **Surprising Behavior** — Unexpected actions or creative solutions
 
-### 4. Key Insights
-- **Technical Analysis**: Technical findings, vulnerabilities, mechanisms
-- **Human Factors**: Psychological manipulation, user behavior, culture
-- **Decision Quality**: Quality of decisions, alternatives considered
-- **Attack/Failure Modes**: How attacks succeeded or failures occurred
-- **Learning Outcomes**: What worked well, what could be improved
+Plus interaction dynamics: pairings, coalitions, conflicts, GM influence.
 
-### 5. Recommendations
-Organized by timeframe:
-- **Immediate Actions (0-30 days)**: High-priority items with expected impact
-- **Medium-Term Actions (30-90 days)**: Root cause addressing
-- **Long-Term Actions (90+ days)**: Strategic initiatives
+### Insights
+Categories included based on available data:
+1. Agent decision-making patterns
+2. Psychological component effects
+3. Information dynamics
+4. Emergent social phenomena
+5. Game-theoretic outcomes (if applicable)
+6. Grounded variable trajectories (if applicable)
+7. Nested simulation integration (if applicable)
+8. Methodological observations
+
+### Recommendations
+1. **Re-run Variations** — Specific parameter changes with hypotheses and expected observations
+2. **Design Improvements** — Agent configuration, scenario structure, missing elements
+3. **Research Extensions** — Theoretical frameworks, research questions, data extraction approaches
 
 ## Configuration
 
-The analyzer uses the same LLM configuration as the main Concordia application:
+The analyzer uses the same LLM providers as the simulation runner. Configure in `.env`:
 
 ```bash
-# .env file
-LLM_PROVIDER=glm
-MODEL_NAME=glm-4.7
-GLM_API_KEY=your-api-key-here
+# Any supported provider works for analysis
+OPENAI_API_KEY=sk-xxx
+DEEPSEEK_API_KEY=sk-xxx
+GEMINI_API_KEY=xxx
+ANTHROPIC_API_KEY=sk-xxx
 ```
 
-Supported providers:
-- `glm` (Zhipu AI)
-- `openai` (GPT models)
-- `anthropic` (Claude models)
-- `gemini` (Google Gemini)
+All 8 providers are supported: OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote.
 
-## Example Report
+## Anti-Fabrication Guardrails
 
-See [docs/phishing-simulation-analysis-report.md](../../docs/phishing-simulation-analysis-report.md) for a complete example of a manual analysis. The automated tool produces reports with similar structure and depth.
-
-## How It Works
-
-1. **Parse HTML Log**: Extract structured data from simulation HTML
-2. **Load Metadata**: Read simulation metadata from JSON file
-3. **Generate Analysis**: Use LLM to analyze each section
-4. **Format Report**: Compile into professional markdown report
-
-### Analysis Pipeline
-
-```
-HTML Log → BeautifulSoup Parser → Structured Data → LLM Analysis → Markdown Report
-```
-
-## Advanced Usage
-
-### Custom Analysis Prompts
-
-You can extend the `SimulationAnalyzer` class to customize analysis:
-
-```python
-class CustomAnalyzer(SimulationAnalyzer):
-    def _generate_custom_insights(self, parsed_data, metadata):
-        prompt = "Your custom analysis prompt here..."
-        return self.llm.sample_text(prompt, max_tokens=2000)
-```
-
-### Batch Analysis
-
-Analyze multiple simulations:
-
-```python
-import glob
-from pathlib import Path
-
-log_files = glob.glob("logs/*.html")
-for log_path in log_files:
-    print(f"Analyzing {log_path}...")
-    analysis = analyzer.analyze_simulation(log_path)
-
-    output_path = f"reports/{Path(log_path).stem}_analysis.md"
-    analyzer.save_report(analysis, output_path)
-```
-
-### Integration with Web API
-
-You can integrate the analyzer into the backend API:
-
-```python
-@router.post("/api/analyze-simulation")
-async def analyze_simulation_endpoint(simulation_id: str):
-    log_path = f"logs/{simulation_id}.html"
-
-    analyzer = SimulationAnalyzer(get_llm_client())
-    analysis = analyzer.analyze_simulation(log_path)
-
-    return {"analysis": analysis}
-```
-
-## Limitations
-
-- **HTML Structure**: Assumes specific HTML structure from Concordia logs
-- **Token Limits**: Very long simulations may require chunking
-- **LLM Quality**: Output quality depends on LLM capabilities
-- **Processing Time**: Analysis may take several minutes for complex simulations
+Every LLM prompt includes explicit instructions to:
+- Ground claims in specific log evidence with step citations
+- State when information is missing or ambiguous rather than speculating
+- Never fabricate dialogue, events, or outcomes not in the log
+- Skip analysis categories that lack sufficient evidence
+- Generate diagnostic reports (not fake results) when no step data exists
 
 ## Troubleshooting
 
-### "HTML parsing errors"
-- Ensure log file is valid HTML from Concordia
-- Check that beautifulsoup4 and lxml are installed
+**Empty or low-quality reports** — Try a more capable model. Analysis quality depends on LLM reasoning ability.
 
-### "LLM timeout errors"
-- Increase `LLM_TIMEOUT` in `.env` (default: 250s)
-- Use a faster model (e.g., `glm-4.5-flash`)
+**LLM timeout errors** — Increase `LLM_TIMEOUT` in `.env` (default: 180s). Analysis prompts can be long.
 
-### "Empty or low-quality reports"
-- Check that LLM API key is valid
-- Verify LLM provider is accessible
-- Try a different model or provider
+**"Analysis failed" in UI** — Check terminal for `[Analyzer]` messages. Common causes: invalid API key, model not available, rate limiting.
 
-## Contributing
-
-To extend the analyzer:
-
-1. Add new analysis methods to `SimulationAnalyzer` class
-2. Update prompt templates for better results
-3. Add new report sections in `_format_markdown_report()`
-4. Improve HTML parsing for better data extraction
-
-## License
-
-Same as the main Concordia project.
+**Checkpoint files** — Checkpoints can be analyzed too. The analytics endpoint resolves checkpoint filenames to find base metadata when available.

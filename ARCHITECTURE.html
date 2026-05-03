@@ -1,0 +1,124 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 685" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+  <!-- Background -->
+  <rect x="0" y="0" width="900" height="720" fill="#f8f9fa"/>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1f2937">Concordia Simulation Builder - System Architecture</text>
+
+  <!-- Frontend Layer -->
+  <rect x="50" y="60" width="800" height="140" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="450" y="85" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e40af">Frontend (React + TypeScript + Tailwind)</text>
+
+  <!-- Frontend Components -->
+  <rect x="80" y="100" width="230" height="80" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="195" y="125" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">Simulation Builder</text>
+  <text x="195" y="145" text-anchor="middle" font-size="11" fill="#6b7280">Template Picker + Config</text>
+  <text x="195" y="160" text-anchor="middle" font-size="10" fill="#9ca3af">Agents, GM (Game Master), Scenarios, LLM</text>
+
+  <rect x="335" y="100" width="230" height="80" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="450" y="120" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">Simulation Runner</text>
+  <text x="450" y="138" text-anchor="middle" font-size="11" fill="#6b7280">9 Tabs: Log, Stats, Timeline,</text>
+  <text x="450" y="153" text-anchor="middle" font-size="11" fill="#6b7280">Actions, Summary, Variables,</text>
+  <text x="450" y="168" text-anchor="middle" font-size="11" fill="#6b7280">Cooperation, Analysis, Component Logs</text>
+
+  <rect x="590" y="100" width="230" height="80" rx="8" fill="#ffffff" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="705" y="125" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2937">Recent Simulations</text>
+  <text x="705" y="145" text-anchor="middle" font-size="11" fill="#6b7280">Log Browser + Import/Export</text>
+  <text x="705" y="160" text-anchor="middle" font-size="10" fill="#9ca3af">Collapsible Sidebar</text>
+
+  <!-- Connection Arrow -->
+  <path d="M450 200 L450 235" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowdown)"/>
+  <rect x="350" y="207" width="200" height="20" rx="4" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="450" y="221" text-anchor="middle" font-size="10" fill="#4b5563">HTTP / SSE (Server-Sent Events) (Real-time)</text>
+
+  <!-- Backend Layer -->
+  <rect x="50" y="240" width="800" height="160" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+  <text x="450" y="265" text-anchor="middle" font-size="16" font-weight="bold" fill="#065f46">Backend (FastAPI + Python)</text>
+
+  <!-- Backend Services -->
+  <rect x="80" y="280" width="170" height="65" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
+  <text x="165" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">Sim Builder</text>
+  <text x="165" y="316" text-anchor="middle" font-size="10" fill="#6b7280">31 Templates + Prefabs</text>
+  <text x="165" y="330" text-anchor="middle" font-size="10" fill="#9ca3af">Config Validation</text>
+
+  <rect x="265" y="280" width="170" height="65" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
+  <text x="350" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">Sim Runner</text>
+  <text x="350" y="316" text-anchor="middle" font-size="10" fill="#6b7280">Threaded Execution</text>
+  <text x="350" y="330" text-anchor="middle" font-size="10" fill="#9ca3af">State + Checkpoints + SSE</text>
+
+  <rect x="450" y="280" width="170" height="65" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
+  <text x="535" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">LLM Factory</text>
+  <text x="535" y="316" text-anchor="middle" font-size="10" fill="#6b7280">Multi-Provider Clients</text>
+  <text x="535" y="330" text-anchor="middle" font-size="10" fill="#9ca3af">Agent + GM LLM</text>
+
+  <rect x="635" y="280" width="185" height="65" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
+  <text x="727" y="300" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2937">Sim Analyzer</text>
+  <text x="727" y="316" text-anchor="middle" font-size="10" fill="#6b7280">HTML Log Parsing</text>
+  <text x="727" y="330" text-anchor="middle" font-size="10" fill="#9ca3af">LLM-Powered Analysis</text>
+
+  <!-- Concordia Integration Box -->
+  <rect x="80" y="355" width="740" height="35" rx="6" fill="#065f46" stroke="#047857" stroke-width="1.5"/>
+  <text x="450" y="377" text-anchor="middle" font-size="13" font-weight="600" fill="#ffffff">Concordia Framework Integration Layer</text>
+
+  <!-- Connection Arrow -->
+  <path d="M450 395 L450 430" stroke="#6b7280" stroke-width="2" marker-end="url(#arrowdown)"/>
+  <rect x="375" y="405" width="150" height="18" rx="4" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="450" y="418" text-anchor="middle" font-size="10" fill="#4b5563">API Calls</text>
+
+  <!-- LLM Providers Layer -->
+  <rect x="50" y="435" width="800" height="100" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="450" y="460" text-anchor="middle" font-size="16" font-weight="bold" fill="#92400e">LLM Providers (8 supported, separate Agent + GM selection)</text>
+
+  <!-- LLM Provider Boxes -->
+  <rect x="70" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="120" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">OpenAI</text>
+  <text x="120" y="510" text-anchor="middle" font-size="9" fill="#6b7280">GPT-4, o1, o3, o4</text>
+
+  <rect x="180" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="230" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">Azure</text>
+  <text x="230" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Azure OpenAI</text>
+
+  <rect x="290" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="340" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">DeepSeek</text>
+  <text x="340" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Flash and Pro</text>
+
+  <rect x="400" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="450" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">Anthropic</text>
+  <text x="450" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Claude</text>
+
+  <rect x="510" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="560" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">Gemini</text>
+  <text x="560" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Google</text>
+
+  <rect x="620" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="670" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">Ollama</text>
+  <text x="670" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Local + Remote</text>
+
+  <rect x="730" y="470" width="100" height="50" rx="6" fill="#ffffff" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="780" y="492" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2937">GLM</text>
+  <text x="780" y="510" text-anchor="middle" font-size="9" fill="#6b7280">Zhipu AI</text>
+
+  <!-- Data Flow Labels -->
+  <text x="70" y="570" font-size="11" font-weight="600" fill="#374151">Data Flow:</text>
+  <text x="70" y="588" font-size="10" fill="#6b7280">1. User picks template or builds from scratch via Builder</text>
+  <text x="70" y="605" font-size="10" fill="#6b7280">2. Selects LLM provider/model (separate for agents and GM)</text>
+  <text x="70" y="622" font-size="10" fill="#6b7280">3. Backend validates config, maps prefabs, builds simulation</text>
+  <text x="70" y="639" font-size="10" fill="#6b7280">4. Runner executes with SSE progress + checkpoints</text>
+
+  <text x="480" y="570" font-size="11" font-weight="600" fill="#374151">Data Flow (continued):</text>
+  <text x="480" y="588" font-size="10" fill="#6b7280">5. LLM calls drive agent behaviors + grounded variable updates</text>
+  <text x="480" y="605" font-size="10" fill="#6b7280">6. Results saved as HTML log + .metadata.json sidecar</text>
+  <text x="480" y="622" font-size="10" fill="#6b7280">7. Analyzer extracts structured data from HTML logs</text>
+  <text x="480" y="639" font-size="10" fill="#6b7280">8. 9-tab dashboard: stats, timeline, summary, analysis, etc.</text>
+
+  <!-- Version label -->
+  <text x="870" y="670" text-anchor="end" font-size="9" fill="#9ca3af">Updated: 2026-05-03 | Concordia v2.4</text>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowdown" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10" fill="#6b7280"/>
+    </marker>
+  </defs>
+</svg>

@@ -3,10 +3,26 @@ LLM factory for creating language model and embedder instances.
 Uses the wrapper classes from backend.models.llm_wrappers.
 """
 import os
+import time
+import threading
 from typing import Tuple, Optional, Collection
 from enum import Enum
 from concordia.language_model import language_model
 from backend.models.schemas import LLMSettings, LLMProvider
+
+# Shared LLM activity tracker — updated on every call, read by watchdog
+_llm_activity = {
+    'last_call_start': 0.0,
+    'last_call_end': 0.0,
+    'calls_in_flight': 0,
+    'total_calls': 0,
+}
+_llm_activity_lock = threading.Lock()
+
+
+def get_llm_activity() -> dict:
+    with _llm_activity_lock:
+        return dict(_llm_activity)
 
 
 # Import wrapper classes from backend.models.llm_wrappers
@@ -25,9 +41,11 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
     This allows the user's temperature setting from the web app to be used.
     """
 
-    def __init__(self, base_model: language_model.LanguageModel, temperature: float):
+    def __init__(self, base_model: language_model.LanguageModel, temperature: float, request_timeout: float = 120.0, max_tokens: int = 3500):
         self._model = base_model
         self._temperature = temperature
+        self._request_timeout = request_timeout
+        self._max_tokens = max_tokens
 
     def sample_text(
         self,
@@ -38,32 +56,47 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
         temperature: Optional[float] = None,
         timeout: float = language_model.DEFAULT_TIMEOUT_SECONDS,
         seed: int | None = None,
+        top_p: float = 0.95,
+        top_k: int = 64,
+        **kwargs,
     ) -> str:
         """
         Sample text from the model, using configured temperature if not provided.
         """
-        # Use our configured temperature if caller doesn't specify one
         if temperature is None:
             temperature = self._temperature
 
-        # Override timeout with LLM_TIMEOUT environment variable if set
-        # This allows global timeout configuration without code changes
+        max_tokens = max(max_tokens, self._max_tokens)
+
+        timeout = self._request_timeout
+
         env_timeout = os.getenv('LLM_TIMEOUT')
         if env_timeout:
             try:
                 timeout = float(env_timeout)
             except ValueError:
-                pass  # Use the provided timeout
+                pass
 
-        # Call the underlying model's sample_text with the temperature
-        return self._model.sample_text(
-            prompt,
-            max_tokens=max_tokens,
-            terminators=terminators,
-            temperature=temperature,
-            timeout=timeout,
-            seed=seed
-        )
+        with _llm_activity_lock:
+            _llm_activity['last_call_start'] = time.time()
+            _llm_activity['calls_in_flight'] += 1
+            _llm_activity['total_calls'] += 1
+        try:
+            return self._model.sample_text(
+                prompt,
+                max_tokens=max_tokens,
+                terminators=terminators,
+                temperature=temperature,
+                timeout=timeout,
+                seed=seed,
+                top_p=top_p,
+                top_k=top_k,
+                **kwargs,
+            )
+        finally:
+            with _llm_activity_lock:
+                _llm_activity['last_call_end'] = time.time()
+                _llm_activity['calls_in_flight'] -= 1
 
     def sample_choice(
         self,
@@ -152,15 +185,20 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = AnthropicModel(api_key=api_key, model_name=model_name)
 
     elif provider == LLMProvider.OLLAMA.value:
-        # Ollama uses OpenAI-compatible API running on localhost or remote server
-        # Default base URL for Ollama is http://localhost:11434/v1
-        # Can also use services like OpenWebUI which may require an API key
-        ollama_base_url = base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+        # Ollama local — always uses localhost, no auth needed
+        ollama_base_url = 'http://localhost:11434/v1'
+        model = CustomGPTModel(
+            api_key='ollama',
+            model_name=model_name,
+            base_url=ollama_base_url
+        )
 
-        # Use provided API key, or check environment, or use dummy key for local Ollama
-        # Some Ollama hosting services (like OpenWebUI) require an API key
-        ollama_api_key = api_key or os.getenv('OLLAMA_API_KEY', 'ollama')
-
+    elif provider == LLMProvider.OLLAMA_REMOTE.value:
+        # Ollama remote — uses .env configured endpoint and API key
+        ollama_base_url = base_url or os.getenv('OLLAMA_BASE_URL')
+        if not ollama_base_url:
+            raise ValueError("OLLAMA_BASE_URL not set for remote Ollama. Set it in .env or provide base_url.")
+        ollama_api_key = api_key or os.getenv('OLLAMA_API_KEY', '')
         model = CustomGPTModel(
             api_key=ollama_api_key,
             model_name=model_name,
@@ -178,9 +216,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
-    # Wrap model with temperature configuration from settings
-    # This ensures the user's temperature setting from the web app is actually used
-    model = TemperatureConfiguredModel(model, settings.temperature)
+    request_timeout = float(getattr(settings, 'request_timeout', 120))
+    model = TemperatureConfiguredModel(model, settings.temperature, request_timeout, settings.max_tokens)
 
     # Create embedder
     embedder = SentenceTransformerEmbedder(settings.embedder_model)
@@ -209,7 +246,7 @@ def get_available_providers() -> list[dict]:
         {
             "provider": LLMProvider.DEEPSEEK,
             "name": "DeepSeek",
-            "models": ["deepseek-chat", "deepseek-coder"],
+            "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
             "requires_api_key": True
         },
         {
@@ -232,12 +269,12 @@ def get_available_providers() -> list[dict]:
             "provider": LLMProvider.GLM,
             "name": "GLM (Zhipu AI)",
             "models": [
-                "glm-4.7",
-                "glm-4.6",
-                "glm-4.5",
-                "glm-4.5-air",
-                "glm-4.5-flash",
-                "glm-4-plus"
+                "GLM-5.1",
+                "GLM-5",
+                "GLM-4.7",
+                "GLM-4.7-Flash",
+                "GLM-4.6",
+                "GLM-4.5-Air"
             ],
             "requires_api_key": True,
             "note": "Fast, reliable Chinese and English language models."

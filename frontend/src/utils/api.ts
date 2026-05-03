@@ -72,6 +72,22 @@ export async function validateComponentParameters(
 }
 
 /**
+ * Get available contrib GM components
+ */
+export async function getContribComponents(): Promise<{
+  components: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    params: Record<string, { type: string; default?: any; min?: number; max?: number; description?: string }>;
+  }>;
+}> {
+  const response = await api.get('/api/simulations/contrib-components');
+  return response.data;
+}
+
+/**
  * Validate a simulation configuration
  */
 export async function validateConfig(config: SimulationConfig): Promise<ValidationResult> {
@@ -93,7 +109,11 @@ export async function executeSimulationStream(
   llmSettings: LLMSettings,
   onProgress?: (progress: { step: number; max_steps: number; elapsed: number; est_remaining: number; est_time_str: string }) => void,
   onComplete?: (result: any) => void,
-  onError?: (error: string) => void
+  onError?: (error: string) => void,
+  onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
+  onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
+  gmLlmSettings?: LLMSettings | null,
+  onDisconnect?: () => void,
 ): Promise<void> {
   // Remove player_specific_context for execution
   const { player_specific_context, ...configToUse } = config as any;
@@ -101,15 +121,20 @@ export async function executeSimulationStream(
   console.log('[executeSimulationStream] Starting...', { API_BASE_URL, config: configToUse, llmSettings });
 
   try {
+    const body: any = {
+      config: configToUse,
+      llm_settings: llmSettings,
+    };
+    if (gmLlmSettings) {
+      body.gm_llm_settings = gmLlmSettings;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/simulations/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        config: configToUse,
-        llm_settings: llmSettings
-      }),
+      body: JSON.stringify(body),
     });
 
     console.log('[executeSimulationStream] Response received:', { ok: response.ok, status: response.status, statusText: response.statusText, contentType: response.headers.get('content-type') });
@@ -127,13 +152,17 @@ export async function executeSimulationStream(
 
     let buffer = '';
     let eventCount = 0;
+    let streamCompleted = false;
 
     while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
         console.log('[executeSimulationStream] Stream done. Total events:', eventCount);
-        console.log('[executeSimulationStream] Final buffer state:', { bufferLength: buffer.length, buffer: buffer.length > 0 ? buffer : '(empty)' });
+        if (!streamCompleted) {
+          console.warn('[executeSimulationStream] Stream ended without completion event — connection lost');
+          onDisconnect?.();
+        }
         break;
       }
 
@@ -161,7 +190,10 @@ export async function executeSimulationStream(
 
                 switch (eventType) {
                   case 'simulation_start':
-                    console.log('[executeSimulationStream] Simulation started:', data.message);
+                    console.log('[executeSimulationStream] Simulation started:', data.message, 'task_id:', data.task_id);
+                    if (data.task_id) {
+                      onProgress?.({ step: 0, max_steps: 0, elapsed: 0, est_remaining: 0, est_time_str: '', task_id: data.task_id } as any);
+                    }
                     eventCount++;
                     break;
                   case 'step_progress':
@@ -170,8 +202,8 @@ export async function executeSimulationStream(
                     eventCount++;
                     break;
                   case 'simulation_complete':
+                    streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onComplete');
-                    // Fetch the full log content from the server
                     if (data.log_filename) {
                       console.log('[executeSimulationStream] Fetching log content from:', data.log_filename);
                       fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
@@ -195,7 +227,18 @@ export async function executeSimulationStream(
                     }
                     eventCount++;
                     break;
+                  case 'step_data':
+                    console.log('[executeSimulationStream] Step data:', data);
+                    onStepData?.(data);
+                    eventCount++;
+                    break;
+                  case 'controller_state':
+                    console.log('[executeSimulationStream] Controller state:', data);
+                    onControllerState?.(data);
+                    eventCount++;
+                    break;
                   case 'error':
+                    streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onError');
                     onError?.(data.error || 'Unknown error');
                     eventCount++;
@@ -418,6 +461,94 @@ export async function getUrbanGentrificationTemplate(): Promise<SimulationTempla
 }
 
 /**
+ * Get the rational negotiators template (rational__Entity demo)
+ */
+export async function getRationalNegotiatorsTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/rational-negotiators');
+  return response.data;
+}
+
+/**
+ * Get the social media discourse template (asynchronous engine demo)
+ */
+export async function getSocialMediaDiscourseTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/social-media-discourse');
+  return response.data;
+}
+
+/**
+ * Get the puppet wizard-of-oz template (puppet__Entity + simultaneous engine)
+ */
+export async function getPuppetWizardOfOzTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/puppet-wizard-of-oz');
+  return response.data;
+}
+
+/**
+ * Get the conversational debate template (conversational__Entity demo)
+ */
+export async function getConversationalDebateTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/conversational-debate');
+  return response.data;
+}
+
+/**
+ * Get the spaceship crisis template (space_ship GM from contrib)
+ */
+export async function getSpaceshipCrisisTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/spaceship-crisis');
+  return response.data;
+}
+
+/**
+ * Get the simultaneous auction template (simultaneous engine demo)
+ */
+export async function getSimultaneousAuctionTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/simultaneous-auction');
+  return response.data;
+}
+
+/**
+ * Get the step controller demo template
+ */
+export async function getStepControllerDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/step-controller-demo');
+  return response.data;
+}
+
+/**
+ * Get the contrib GM components demo template
+ */
+export async function getContribGmComponentsDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/contrib-gm-components-demo');
+  return response.data;
+}
+
+/**
+ * Get the formative memories demo template
+ */
+export async function getFormativeMemoriesDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/formative-memories-demo');
+  return response.data;
+}
+
+/**
+ * Get the measurements demo template
+ */
+export async function getMeasurementsDemoTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/measurements-demo');
+  return response.data;
+}
+
+/**
+ * Get the nested simulation strategy template
+ */
+export async function getNestedSimStrategyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/nested-sim-strategy');
+  return response.data;
+}
+
+/**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
  * @param api_key - Optional API key for authentication
@@ -513,6 +644,11 @@ export interface SimulationAnalytics {
   character_count: number;
   premise?: string;
   gm_prefab?: string;
+  llm?: { provider: string; model: string } | null;
+  gm_llm?: { provider: string; model: string } | null;
+  elapsed_seconds?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
   agent_details?: Record<string, {
     actions: Array<{
       step: number;
@@ -525,10 +661,12 @@ export interface SimulationAnalytics {
   has_nested_sims: boolean;
   has_grounded_variables: boolean;
   has_components: boolean;
+  has_measurements: boolean;
   // NEW: Feature-specific data
   nested_simulations: Record<string, NestedSimulationData>;
   grounded_variables: GroundedVariableData[];
   components: ComponentAnalysisData;
+  measurements: Record<string, any[]>;
 }
 
 export async function getSimulationAnalytics(filename: string): Promise<SimulationAnalytics> {
@@ -619,6 +757,26 @@ export async function cancelSimulation(taskId: string): Promise<{
   return response.data;
 }
 
+export async function simulationPlay(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/play`);
+  return response.data;
+}
+
+export async function simulationPause(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/pause`);
+  return response.data;
+}
+
+export async function simulationStep(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/step`);
+  return response.data;
+}
+
+export async function simulationStop(taskId: string): Promise<{ status: string; task_id: string }> {
+  const response = await api.post(`/api/simulations/control/${taskId}/stop`);
+  return response.data;
+}
+
 /**
  * Get status of all simulations
  */
@@ -636,6 +794,8 @@ export async function getSimulationStatus(taskId: string): Promise<{
   started_at: string;
   steps_completed: number;
   error: string | null;
+  log_filename?: string;
+  completion_data?: any;
   config: {
     premise: string;
     max_steps: number;
@@ -674,6 +834,17 @@ export async function deleteCheckpointFiles(): Promise<{
   message: string;
 }> {
   const response = await api.delete('/api/simulations/logs/checkpoints');
+  return response.data;
+}
+
+/**
+ * Delete a simulation log and its metadata
+ */
+export async function deleteSimulationLog(filename: string): Promise<{
+  success: boolean;
+  deleted: string[];
+}> {
+  const response = await api.delete(`/api/simulations/logs/${encodeURIComponent(filename)}`);
   return response.data;
 }
 
@@ -718,6 +889,47 @@ export async function analyzeSimulation(simulationId: string, llmSettings?: {
     llm_settings: llmSettings
   });
   return response.data;
+}
+
+export async function generateFormativeMemories(request: {
+  agent_name: string;
+  agent_context?: string;
+  shared_memories?: string[];
+  sentences_per_episode?: number;
+  llm_settings: any;
+}): Promise<{ memories: string[] }> {
+  const response = await api.post('/api/simulations/generate-formative-memories', request);
+  return response.data;
+}
+
+export async function generatePersonas(request: {
+  context: string;
+  diversity_axes: string[];
+  num_personas: number;
+  num_memories: number;
+  llm_settings: any;
+}): Promise<{ personas: Array<{ name: string; goal: string; memories: string[]; description: string }> }> {
+  const response = await api.post('/api/simulations/generate-personas', request);
+  return response.data;
+}
+
+export async function shutdownServer(): Promise<void> {
+  await api.post('/api/server/shutdown');
+}
+
+export async function getLogConfig(): Promise<{ debug_enabled: boolean; llm_logging_enabled: boolean }> {
+  const response = await api.get('/api/simulations/logs/config');
+  return response.data;
+}
+
+export function connectLogStream(
+  onLog: (entry: { ts: number; cat: 'system' | 'debug' | 'llm'; msg: string }) => void,
+  onError?: (err: Event) => void,
+): EventSource {
+  const es = new EventSource(`${API_BASE_URL}/api/simulations/logs/stream`);
+  es.onmessage = (e) => onLog(JSON.parse(e.data));
+  es.onerror = (e) => onError?.(e);
+  return es;
 }
 
 export default api;
