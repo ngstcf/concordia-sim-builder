@@ -105,7 +105,7 @@ requirements-dev.bak
 
 # Analysis and reports
 analyze_simulation.py
-ARCHITECTURE.md
+ARCHITECTURE_v1.md
 reports/
 
 # Research use cases
