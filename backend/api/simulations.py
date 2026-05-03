@@ -446,6 +446,7 @@ async def execute_simulation(request: ExecutionRequest):
     """
     config = request.config
     llm_settings = request.llm_settings
+    gm_llm_settings = getattr(request, 'gm_llm_settings', None)
 
     # Debug: Check if critical_decision_points are in the request
     debug_print(f"[DEBUG] execute_simulation: Checking for critical_decision_points in request...")
@@ -454,6 +455,9 @@ async def execute_simulation(request: ExecutionRequest):
         debug_print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
         if hasattr(config.game_master, 'critical_decision_points'):
             debug_print(f"[DEBUG] config.game_master.critical_decision_points: {config.game_master.critical_decision_points}")
+
+    if gm_llm_settings:
+        debug_print(f"[DEBUG] Separate GM LLM: {gm_llm_settings.provider} / {gm_llm_settings.model_name}")
 
     # Validate first
     validation = await validate_config(config)
@@ -464,7 +468,7 @@ async def execute_simulation(request: ExecutionRequest):
         )
 
     return StreamingResponse(
-        run_simulation_stream(config, llm_settings),
+        run_simulation_stream(config, llm_settings, gm_llm_settings=gm_llm_settings),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -112,6 +112,7 @@ export async function executeSimulationStream(
   onError?: (error: string) => void,
   onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
   onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
+  gmLlmSettings?: LLMSettings | null,
 ): Promise<void> {
   // Remove player_specific_context for execution
   const { player_specific_context, ...configToUse } = config as any;
@@ -119,15 +120,20 @@ export async function executeSimulationStream(
   console.log('[executeSimulationStream] Starting...', { API_BASE_URL, config: configToUse, llmSettings });
 
   try {
+    const body: any = {
+      config: configToUse,
+      llm_settings: llmSettings,
+    };
+    if (gmLlmSettings) {
+      body.gm_llm_settings = gmLlmSettings;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/simulations/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        config: configToUse,
-        llm_settings: llmSettings
-      }),
+      body: JSON.stringify(body),
     });
 
     console.log('[executeSimulationStream] Response received:', { ok: response.ok, status: response.status, statusText: response.statusText, contentType: response.headers.get('content-type') });

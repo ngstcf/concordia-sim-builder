@@ -242,7 +242,7 @@ function TimeoutWarning({ startTime, timeout, warningThreshold }: { startTime: n
 
 export default function SimulationRunner() {
   const navigate = useNavigate();
-  const { config, validation, setValidation, llmSettings, setLLMSettings } = useSimulation();
+  const { config, setConfig, validation, setValidation, llmSettings, setLLMSettings, gmLlmSettings, setGmLlmSettings } = useSimulation();
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -388,6 +388,8 @@ export default function SimulationRunner() {
         setControllerState(data.state as 'playing' | 'paused' | 'stopped');
         if (data.task_id) setTaskId(data.task_id);
       },
+      // gmLlmSettings
+      gmLlmSettings,
     );
     console.log('[handleRun] executeSimulationStream completed');
   };
@@ -582,6 +584,92 @@ export default function SimulationRunner() {
                   onChange={(e) => setLLMSettings({ ...llmSettings, request_timeout: parseInt(e.target.value) || 120 })}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* GM Settings */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Game Master</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Early Termination Toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={config.game_master.allow_early_termination !== false}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    game_master: { ...config.game_master, allow_early_termination: e.target.checked }
+                  })}
+                />
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Allow early termination</span>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {config.game_master.allow_early_termination !== false
+                      ? 'GM can end the simulation before max steps'
+                      : 'Simulation always runs to max steps'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Separate GM LLM toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={gmLlmSettings !== null}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setGmLlmSettings({ ...llmSettings });
+                    } else {
+                      setGmLlmSettings(null);
+                    }
+                  }}
+                />
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Use separate LLM for GM</span>
+                  <p className="text-xs text-gray-400 mt-0.5">Different model for GM decisions (termination, turn order)</p>
+                </div>
+              </label>
+
+              {/* GM LLM provider/model selectors */}
+              {gmLlmSettings && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">GM Provider</label>
+                    <select
+                      className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={gmLlmSettings.provider}
+                      onChange={(e) => {
+                        const provider = e.target.value as any;
+                        const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                        setGmLlmSettings({ ...gmLlmSettings, provider, request_timeout: timeout });
+                      }}
+                    >
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="azure">Azure OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="glm">GLM (Zhipu AI)</option>
+                      <option value="ollama">Ollama (Local)</option>
+                      <option value="ollama_remote">Ollama (Remote)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">GM Model</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={gmLlmSettings.model_name}
+                      onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                      placeholder="Model name for GM"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

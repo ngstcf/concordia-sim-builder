@@ -62,7 +62,8 @@ def _simulation_log_to_html(sim_log_or_result) -> str:
 
 async def run_simulation_stream(
     config: SimulationConfig,
-    llm_settings: LLMSettings
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Run a simulation and yield SSE events.
@@ -70,6 +71,7 @@ async def run_simulation_stream(
     Args:
         config: Simulation configuration
         llm_settings: LLM provider settings
+        gm_llm_settings: Optional separate LLM settings for the Game Master
 
     Yields:
         SSE-formatted event strings
@@ -81,14 +83,35 @@ async def run_simulation_stream(
 
         from backend.services.llm_factory import get_model_and_embedder
 
+        # Check for GM LLM settings from env if not provided via request
+        if not gm_llm_settings:
+            gm_provider = os.getenv('GM_LLM_PROVIDER')
+            gm_model_name = os.getenv('GM_LLM_MODEL')
+            if gm_provider and gm_model_name:
+                gm_llm_settings = LLMSettings(
+                    provider=gm_provider,
+                    model_name=gm_model_name,
+                    api_key=os.getenv('GM_LLM_API_KEY'),
+                    base_url=os.getenv('GM_LLM_BASE_URL'),
+                    temperature=float(os.getenv('GM_LLM_TEMPERATURE', '0.3')),
+                    max_tokens=int(os.getenv('GM_LLM_MAX_TOKENS', '3500')),
+                    request_timeout=int(os.getenv('GM_LLM_TIMEOUT', str(llm_settings.request_timeout))),
+                    embedder_model=llm_settings.embedder_model,
+                )
+                print(f"[GM LLM] Using env-configured GM model: {gm_provider}/{gm_model_name}")
+
         # Log start
         print(f"\n{'='*60}")
         print(f"Starting Simulation Execution")
         print(f"{'='*60}")
         print(f"Provider: {llm_settings.provider}")
         print(f"Model: {llm_settings.model_name}")
+        if gm_llm_settings:
+            print(f"GM Provider: {gm_llm_settings.provider}")
+            print(f"GM Model: {gm_llm_settings.model_name}")
         print(f"Max Steps: {config.max_steps}")
         print(f"Agents: {', '.join([a.name for a in config.agents])}")
+        print(f"Early Termination: {'enabled' if config.game_master.allow_early_termination else 'disabled'}")
         print(f"{'='*60}\n")
 
         # Generate task_id for cancellation support
@@ -98,7 +121,15 @@ async def run_simulation_stream(
         # Get model and embedder
         print("🔄 Initializing LLM and embedder...")
         model, embedder = get_model_and_embedder(llm_settings)
-        print("✓ Model and embedder ready\n")
+        print("✓ Model and embedder ready")
+
+        # Create separate GM model if configured
+        gm_model = None
+        if gm_llm_settings:
+            print(f"🔄 Initializing separate GM LLM ({gm_llm_settings.provider}/{gm_llm_settings.model_name})...")
+            gm_model, _ = get_model_and_embedder(gm_llm_settings)
+            print("✓ GM model ready")
+        print()
 
         # Send start event with task_id so frontend can cancel
         yield _format_sse(EventType.SIMULATION_START, {
@@ -109,7 +140,7 @@ async def run_simulation_stream(
 
         # Build simulation
         print("🔨 Building simulation from configuration...")
-        sim = build_simulation(config, model, embedder)
+        sim = build_simulation(config, model, embedder, gm_model=gm_model)
         print("✓ Simulation built successfully\n")
 
         yield _format_sse(EventType.SIMULATION_START, {

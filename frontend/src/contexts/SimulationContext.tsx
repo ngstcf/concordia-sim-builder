@@ -35,6 +35,10 @@ interface SimulationContextType {
   llmSettings: LLMSettings;
   setLLMSettings: (settings: LLMSettings) => void;
 
+  // Optional separate GM LLM settings
+  gmLlmSettings: LLMSettings | null;
+  setGmLlmSettings: (settings: LLMSettings | null) => void;
+
   // Validation
   validation: ValidationResult | null;
   setValidation: (validation: ValidationResult | null) => void;
@@ -79,6 +83,7 @@ interface SimulationProviderProps {
 export function SimulationProvider({ children }: SimulationProviderProps) {
   const [config, setConfig] = useState<SimulationConfig>(defaultConfig);
   const [llmSettings, setLLMSettings] = useState<LLMSettings>(defaultLLMSettings);
+  const [gmLlmSettings, setGmLlmSettings] = useState<LLMSettings | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [events, setEvents] = useState<SimulationEvent[]>([]);
@@ -166,6 +171,8 @@ export function SimulationProvider({ children }: SimulationProviderProps) {
     updateSharedMemory,
     llmSettings,
     setLLMSettings,
+    gmLlmSettings,
+    setGmLlmSettings,
     validation,
     setValidation,
     isRunning,

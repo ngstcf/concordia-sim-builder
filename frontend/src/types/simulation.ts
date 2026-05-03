@@ -100,6 +100,7 @@ export interface GameMasterConfig {
   grounded_variables?: VariableConfig[];
   critical_decision_points?: CriticalDecisionPoint[];
   contrib_components?: ContribComponentConfig[];
+  allow_early_termination?: boolean;
 }
 
 // Critical Decision Point

@@ -65,7 +65,8 @@ def create_memory_bank(embedder, memories: list[str]) -> basic_associative_memor
 def build_simulation(
     config: SimulationConfig,
     model: language_model.LanguageModel,
-    embedder
+    embedder,
+    gm_model: language_model.LanguageModel | None = None,
 ) -> simulation.Simulation:
     """
     Build a Concordia simulation from configuration.
@@ -74,6 +75,7 @@ def build_simulation(
         config: SimulationConfig object
         model: Language model instance
         embedder: Sentence embedder instance
+        gm_model: Optional separate model for game master decisions
 
     Returns:
         Built simulation object ready to run
@@ -195,6 +197,7 @@ def build_simulation(
     gm_params = {
         'name': config.game_master.name,
         'acting_order': config.game_master.acting_order.value,
+        'can_terminate_simulation': config.game_master.allow_early_termination,
     }
 
     # Note: Don't use gm_params.update() here because we need to convert
@@ -450,7 +453,8 @@ def build_simulation(
         config=sim_config,
         model=model,
         embedder=embedder,
-        engine=engine
+        engine=engine,
+        override_game_master_model=gm_model,
     )
 
     sim._measurements = measurements

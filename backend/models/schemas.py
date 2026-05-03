@@ -126,6 +126,10 @@ class GameMasterConfig(BaseModel):
         None,
         description="Optional contrib GM components to add (Death, GMWorkingMemory, etc.)"
     )
+    allow_early_termination: bool = Field(
+        True,
+        description="If False, simulation always runs to max_steps (disables LLM-driven early termination)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -234,6 +238,10 @@ class ExecutionRequest(BaseModel):
     """Request to execute a simulation."""
     config: SimulationConfig
     llm_settings: LLMSettings
+    gm_llm_settings: Optional[LLMSettings] = Field(
+        None,
+        description="Optional separate LLM settings for the Game Master. If not set, uses llm_settings."
+    )
 
     class Config:
         json_schema_extra = {
