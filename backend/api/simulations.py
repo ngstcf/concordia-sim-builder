@@ -251,9 +251,30 @@ async def get_provider_models(
 
     elif provider == LLMProvider.OPENAI.value:
         # For OpenAI, use their models API
+        import re
         key = api_key or os.getenv('OPENAI_API_KEY')
         if not key:
             return {'provider': provider, 'models': [], 'error': 'API key required'}
+
+        date_suffix_re = re.compile(r'-\d{4}-\d{2}-\d{2}')
+        numeric_suffix_re = re.compile(r'-\d{4}$')
+        skip_keywords = ('preview', 'audio', 'realtime', 'tts', 'whisper', 'dall-e',
+                         'embedding', 'davinci', 'babbage', 'search',
+                         'transcribe', 'codex', 'image')
+        below_gpt4 = ('gpt-3.5', 'gpt-3', 'gpt-2', 'gpt-1')
+
+        def _keep_openai_model(model_id: str) -> bool:
+            if not model_id.startswith(('gpt-', 'o1', 'o3', 'o4')):
+                return False
+            if model_id.startswith(below_gpt4):
+                return False
+            if any(kw in model_id for kw in skip_keywords):
+                return False
+            if date_suffix_re.search(model_id):
+                return False
+            if numeric_suffix_re.search(model_id):
+                return False
+            return True
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -264,11 +285,14 @@ async def get_provider_models(
 
                 if response.status_code == 200:
                     data = response.json()
-                    models = [
-                        {'id': m['id'], 'name': m['id']}
-                        for m in data.get('data', [])
-                        if m['id'].startswith(('gpt-', 'o1-'))
-                    ]
+                    models = sorted(
+                        [
+                            {'id': m['id'], 'name': m['id']}
+                            for m in data.get('data', [])
+                            if _keep_openai_model(m['id'])
+                        ],
+                        key=lambda m: m['id']
+                    )
                     return {'provider': provider, 'models': models}
 
                 return {'provider': provider, 'models': [], 'error': f"API returned status {response.status_code}"}

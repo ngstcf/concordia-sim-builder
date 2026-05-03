@@ -279,6 +279,11 @@ export default function SimulationRunner() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
+  // GM model selection state
+  const [gmAvailableModels, setGmAvailableModels] = useState<Array<{ id: string; name: string; [key: string]: any }>>([]);
+  const [gmLoadingModels, setGmLoadingModels] = useState(false);
+  const [gmModelsError, setGmModelsError] = useState<string | null>(null);
+
   // Fetch available models when provider changes
   useEffect(() => {
     const fetchModels = async () => {
@@ -315,6 +320,45 @@ export default function SimulationRunner() {
     fetchModels();
   }, [llmSettings.provider]);
 
+  // Fetch available models when GM provider changes
+  useEffect(() => {
+    if (!gmLlmSettings) {
+      setGmAvailableModels([]);
+      setGmModelsError(null);
+      return;
+    }
+
+    const fetchGmModels = async () => {
+      setGmLoadingModels(true);
+      setGmModelsError(null);
+
+      try {
+        const result = await getProviderModels(
+          gmLlmSettings.provider,
+          gmLlmSettings.api_key,
+          gmLlmSettings.base_url
+        );
+
+        if (result.error) {
+          setGmModelsError(result.error);
+          setGmAvailableModels([]);
+        } else {
+          setGmAvailableModels(result.models);
+          if (result.models.length > 0 && !result.models.find(m => m.id === gmLlmSettings.model_name)) {
+            setGmLlmSettings({ ...gmLlmSettings, model_name: result.models[0].id });
+          }
+        }
+      } catch (err: any) {
+        setGmModelsError(err.message || 'Failed to fetch models');
+        setGmAvailableModels([]);
+      } finally {
+        setGmLoadingModels(false);
+      }
+    };
+
+    fetchGmModels();
+  }, [gmLlmSettings?.provider]);
+
   const handleLoadSimulation = (htmlContent: string, filename: string, modified: number) => {
     setResults({
       results: htmlContent,
@@ -336,7 +380,7 @@ export default function SimulationRunner() {
           llm_model: llm?.model,
           gm_llm_provider: gmLlm?.provider,
           gm_llm_model: gmLlm?.model,
-          elapsed_seconds: analytics.elapsed_seconds,
+          elapsed_seconds: analytics.elapsed_seconds ?? undefined,
           steps_completed: analytics.total_steps,
         });
       }
@@ -508,11 +552,11 @@ export default function SimulationRunner() {
                     setLLMSettings({ ...llmSettings, provider, request_timeout: timeout });
                   }}
                 >
-                  <option value="deepseek">DeepSeek</option>
                   <option value="openai">OpenAI</option>
-                  <option value="azure">Azure OpenAI</option>
                   <option value="gemini">Gemini</option>
                   <option value="anthropic">Anthropic</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="azure">Azure OpenAI</option>
                   <option value="glm">GLM (Zhipu AI)</option>
                   <option value="ollama">Ollama (Local)</option>
                   <option value="ollama_remote">Ollama (Remote)</option>
@@ -658,7 +702,7 @@ export default function SimulationRunner() {
                   checked={gmLlmSettings !== null}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setGmLlmSettings({ ...llmSettings });
+                      setGmLlmSettings({ ...llmSettings, temperature: 0.1 });
                     } else {
                       setGmLlmSettings(null);
                     }
@@ -684,11 +728,11 @@ export default function SimulationRunner() {
                         setGmLlmSettings({ ...gmLlmSettings, provider, request_timeout: timeout });
                       }}
                     >
-                      <option value="deepseek">DeepSeek</option>
                       <option value="openai">OpenAI</option>
-                      <option value="azure">Azure OpenAI</option>
                       <option value="gemini">Gemini</option>
                       <option value="anthropic">Anthropic</option>
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="azure">Azure OpenAI</option>
                       <option value="glm">GLM (Zhipu AI)</option>
                       <option value="ollama">Ollama (Local)</option>
                       <option value="ollama_remote">Ollama (Remote)</option>
@@ -696,13 +740,47 @@ export default function SimulationRunner() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">GM Model</label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={gmLlmSettings.model_name}
-                      onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
-                      placeholder="Model name for GM"
-                    />
+                    {gmLoadingModels ? (
+                      <div className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 bg-gray-50 flex items-center">
+                        <svg className="animate-spin h-4 w-4 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-gray-500">Loading models...</span>
+                      </div>
+                    ) : gmModelsError ? (
+                      <div className="w-full">
+                        <select
+                          className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          value={gmLlmSettings.model_name}
+                          onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                        >
+                          <option value="">Custom model</option>
+                          {gmAvailableModels.map(model => (
+                            <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-amber-600">{gmModelsError}</p>
+                      </div>
+                    ) : gmAvailableModels.length > 0 ? (
+                      <select
+                        className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={gmLlmSettings.model_name}
+                        onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                      >
+                        {gmAvailableModels.map(model => (
+                          <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={gmLlmSettings.model_name}
+                        onChange={(e) => setGmLlmSettings({ ...gmLlmSettings, model_name: e.target.value })}
+                        placeholder="Enter model name for GM"
+                      />
+                    )}
                   </div>
                 </div>
               )}

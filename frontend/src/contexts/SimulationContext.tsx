@@ -68,11 +68,11 @@ const defaultConfig: SimulationConfig = {
 };
 
 const defaultLLMSettings: LLMSettings = {
-  provider: 'deepseek',
-  model_name: 'deepseek-chat',
+  provider: 'openai',
+  model_name: '',
   embedder_model: 'all-MiniLM-L6-v2',
-  temperature: 0.5,  // Match Concordia's DEFAULT_TEMPERATURE
-  max_tokens: 3500,  // Increased for better response quality
+  temperature: 0.5,
+  max_tokens: 9000,
   request_timeout: 120
 };
 

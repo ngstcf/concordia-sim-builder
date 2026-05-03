@@ -209,7 +209,7 @@ class LLMSettings(BaseModel):
     base_url: Optional[str] = Field(None, description="Custom base URL for OpenAI-compatible APIs. For Azure OpenAI, use AZURE_OAI_ENDPOINT")
     embedder_model: str = Field("all-MiniLM-L6-v2", description="Sentence transformer model")
     temperature: float = Field(0.5, ge=0, le=2, description="Sampling temperature")  # Match Concordia's DEFAULT_TEMPERATURE
-    max_tokens: int = Field(3500, ge=1, le=32000, description="Maximum tokens to generate")  # Increased for better response quality
+    max_tokens: int = Field(9000, ge=1, le=32000, description="Maximum tokens to generate")
     api_version: Optional[str] = Field(None, description="API version for Azure OpenAI (e.g., '2024-02-15-preview'). Env: AZURE_OAI_API_VERSION")
     request_timeout: int = Field(120, ge=10, le=600, description="Per-request timeout in seconds for LLM calls")
 
@@ -228,8 +228,8 @@ class LLMSettings(BaseModel):
                 "provider": "openai",
                 "model_name": "gpt-4",
                 "embedder_model": "all-MiniLM-L6-v2",
-                "temperature": 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
-                "max_tokens": 3500  # Increased for better response quality
+                "temperature": 0.5,
+                "max_tokens": 9000
             }
         }
 

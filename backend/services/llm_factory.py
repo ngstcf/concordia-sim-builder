@@ -246,7 +246,7 @@ def get_available_providers() -> list[dict]:
         {
             "provider": LLMProvider.DEEPSEEK,
             "name": "DeepSeek",
-            "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat"],
+            "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
             "requires_api_key": True
         },
         {
@@ -269,12 +269,12 @@ def get_available_providers() -> list[dict]:
             "provider": LLMProvider.GLM,
             "name": "GLM (Zhipu AI)",
             "models": [
-                "glm-4.7",
-                "glm-4.6",
-                "glm-4.5",
-                "glm-4.5-air",
-                "glm-4.5-flash",
-                "glm-4-plus"
+                "GLM-5.1",
+                "GLM-5",
+                "GLM-4.7",
+                "GLM-4.7-Flash",
+                "GLM-4.6",
+                "GLM-4.5-Air"
             ],
             "requires_api_key": True,
             "note": "Fast, reliable Chinese and English language models."
