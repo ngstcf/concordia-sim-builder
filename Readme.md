@@ -9,26 +9,26 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 ![React](https://img.shields.io/badge/React-18+-blue)
 ![License](https://img.shields.io/badge/License-Apache%202.0-orange)
 
-**📖 Documentation:** [c3.unu.edu/projects/ai/simulator/v2.1.html](https://c3.unu.edu/projects/ai/simulator/v2.1.html)
+**Documentation:** [c3.unu.edu/projects/ai/simulator/v2.1.html](https://c3.unu.edu/projects/ai/simulator/v2.1.html)
 
-## ✨ Features
+## Features
 
-- **🎨 Form-Based Configuration** - Intuitive web UI for configuring agent-based simulations without coding
-- **🤖 Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
-- **🧩 Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
-- **🔄 Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
-- **📊 Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.) with AI-powered post-processing to extract variable history from simulation logs
-- **⚡ Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
-- **📊 Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
-- **🧠 LLM-Powered Simulation Analyzer** - Automated deep content analysis generating executive summaries, team effectiveness assessments, insights, and recommendations
-- **📂 Recent Simulations Browser** - Easily view and analyze previous simulation results with checkpoint file management
-- **🎮 Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
-- **🔄 Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
-- **🌐 Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, and Ollama
-- **💾 Import/Export** - Save and share simulation configurations as JSON
-- **📝 Automatic Logging** - All simulations saved with timestamped, descriptive filenames
+- **Form-Based Configuration** - Intuitive web UI for configuring agent-based simulations without coding
+- **Multi-Agent Scenarios** - Define multiple agents with unique goals, memories, and behaviors
+- **Customizable Components** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents
+- **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations
+- **Grounded Variables** - Track and update simulation state variables (morale, budget, health, etc.) with AI-powered post-processing to extract variable history from simulation logs
+- **Real-time Progress Streaming** - Watch simulations unfold with live step-by-step progress, elapsed time, and ETA
+- **Analytics Dashboard** - Statistical analysis, timeline visualization, action breakdown, and AI-generated summaries
+- **LLM-Powered Simulation Analyzer** - Automated deep content analysis generating executive summaries, team effectiveness assessments, insights, and recommendations
+- **Recent Simulations Browser** - Easily view and analyze previous simulation results with checkpoint file management
+- **Rich Output Format** - Interactive HTML logs with tabbed views and agent activity tracking
+- **Template System** - Pre-built templates (Peace Negotiation, Coffee Shop Demo, and more)
+- **Multiple LLM Support** - OpenAI, Azure OpenAI, DeepSeek (recommended), Gemini, Anthropic, and Ollama
+- **Import/Export** - Save and share simulation configurations as JSON
+- **Automatic Logging** - All simulations saved with timestamped, descriptive filenames
 
-## 🎯 Use Cases
+## Use Cases
 
 - **Social Science Research** - Model and study complex social interactions with psychological realism
 - **Psychological Experiments** - Test how cognitive biases, social identity, and emotions affect decision-making
@@ -38,7 +38,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 - **Business Scenarios** - Simulate meetings, negotiations, and team dynamics
 - **Resource Management** - Track budget, morale, and other metrics over time
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 **Backend:**
 - Python 3.10+ with FastAPI
@@ -53,7 +53,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 - React Router for navigation
 - TanStack Query for data management
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -65,7 +65,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 
 ```bash
 # Clone the repository
-git clone https://github.com/ngstcf/concordia-sim-builder.git
+git clone --branch v2.1.0 https://github.com/ngstcf/concordia-sim-builder.git
 cd concordia-sim-builder
 
 # Create virtual environment
@@ -99,74 +99,6 @@ DEEPSEEK_API_KEY=sk-xxx                  # For DeepSeek (recommended)
 GEMINI_API_KEY=xxx                       # For Gemini models
 ANTHROPIC_API_KEY=sk-xxx                # For Claude models
 # OLLAMA_BASE_URL=http://localhost:11434/v1  # Optional: Custom Ollama endpoint
-```
-
-### Using Ollama (Local Models)
-
-For completely local simulations without API costs, you can use [Ollama](https://ollama.com):
-
-**Performance Requirements:**
-Ollama works well when running on hardware with sufficient resources:
-- **RAM**: 8GB+ for 7B models, 16GB+ recommended for larger models
-- **CPU**: Multi-core processor recommended (local models are CPU-intensive)
-- **GPU**: Optional but significantly improves inference speed
-- For best performance, consider using a hosted Ollama service or cloud-based LLMs (DeepSeek, OpenAI)
-
-**When to use Ollama:**
-- ✅ Privacy-sensitive simulations (data stays local)
-- ✅ Testing and development without API costs
-- ✅ Machines with good CPU/GPU performance
-- ✅ Hosted Ollama services with sufficient server resources
-
-1. **Install Ollama:**
-   ```bash
-   # macOS/Linux
-   curl -fsSL https://ollama.com/install.sh | sh
-
-   # Or download from https://ollama.com for Windows
-   ```
-
-2. **Pull a model:**
-   ```bash
-   # Llama 3 (8B) - Recommended balance of quality and speed
-   ollama pull llama3
-
-   # For faster performance with smaller models
-   ollama pull llama3:2
-
-   # Other options: mistral, codellama, phi3, gemma2, qwen2
-   ```
-
-3. **Start Ollama:**
-   ```bash
-   ollama serve
-   ```
-
-4. **Configure in the web UI:**
-   - Select "Ollama (Local)" as the provider
-   - Enter the model name (e.g., "llama3")
-   - No API key required for local Ollama!
-
-**Available Ollama models:** `llama3`, `llama3:2`, `mistral`, `codellama`, `phi3`, `gemma2`, `qwen2`
-
-**⚠️ Important Note on Ollama Timeouts:**
-- Local models like Ollama can experience timeout issues, especially with larger models or slower hardware
-- Typical timeout symptoms: "Timeout on attempt X/3. Retrying in Y seconds..."
-- If you experience frequent timeouts, consider using **DeepSeek** (recommended) instead
-- Hosted Ollama services (e.g., on powerful servers) work well for production use
-
-### Using Hosted Ollama Services (OpenWebUI, etc.)
-
-If you're using a hosted Ollama service (like OpenWebUI) that requires authentication:
-
-1. Set the `OLLAMA_BASE_URL` to your hosted service endpoint
-2. Set `OLLAMA_API_KEY` to your API key (if required)
-3. In the web UI, select "Ollama (Local)" and enter your API key
-
-```bash
-# Example .env configuration for hosted Ollama
-OLLAMA_BASE_URL=https://your-openwebui-instance.com/v1
-OLLAMA_API_KEY=your-api-key-here
 ```
 
 ### Configuring Game-Theoretic Simulations
@@ -278,7 +210,7 @@ VITE_SIMULATION_TIMEOUT=10800000
 
 For detailed configuration guidance, see [docs/TIMEOUT_CONFIGURATION.md](docs/TIMEOUT_CONFIGURATION.md).
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Start Backend (Terminal 1)
 
@@ -303,7 +235,7 @@ npm run dev
 
 Frontend runs at: `http://localhost:5173`
 
-## 📖 Usage Guide
+## Usage Guide
 
 ### 1. Building a Simulation
 
@@ -328,7 +260,7 @@ Frontend runs at: `http://localhost:5173`
    - Choose model name
    - Set temperature (0.8-1.2 for creative, 0.1-0.4 for focused)
 3. Click **"Run Simulation"**
-4. **✨ Watch real-time progress in the web UI** showing:
+4. **Watch real-time progress in the web UI** showing:
    - Current step completion (e.g., "3/5 steps completed")
    - Elapsed time and estimated remaining time
    - Progress bar filling as simulation advances
@@ -463,7 +395,7 @@ console.log(analysis.executive_summary);
 console.log(analysis.recommendations);
 ```
 
-## 📚 API Endpoints
+## API Endpoints
 
 ### Core Endpoints
 
@@ -474,7 +406,7 @@ console.log(analysis.recommendations);
 | `/api/simulations/providers` | GET | List supported LLM providers |
 | `/api/simulations/models/{provider}` | GET | List available models for a provider |
 | `/api/simulations/validate` | POST | Validate simulation configuration |
-| `/api/simulations/execute` | POST | Run simulation with **real-time progress streaming** ✨ |
+| `/api/simulations/execute` | POST | Run simulation with **real-time progress streaming** |
 | `/api/simulations/execute-simple` | POST | Run simulation (non-streaming, for testing) |
 | `/api/simulations/export-template` | GET | Get blank configuration template |
 | `/api/simulations/import` | POST | Import configuration from JSON |
@@ -542,7 +474,7 @@ console.log(analysis.recommendations);
 | `/api/simulations/templates/phishing-attack-simulation` | GET | Phishing attack simulation (cybersecurity) |
 | `/api/simulations/templates/urban-gentrification` | GET | Urban gentrification simulation (housing policy) |
 
-## 🎨 Supported Prefabs
+## Supported Prefabs
 
 ### Entity Prefabs (Agents)
 
@@ -574,7 +506,7 @@ console.log(analysis.recommendations);
 |--------|-------------|
 | `formative_memories_initializer__GameMaster` | Creates character backgrounds from `player_specific_context` before main simulation |
 
-## 🔧 Configuration Examples
+## Configuration Examples
 
 ### Simple Coffee Shop Encounter
 
@@ -623,7 +555,7 @@ console.log(analysis.recommendations);
 }
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Backend Issues
 
@@ -668,7 +600,7 @@ lsof -ti:5173 | xargs kill -9
 - Check network connectivity to `https://api.deepseek.com`
 - Try model `deepseek-chat` or `deepseek-coder`
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 concordia-sim-builder/
@@ -689,11 +621,11 @@ concordia-sim-builder/
 │   │   ├── components/
 │   │   │   ├── SimulationBuilder/   # Builder UI
 │   │   │   ├── SimulationRunner/    # Runner UI with progress
-│   │   │   │   ├── StatisticalDashboard.tsx    # ✨ Analytics
-│   │   │   │   ├── TimelineVisualization.tsx  # ✨ Timeline
-│   │   │   │   ├── ActionsView.tsx            # ✨ Actions
-│   │   │   │   └── NaturalLanguageSummary.tsx # ✨ Summary
-│   │   │   ├── RecentSimulations/  # ✨ Recent logs browser
+│   │   │   │   ├── StatisticalDashboard.tsx    # Analytics
+│   │   │   │   ├── TimelineVisualization.tsx  # Timeline
+│   │   │   │   ├── ActionsView.tsx            # Actions
+│   │   │   │   └── NaturalLanguageSummary.tsx # Summary
+│   │   │   ├── RecentSimulations/  # Recent logs browser
 │   │   │   └── shared/             # Shared components
 │   │   ├── contexts/
 │   │   │   └── SimulationContext.tsx # Global state
@@ -707,7 +639,7 @@ concordia-sim-builder/
 └── requirements.txt                 # Python dependencies
 ```
 
-## 🔌 LLM Integration Architecture
+## LLM Integration Architecture
 
 ### Why We Built Our Own LLM Factory
 
@@ -756,7 +688,7 @@ backend/models/schemas.py          # LLMSettings with provider-specific fields
 **Why Not Concordia's Built-in?**
 Concordia's `GptLanguageModel` only supports OpenAI's API, lacks Azure support, has no alternative provider options, and uses a rigid configuration model. Our custom implementation enables the multi-provider flexibility required for production deployments across different organizational needs, cost constraints, and compliance requirements.
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -773,45 +705,45 @@ Contributions are welcome! Please:
 - Frontend components use React Context for state management
 - All simulations are automatically saved to `logs/` directory
 
-## 📜 License
+## License
 
 This project uses the [Concordia library](https://github.com/google-deepmind/concordia) (Apache-2.0 license).
 
 This project is licensed under the Apache 2.0 License - see the LICENSE file for details.
 
-## 📖 Citation
+## Citation
 
 If you use this software in your research, please cite:
 
 ```bibtex
-@software{concordia_sim_builder,
-  title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
-  author={Ng Chong},
-  year={2026},
-  url={https://github.com/ngstcf/concordia-sim-builder}
-}
-```
-
-**OR**
-
-```bibtex
-@software{concordia_sim_builder,
+@inproceedings{concordia_sim_builder,
   title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
   author={Chong, Ng S. T.},
+  booktitle={Proceedings of the 16th International Conference on Simulation and Modeling Methodologies, Technologies and Applications (SIMULTECH 2026)},
   year={2026},
+  organization={INSTICC},
   url={https://github.com/ngstcf/concordia-sim-builder},
   institution={United Nations University}
 }
 ```
 
-## 🙏 Acknowledgments
+## Resources
+
+- **Online Documentation**: [c3.unu.edu/projects/ai/simulator/v2.1.html](https://c3.unu.edu/projects/ai/simulator/v2.1.html)
+- **Research Use Cases**: See [docs/research-use-cases/](docs/research-use-cases/) for detailed research documentation:
+  - [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md) — Psychological component system research
+  - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md) — Cybersecurity tabletop exercises
+  - [Urban Gentrification](docs/research-use-cases/urban-gentrification-simulation.md) — Housing policy and neighborhood change
+- **Known Issues**: See [CONCORDIA_ISSUES.md](CONCORDIA_ISSUES.md) for documented framework limitations
+
+## Acknowledgments
 
 - **Google DeepMind** for the [Concordia](https://github.com/google-deepmind/concordia) framework
 - **Concordia Contributors** for building an amazing simulation library
 - **FastAPI** for the excellent web framework
 - **React Community** for the amazing ecosystem
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 ### Game-Theoretic Simulation Issue
 
@@ -823,17 +755,11 @@ The `game_theoretic_and_dramaturgic__GameMaster` prefab has a confirmed issue wh
 
 **Status**: Documented bug in Concordia framework - tracking for upstream fix.
 
-## 🌟 Roadmap
+## Roadmap
 
-- [x] **Analytics Dashboard** - Statistical analysis and natural language summaries of simulation results ✅
-- [x] **Real-time Progress Streaming** - Watch simulations unfold live in the browser with step-by-step progress ✅
-- [x] **Console Progress Logging** - Detailed real-time logs during simulation execution ✅
-- [x] **Timeline Visualization** - Step-by-step event timeline ✅
-- [x] **Actions View** - Per-agent action breakdown with extracted goals ✅
-- [x] **Game-Theoretic Analytics** - Robust action extraction for strategic games (Prisoner's Dilemma, Marketplace) ✅
-- [x] **Customizable Components System** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents ✅ 
-- [x] **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations ✅ 
-- [x] **Grounded Variables Tracking** - Track and update simulation state variables (morale, budget, health, etc.) ✅ 
+- [x] **Analytics Dashboard** - Statistical analysis and natural language summaries of simulation results - [x] **Real-time Progress Streaming** - Watch simulations unfold live in the browser with step-by-step progress - [x] **Console Progress Logging** - Detailed real-time logs during simulation execution - [x] **Timeline Visualization** - Step-by-step event timeline - [x] **Actions View** - Per-agent action breakdown with extracted goals - [x] **Game-Theoretic Analytics** - Robust action extraction for strategic games (Prisoner's Dilemma, Marketplace) - [x] **Customizable Components System** - Add psychological components (personality, cognitive bias, social identity, emotions, values, TPB) to agents 
+- [x] **Nested Simulations** - PhoneGameMaster pattern for running mini-simulations within simulations 
+- [x] **Grounded Variables Tracking** - Track and update simulation state variables (morale, budget, health, etc.) 
 - [ ] **Visual graph editor for agent relationships** - Drag-and-drop interface to create and visualize agent social networks, influence maps, and communication flows
 - [ ] **Simulation comparison tool** - Run multiple simulations with varied parameters and compare outcomes side-by-side with statistical analysis
 - [ ] **Export to PDF/Markdown** - Generate publication-ready reports from simulation results in multiple formats
