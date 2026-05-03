@@ -78,6 +78,13 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Refactored `simulations.py` (6200 → 2100 lines): 26 templates extracted into `backend/api/templates/` package
 - Templates registered via dynamic `router.add_api_route()`
 
+### Bug Fixes
+- Fixed checkpoint saves failing silently — local `import re` inside `run_simulation_stream` shadowed the module-level import, causing a `NameError` in the checkpoint callback closure
+- Fixed off-by-one step numbering — Concordia's `checkpoint_counter` is 0-indexed; progress now correctly shows Step 1/N through N/N
+- Fixed SSE progress stream dropping during long simulations — added 5-second keepalive heartbeats between steps to prevent idle connection timeouts
+- Added automatic polling recovery when SSE stream disconnects — frontend detects the drop, shows a "Connection lost" banner, and polls `/status/{task_id}` every 5 seconds until results are available
+- Completed simulations now retained in backend state (last 20) so the status endpoint returns results even after the SSE stream ends
+
 ### Templates (31 total)
 
 **Original (v2.1.0):**
