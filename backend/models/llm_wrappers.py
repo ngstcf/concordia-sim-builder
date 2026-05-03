@@ -496,6 +496,13 @@ class AnthropicModel:
         self._client = Anthropic(api_key=api_key)
         self._model_name = model_name
 
+    def _supports_temperature(self) -> bool:
+        """Opus 4.7+ uses extended thinking and rejects the temperature parameter."""
+        m = self._model_name.lower()
+        if 'opus-4-7' in m or 'opus-4-8' in m or 'opus-4-9' in m:
+            return False
+        return True
+
     def sample_text(
         self,
         prompt: str,
@@ -524,9 +531,11 @@ class AnthropicModel:
                 params = {
                     "model": self._model_name,
                     "max_tokens": max_tokens,
-                    "temperature": temperature,
                     "messages": [{"role": "user", "content": prompt}]
                 }
+
+                if self._supports_temperature():
+                    params["temperature"] = temperature
 
                 if seed is not None:
                     params["seed"] = seed
