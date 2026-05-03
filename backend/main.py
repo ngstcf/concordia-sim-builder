@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Concordia Simulation Builder",
     description="API for building and running Concordia agent-based simulations",
-    version="1.0.0",
+    version="2.4.0",
     lifespan=lifespan
 )
 
@@ -59,7 +59,7 @@ async def root():
     """Root endpoint."""
     return {
         "message": "Concordia Simulation Builder API",
-        "version": "1.0.0",
+        "version": "2.4.0",
         "docs": "/docs",
         "endpoints": {
             "prefabs": "/api/simulations/prefabs",

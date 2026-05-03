@@ -29,12 +29,17 @@ export default function TemplatePicker({ onLoadTemplate }: TemplatePickerProps) 
     let result = TEMPLATES;
 
     if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(t =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q) ||
-        t.tags.some(tag => TAG_LABELS[tag]?.toLowerCase().includes(q))
-      );
+      const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+      result = result.filter(t => {
+        const haystack = [
+          t.name,
+          t.description,
+          ...t.agentNames,
+          t.keywords || '',
+          ...t.tags.map(tag => TAG_LABELS[tag] || ''),
+        ].join(' ').toLowerCase();
+        return terms.every(term => haystack.includes(term));
+      });
     }
 
     if (activeTagFilters.size > 0) {
@@ -143,7 +148,7 @@ export default function TemplatePicker({ onLoadTemplate }: TemplatePickerProps) 
             </svg>
             <input
               type="text"
-              placeholder="Search templates by name, description, or feature..."
+              placeholder="Search by name, agent, topic, or keyword..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
