@@ -16,7 +16,8 @@ from backend.models.schemas import (
     SimulationConfig,
     LLMSettings,
     SimulationEvent,
-    EventType
+    EventType,
+    EngineType,
 )
 from backend.services.simulation_builder import build_simulation
 
