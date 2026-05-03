@@ -85,10 +85,16 @@ documentation.html
 simulation_for_sdgs.md
 GLM_SETUP.md
 
-# Custom documentation (keep untracked)
-docs/
+# Custom documentation (only track selected files)
+docs/**
 !docs/SIMULATION_TEMPLATES_GUIDE.md
 !docs/SIMULATION_BUILDING_GUIDE.md
+!docs/TIMEOUT_CONFIGURATION.md
+!docs/research-use-cases/
+docs/research-use-cases/*
+!docs/research-use-cases/vaccine-hesitancy-study.md
+!docs/research-use-cases/phishing-attack-simulation.md
+!docs/research-use-cases/urban-gentrification-simulation.md
 
 # Test scripts
 test_glm.py

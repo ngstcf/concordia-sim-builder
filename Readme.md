@@ -15,6 +15,12 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
 - [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 31 templates with research setups and experiment suggestions
+- [Timeout Configuration](docs/TIMEOUT_CONFIGURATION.md) — Tuning LLM, watchdog, and frontend timeouts
+
+**Research Use Cases:**
+- [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md)
+- [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md)
+- [Urban Gentrification Simulation](docs/research-use-cases/urban-gentrification-simulation.md)
 
 ## Features
 
@@ -284,7 +290,12 @@ concordia-sim-builder/
 │   └── package.json
 ├── docs/
 │   ├── SIMULATION_BUILDING_GUIDE.md
-│   └── SIMULATION_TEMPLATES_GUIDE.md
+│   ├── SIMULATION_TEMPLATES_GUIDE.md
+│   ├── TIMEOUT_CONFIGURATION.md
+│   └── research-use-cases/
+│       ├── vaccine-hesitancy-study.md
+│       ├── phishing-attack-simulation.md
+│       └── urban-gentrification-simulation.md
 ├── logs/                            # Auto-generated simulation logs
 ├── CHANGELOG.md
 └── requirements.txt                 # Python dependencies (gdm-concordia pinned)
