@@ -332,10 +332,12 @@ Licensed under the Apache 2.0 License — see the LICENSE file for details.
 If you use this software in your research, please cite:
 
 ```bibtex
-@software{concordia_sim_builder,
+@inproceedings{concordia_sim_builder,
   title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
   author={Chong, Ng S. T.},
+  booktitle={Proceedings of the 16th International Conference on Simulation and Modeling Methodologies, Technologies and Applications (SIMULTECH 2026)},
   year={2026},
+  organization={INSTICC},
   url={https://github.com/ngstcf/concordia-sim-builder},
   institution={United Nations University}
 }
