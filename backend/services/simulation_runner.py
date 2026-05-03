@@ -5,6 +5,7 @@ import asyncio
 import json
 import datetime
 import os
+import re
 import sys
 import time
 import uuid
@@ -294,7 +295,6 @@ async def run_simulation_stream(
                             partial_log_html = _raw_log_to_html(raw_log)
 
                             # Create partial checkpoint filename
-                            import re
                             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                             safe_premise = re.sub(r'[^\w\s-]', '', config.premise[:50])
                             safe_premise = re.sub(r'[-\s]+', '_', safe_premise.strip())
@@ -423,7 +423,12 @@ async def run_simulation_stream(
                             hung_styled = _inject_html_styles(hung_html)
 
                             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                            hung_filename = f"{timestamp}_WATCHDOG_EMERGENCY_step{step_count_tracker[0]}.html"
+                            safe_premise_wd = re.sub(r'[^\w\s-]', '', config.premise[:50])
+                            safe_premise_wd = re.sub(r'[-\s]+', '_', safe_premise_wd.strip())[:50]
+                            agent_names_wd = '_'.join([agent.name[:15] for agent in config.agents[:3]])
+                            if len(config.agents) > 3:
+                                agent_names_wd += f"_and_{len(config.agents) - 3}_more"
+                            hung_filename = f"{timestamp}_{agent_names_wd}_{safe_premise_wd}_WATCHDOG_EMERGENCY_step{step_count_tracker[0]}.html"
                             hung_path = LOGS_DIR / hung_filename
 
                             with open(hung_path, 'w', encoding='utf-8') as f:
@@ -513,7 +518,12 @@ async def run_simulation_stream(
             emergency_styled = _inject_html_styles(emergency_html)
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            emergency_filename = f"{timestamp}_EMERGENCY_CHECKPOINT.html"
+            safe_premise_ec = re.sub(r'[^\w\s-]', '', config.premise[:50])
+            safe_premise_ec = re.sub(r'[-\s]+', '_', safe_premise_ec.strip())[:50]
+            agent_names_ec = '_'.join([agent.name[:15] for agent in config.agents[:3]])
+            if len(config.agents) > 3:
+                agent_names_ec += f"_and_{len(config.agents) - 3}_more"
+            emergency_filename = f"{timestamp}_{agent_names_ec}_{safe_premise_ec}_EMERGENCY_CHECKPOINT.html"
             emergency_path = LOGS_DIR / emergency_filename
 
             with open(emergency_path, 'w', encoding='utf-8') as f:
