@@ -29,7 +29,6 @@ function lineColor(entry: LogEntry): string {
 }
 
 export default function LogViewer({ title, categories, entries }: LogViewerProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -38,8 +37,8 @@ export default function LogViewer({ title, categories, entries }: LogViewerProps
     .slice(-MAX_LINES);
 
   useEffect(() => {
-    if (autoScroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [filtered.length, autoScroll]);
 
@@ -59,7 +58,9 @@ export default function LogViewer({ title, categories, entries }: LogViewerProps
           <button
             onClick={() => {
               setAutoScroll(true);
-              bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+              if (containerRef.current) {
+                containerRef.current.scrollTop = containerRef.current.scrollHeight;
+              }
             }}
             className={`text-[10px] px-1.5 py-0.5 rounded ${
               autoScroll
@@ -74,7 +75,7 @@ export default function LogViewer({ title, categories, entries }: LogViewerProps
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-64 overflow-y-auto p-2 font-mono text-[11px] leading-4"
+        className="h-96 overflow-y-auto p-2 font-mono text-[11px] leading-4"
       >
         {filtered.length === 0 ? (
           <div className="text-gray-600 text-center py-8">Waiting for log output...</div>
@@ -86,7 +87,6 @@ export default function LogViewer({ title, categories, entries }: LogViewerProps
             </div>
           ))
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
