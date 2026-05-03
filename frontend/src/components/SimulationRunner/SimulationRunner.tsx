@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop } from '../../utils/api';
+import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -254,6 +254,14 @@ export default function SimulationRunner() {
   const isStepControlled = config?.engine_type === 'step_controller';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [cachedAnalysis, setCachedAnalysis] = useState<any>(null);
+  const [simulationMeta, setSimulationMeta] = useState<{
+    llm_provider?: string;
+    llm_model?: string;
+    gm_llm_provider?: string | null;
+    gm_llm_model?: string | null;
+    elapsed_seconds?: number;
+    steps_completed?: number;
+  } | null>(null);
   const [progress, setProgress] = useState<{
     step: number;
     max_steps: number;
@@ -317,6 +325,22 @@ export default function SimulationRunner() {
     });
     setError(null);
     setCachedAnalysis(null);
+    setSimulationMeta(null);
+
+    getSimulationAnalytics(filename).then(analytics => {
+      const llm = analytics.llm;
+      const gmLlm = analytics.gm_llm;
+      if (llm || analytics.elapsed_seconds) {
+        setSimulationMeta({
+          llm_provider: llm?.provider,
+          llm_model: llm?.model,
+          gm_llm_provider: gmLlm?.provider,
+          gm_llm_model: gmLlm?.model,
+          elapsed_seconds: analytics.elapsed_seconds,
+          steps_completed: analytics.total_steps,
+        });
+      }
+    }).catch(() => {});
   };
 
   const handleRun = async () => {
@@ -326,6 +350,7 @@ export default function SimulationRunner() {
     setTaskId(null);
     setProgress(null);
     setCachedAnalysis(null);
+    setSimulationMeta(null);
 
     // Check if there are agents before validating
     if (config.agents.length === 0 || !config.premise) {
@@ -370,6 +395,14 @@ export default function SimulationRunner() {
       (result) => {
         console.log('[handleRun] onComplete callback called');
         setResults(result);
+        setSimulationMeta({
+          llm_provider: result.llm_provider,
+          llm_model: result.llm_model,
+          gm_llm_provider: result.gm_llm_provider,
+          gm_llm_model: result.gm_llm_model,
+          elapsed_seconds: result.elapsed_seconds,
+          steps_completed: result.steps_completed,
+        });
         setProgress(null);
         setRunning(false);
         setControllerState(null);
@@ -980,6 +1013,55 @@ export default function SimulationRunner() {
                     <span className="text-xs text-green-700 flex-1 min-w-0">
                       Log saved to <code className="bg-green-100 px-1.5 py-0.5 rounded text-xs break-all" style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{results.log_path}</code>
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Simulation Metadata Bar */}
+              {simulationMeta && (simulationMeta.llm_provider || simulationMeta.elapsed_seconds) && (
+                <div className="mx-5 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-gray-600">
+                    {simulationMeta.llm_provider && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-gray-500">LLM:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.llm_provider}/{simulationMeta.llm_model}</span>
+                      </div>
+                    )}
+                    {simulationMeta.gm_llm_provider && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                        <span className="text-gray-500">GM:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.gm_llm_provider}/{simulationMeta.gm_llm_model}</span>
+                      </div>
+                    )}
+                    {simulationMeta.elapsed_seconds != null && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-gray-500">Duration:</span>
+                        <span className="font-medium text-gray-700">
+                          {simulationMeta.elapsed_seconds >= 60
+                            ? `${Math.floor(simulationMeta.elapsed_seconds / 60)}m ${Math.round(simulationMeta.elapsed_seconds % 60)}s`
+                            : `${Math.round(simulationMeta.elapsed_seconds)}s`
+                          }
+                        </span>
+                      </div>
+                    )}
+                    {simulationMeta.steps_completed != null && (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        <span className="text-gray-500">Steps:</span>
+                        <span className="font-medium text-gray-700">{simulationMeta.steps_completed}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -908,6 +908,13 @@ async def run_simulation_stream(
         start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
         end_time_iso = datetime.datetime.now().isoformat()
 
+        gm_llm_info = None
+        if gm_llm_settings:
+            gm_llm_info = {
+                "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+                "model": gm_llm_settings.model_name,
+            }
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
@@ -917,6 +924,7 @@ async def run_simulation_stream(
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
             },
+            "gm_llm": gm_llm_info,
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,
@@ -1037,8 +1045,12 @@ async def run_simulation_stream(
             'log_filename': log_filename,
             'completed': completed,
             'error': simulation_error,
-            'error_type': simulation_error_type
-            # NOTE: 'results' field removed - frontend will load from log file
+            'error_type': simulation_error_type,
+            'elapsed_seconds': round(elapsed, 1),
+            'llm_provider': llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
+            'llm_model': llm_settings.model_name,
+            'gm_llm_provider': (gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider)) if gm_llm_settings else None,
+            'gm_llm_model': gm_llm_settings.model_name if gm_llm_settings else None,
         })
         debug_print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
         yield completion_event
@@ -1558,6 +1570,13 @@ async def run_simulation_simple(
         start_time_iso = datetime.datetime.fromtimestamp(start_time).isoformat()
         end_time_iso = datetime.datetime.now().isoformat()
 
+        gm_llm_info = None
+        if gm_llm_settings:
+            gm_llm_info = {
+                "provider": gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider),
+                "model": gm_llm_settings.model_name,
+            }
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
@@ -1567,6 +1586,7 @@ async def run_simulation_simple(
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
             },
+            "gm_llm": gm_llm_info,
             "premise": config.premise,
             "game_master": {
                 "prefab": config.game_master.prefab,

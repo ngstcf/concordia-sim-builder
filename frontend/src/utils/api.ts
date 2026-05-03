@@ -638,6 +638,11 @@ export interface SimulationAnalytics {
   character_count: number;
   premise?: string;
   gm_prefab?: string;
+  llm?: { provider: string; model: string } | null;
+  gm_llm?: { provider: string; model: string } | null;
+  elapsed_seconds?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
   agent_details?: Record<string, {
     actions: Array<{
       step: number;

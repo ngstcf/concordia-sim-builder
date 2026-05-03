@@ -895,9 +895,14 @@ async def get_simulation_analytics(filename: str):
             "timeline": [],
             "word_count": len(soup_words),
             "character_count": len(soup_text),
-            "premise": premise_from_metadata,  # Use premise from metadata
-            "gm_prefab": gm_prefab,  # Include game master prefab type
-            # NEW: Feature detection flags
+            "premise": premise_from_metadata,
+            "gm_prefab": gm_prefab,
+            "llm": metadata.get("llm") if metadata else None,
+            "gm_llm": metadata.get("gm_llm") if metadata else None,
+            "elapsed_seconds": metadata.get("elapsed_seconds") if metadata else None,
+            "started_at": metadata.get("started_at") if metadata else None,
+            "completed_at": metadata.get("completed_at") if metadata else None,
+            # Feature detection flags
             "has_nested_sims": has_nested_sims,
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
