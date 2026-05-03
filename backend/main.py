@@ -14,6 +14,10 @@ load_dotenv()
 # Fix tokenizers parallelism warning
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
+# Install stdout tee for log broadcasting to frontend
+from backend.utils.stdout_tee import install_tee
+install_tee()
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

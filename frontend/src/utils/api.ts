@@ -909,4 +909,19 @@ export async function shutdownServer(): Promise<void> {
   await api.post('/api/server/shutdown');
 }
 
+export async function getLogConfig(): Promise<{ debug_enabled: boolean; llm_logging_enabled: boolean }> {
+  const response = await api.get('/api/simulations/logs/config');
+  return response.data;
+}
+
+export function connectLogStream(
+  onLog: (entry: { ts: number; cat: 'system' | 'debug' | 'llm'; msg: string }) => void,
+  onError?: (err: Event) => void,
+): EventSource {
+  const es = new EventSource(`${API_BASE_URL}/api/simulations/logs/stream`);
+  es.onmessage = (e) => onLog(JSON.parse(e.data));
+  es.onerror = (e) => onError?.(e);
+  return es;
+}
+
 export default api;

@@ -2,10 +2,10 @@
  * SimulationRunner Component
  * Run simulations and view results
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics } from '../../utils/api';
+import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -14,6 +14,8 @@ import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
+import LogViewer from './LogViewer';
+import type { LogEntry } from './LogViewer';
 
 // Inject CSS styles into Concordia HTML logs to improve readability
 function injectStyles(html: string): string {
@@ -283,6 +285,42 @@ export default function SimulationRunner() {
   const [gmAvailableModels, setGmAvailableModels] = useState<Array<{ id: string; name: string; [key: string]: any }>>([]);
   const [gmLoadingModels, setGmLoadingModels] = useState(false);
   const [gmModelsError, setGmModelsError] = useState<string | null>(null);
+
+  // Live log streaming state
+  const [logConfig, setLogConfig] = useState<{ debug_enabled: boolean; llm_logging_enabled: boolean } | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const logEsRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    getLogConfig().then(setLogConfig).catch(() => {});
+  }, []);
+
+  const handleToggleLogs = useCallback(() => {
+    setShowLogs(prev => {
+      const next = !prev;
+      if (next) {
+        setLogEntries([]);
+        logEsRef.current = connectLogStream(
+          (entry) => setLogEntries(prev => {
+            const updated = [...prev, entry];
+            return updated.length > 600 ? updated.slice(-500) : updated;
+          }),
+          () => {},
+        );
+      } else {
+        logEsRef.current?.close();
+        logEsRef.current = null;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      logEsRef.current?.close();
+    };
+  }, []);
 
   // Fetch available models when provider changes
   useEffect(() => {
@@ -1037,6 +1075,41 @@ export default function SimulationRunner() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Live Logs */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleLogs}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                showLogs
+                  ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                  : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {showLogs ? 'Hide Live Logs' : 'Show Live Logs'}
+            </button>
+            {showLogs && (
+              <span className="text-[10px] text-gray-400">
+                Streaming backend terminal output
+              </span>
+            )}
+          </div>
+          {showLogs && (
+            <div className="space-y-3">
+              <LogViewer
+                title={logConfig?.debug_enabled ? 'System & Debug Log' : 'System Log'}
+                categories={logConfig?.debug_enabled ? ['system', 'debug'] : ['system']}
+                entries={logEntries}
+              />
+              {logConfig?.llm_logging_enabled && (
+                <LogViewer
+                  title="LLM Log"
+                  categories={['llm']}
+                  entries={logEntries}
+                />
+              )}
             </div>
           )}
 

@@ -33,7 +33,8 @@ from backend.services.simulation_runner import (
 )
 from backend.services.llm_factory import get_available_providers
 from backend.services.simulation_state import simulation_state
-from backend.utils.debug_print import debug_print
+from backend.utils.debug_print import debug_print, DEBUG_ENABLED, LLM_LOGGING_ENABLED
+from backend.utils.log_broadcaster import broadcaster
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
@@ -623,6 +624,41 @@ async def get_recent_simulations(limit: int = 20):
 
     # Return limited number of results
     return log_files[:limit]
+
+
+@router.get("/logs/config")
+async def get_log_config():
+    """Return logging flags so the frontend knows which panels to show."""
+    return {
+        "debug_enabled": DEBUG_ENABLED,
+        "llm_logging_enabled": LLM_LOGGING_ENABLED,
+    }
+
+
+@router.get("/logs/stream")
+async def stream_logs():
+    """SSE endpoint for real-time log streaming to the frontend."""
+    import asyncio
+
+    async def event_generator():
+        queue = broadcaster.subscribe()
+        try:
+            for entry in broadcaster.get_recent(50):
+                yield f"data: {json.dumps({'ts': entry.timestamp, 'cat': entry.category.value, 'msg': entry.message})}\n\n"
+            while True:
+                try:
+                    entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps({'ts': entry.timestamp, 'cat': entry.category.value, 'msg': entry.message})}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            broadcaster.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/logs/checkpoints")
