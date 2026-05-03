@@ -1912,7 +1912,7 @@ async def get_simulation_status(task_id: str):
             detail=f"Simulation {task_id} not found"
         )
 
-    return {
+    result = {
         "task_id": sim.task_id,
         "status": sim.status,
         "started_at": sim.started_at.isoformat(),
@@ -1924,6 +1924,11 @@ async def get_simulation_status(task_id: str):
             "num_agents": len(sim.config.agents) if hasattr(sim.config, 'agents') else 0
         }
     }
+    if sim.log_filename:
+        result["log_filename"] = sim.log_filename
+    if sim.completion_data:
+        result["completion_data"] = sim.completion_data
+    return result
 
 
 @router.post("/grounded-variables/extract")

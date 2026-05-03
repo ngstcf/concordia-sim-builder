@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream } from '../../utils/api';
+import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -271,6 +271,8 @@ export default function SimulationRunner() {
     est_remaining: number;
     est_time_str: string;
   } | null>(null);
+  const [disconnected, setDisconnected] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Timeout warning state - track elapsed time for running simulations
   const SIMULATION_TIMEOUT = parseInt(import.meta.env.VITE_SIMULATION_TIMEOUT || '18000000', 10);
@@ -319,7 +321,69 @@ export default function SimulationRunner() {
   useEffect(() => {
     return () => {
       logEsRef.current?.close();
+      if (pollRef.current) clearInterval(pollRef.current);
     };
+  }, []);
+
+  const startPollingRecovery = useCallback((tid: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    let failCount = 0;
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+    const stopPolling = (clearBanner = true) => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      if (clearBanner) setDisconnected(false);
+    };
+
+    const handleCompletion = async (data: any) => {
+      stopPolling();
+      if (data.log_filename) {
+        try {
+          const res = await fetch(`${API_BASE}/api/simulations/logs/${data.log_filename}`);
+          const logData = await res.json();
+          setResults({ ...data, results: logData.html_content, timestamp: logData.modified });
+        } catch {
+          setResults(data);
+        }
+      } else {
+        setResults(data);
+      }
+      setSimulationMeta({
+        llm_provider: data.llm_provider,
+        llm_model: data.llm_model,
+        gm_llm_provider: data.gm_llm_provider,
+        gm_llm_model: data.gm_llm_model,
+        elapsed_seconds: data.elapsed_seconds,
+        steps_completed: data.steps_completed,
+      });
+      setProgress(null);
+      setRunning(false);
+    };
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getSimulationStatus(tid);
+        failCount = 0;
+        if (status.status === 'completed' && status.completion_data) {
+          await handleCompletion(status.completion_data);
+        } else if (status.status === 'running' || status.status === 'cancelling') {
+          setProgress(prev => prev ? { ...prev, step: status.steps_completed } : null);
+        } else if (status.status === 'error' || status.status === 'cancelled') {
+          stopPolling();
+          setError(status.error || (status.status === 'cancelled' ? 'Simulation was cancelled' : 'Simulation failed'));
+          setProgress(null);
+          setRunning(false);
+        }
+      } catch (err: any) {
+        failCount++;
+        if (err?.response?.status === 404 || failCount >= 6) {
+          stopPolling();
+          setError('Connection lost and simulation status unavailable. Check Results page for saved output.');
+          setRunning(false);
+        }
+      }
+    }, 5000);
   }, []);
 
   // Fetch available models when provider changes
@@ -457,8 +521,10 @@ export default function SimulationRunner() {
 
     setRunning(true);
     setCancelling(false);
+    setDisconnected(false);
     setControllerState(null);
     setStepDataLog([]);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     console.log('[handleRun] About to call executeSimulationStream');
 
     // Use streaming execution for progress updates
@@ -508,6 +574,20 @@ export default function SimulationRunner() {
       },
       // gmLlmSettings
       gmLlmSettings,
+      // onDisconnect
+      () => {
+        setDisconnected(true);
+        setTaskId(prev => {
+          if (prev) {
+            startPollingRecovery(prev);
+          } else {
+            setError('Connection lost before simulation started. The simulation may still be running — check Results page.');
+            setRunning(false);
+            setDisconnected(false);
+          }
+          return prev;
+        });
+      },
     );
     console.log('[handleRun] executeSimulationStream completed');
   };
@@ -1074,6 +1154,21 @@ export default function SimulationRunner() {
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Connection Lost Banner */}
+          {disconnected && running && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+              <svg className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-semibold text-amber-800">Connection lost</h4>
+                <p className="text-xs text-amber-700 mt-1">
+                  The progress stream was interrupted. The simulation is still running on the server — polling for results every 5 seconds.
+                </p>
               </div>
             </div>
           )}

@@ -19,6 +19,8 @@ class RunningSimulation:
     steps_completed: int = 0
     error: Optional[str] = None
     step_controller: Optional[Any] = None
+    log_filename: Optional[str] = None
+    completion_data: Optional[Dict[str, Any]] = None
 
 
 class SimulationStateManager:
@@ -42,6 +44,7 @@ class SimulationStateManager:
             return
         self._initialized = True
         self._simulations: Dict[str, RunningSimulation] = {}
+        self._completed: Dict[str, RunningSimulation] = {}
         self._lock = threading.Lock()
 
     def register_simulation(self, task_id: str, config: Any) -> RunningSimulation:
@@ -52,9 +55,9 @@ class SimulationStateManager:
             return sim
 
     def get_simulation(self, task_id: str) -> Optional[RunningSimulation]:
-        """Get a simulation by task ID."""
+        """Get a simulation by task ID (checks running first, then completed)."""
         with self._lock:
-            return self._simulations.get(task_id)
+            return self._simulations.get(task_id) or self._completed.get(task_id)
 
     def cancel_simulation(self, task_id: str) -> bool:
         """
@@ -93,13 +96,27 @@ class SimulationStateManager:
 
             return True
 
-    def cleanup_simulation(self, task_id: str) -> bool:
-        """Remove a completed/cancelled simulation from tracking."""
+    def complete_simulation(self, task_id: str, log_filename: str = None, completion_data: dict = None) -> bool:
+        """Move a simulation to completed state (retains data for polling recovery)."""
         with self._lock:
-            if task_id in self._simulations:
-                del self._simulations[task_id]
+            sim = self._simulations.pop(task_id, None)
+            if sim:
+                sim.status = "completed"
+                sim.log_filename = log_filename
+                sim.completion_data = completion_data
+                self._completed[task_id] = sim
+                if len(self._completed) > 20:
+                    oldest = next(iter(self._completed))
+                    del self._completed[oldest]
                 return True
             return False
+
+    def cleanup_simulation(self, task_id: str) -> bool:
+        """Remove a simulation from tracking entirely."""
+        with self._lock:
+            removed = self._simulations.pop(task_id, None) is not None
+            removed = self._completed.pop(task_id, None) is not None or removed
+            return removed
 
     def get_all_simulations(self) -> Dict[str, Dict]:
         """Get status of all tracked simulations."""

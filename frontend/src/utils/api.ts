@@ -113,6 +113,7 @@ export async function executeSimulationStream(
   onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
   onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
   gmLlmSettings?: LLMSettings | null,
+  onDisconnect?: () => void,
 ): Promise<void> {
   // Remove player_specific_context for execution
   const { player_specific_context, ...configToUse } = config as any;
@@ -151,13 +152,17 @@ export async function executeSimulationStream(
 
     let buffer = '';
     let eventCount = 0;
+    let streamCompleted = false;
 
     while (true) {
       const { done, value } = await reader.read();
 
       if (done) {
         console.log('[executeSimulationStream] Stream done. Total events:', eventCount);
-        console.log('[executeSimulationStream] Final buffer state:', { bufferLength: buffer.length, buffer: buffer.length > 0 ? buffer : '(empty)' });
+        if (!streamCompleted) {
+          console.warn('[executeSimulationStream] Stream ended without completion event — connection lost');
+          onDisconnect?.();
+        }
         break;
       }
 
@@ -197,8 +202,8 @@ export async function executeSimulationStream(
                     eventCount++;
                     break;
                   case 'simulation_complete':
+                    streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onComplete');
-                    // Fetch the full log content from the server
                     if (data.log_filename) {
                       console.log('[executeSimulationStream] Fetching log content from:', data.log_filename);
                       fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
@@ -233,6 +238,7 @@ export async function executeSimulationStream(
                     eventCount++;
                     break;
                   case 'error':
+                    streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onError');
                     onError?.(data.error || 'Unknown error');
                     eventCount++;
@@ -788,6 +794,8 @@ export async function getSimulationStatus(taskId: string): Promise<{
   started_at: string;
   steps_completed: number;
   error: string | null;
+  log_filename?: string;
+  completion_data?: any;
   config: {
     premise: string;
     max_steps: number;

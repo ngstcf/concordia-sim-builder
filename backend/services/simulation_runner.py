@@ -244,8 +244,8 @@ async def run_simulation_stream(
                 raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
 
             try:
-                # Extract step number from checkpoint data
-                step = checkpoint_data.get('checkpoint_counter', 0)
+                # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
+                step = checkpoint_data.get('checkpoint_counter', 0) + 1
                 step_count_tracker[0] = step
                 elapsed = time.time() - start_time_progress[0]
 
@@ -396,6 +396,7 @@ async def run_simulation_stream(
                     # Update last progress time
                     last_progress_time[0] = time.time()
                 except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
                     # No progress update for 5 seconds, check for hang
                     time_since_progress = time.time() - last_progress_time[0]
 
@@ -965,8 +966,6 @@ async def run_simulation_stream(
         print("💾 Saving simulation log...")
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Create safe filename from premise (first 50 chars, alphanumeric and basic symbols only)
-        import re
         safe_premise = re.sub(r'[^\w\s-]', '', config.premise[:50])
         safe_premise = re.sub(r'[-\s]+', '_', safe_premise.strip())
         safe_premise = safe_premise[:50]  # Truncate again after sanitization
@@ -1119,7 +1118,7 @@ async def run_simulation_stream(
             completion_message = 'Simulation completed successfully'
             completed = True
 
-        completion_event = _format_sse(EventType.SIMULATION_COMPLETE, {
+        completion_data = {
             'message': completion_message,
             'steps_completed': step_count_tracker[0],
             'timestamp': datetime.datetime.now().isoformat(),
@@ -1133,11 +1132,12 @@ async def run_simulation_stream(
             'llm_model': llm_settings.model_name,
             'gm_llm_provider': (gm_llm_settings.provider.value if hasattr(gm_llm_settings.provider, 'value') else str(gm_llm_settings.provider)) if gm_llm_settings else None,
             'gm_llm_model': gm_llm_settings.model_name if gm_llm_settings else None,
-        })
+        }
+        simulation_state.complete_simulation(task_id, log_filename=log_filename, completion_data=completion_data)
+        completion_event = _format_sse(EventType.SIMULATION_COMPLETE, completion_data)
         debug_print(f"[DEBUG] SIMULATION_COMPLETE event formatted (length: {len(completion_event)} chars)")
         yield completion_event
         print("[DEBUG] SIMULATION_COMPLETE event yielded")
-        simulation_state.cleanup_simulation(task_id)
 
     except Exception as e:
         # Send error event
@@ -1172,7 +1172,6 @@ async def run_simulation_simple(
         Dictionary with simulation results
     """
     import os
-    import re
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
     from backend.services.llm_factory import get_model_and_embedder
@@ -1241,8 +1240,8 @@ async def run_simulation_simple(
                 print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
                 raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
 
-            # Extract step number from checkpoint data
-            step = checkpoint_data.get('checkpoint_counter', 0)
+            # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
+            step = checkpoint_data.get('checkpoint_counter', 0) + 1
             step_count[0] = step
             elapsed = time.time() - start_time_progress[0]
 
@@ -1752,11 +1751,7 @@ async def run_simulation_simple(
         print(f"   Size: {len(styled_html):,} characters")
         print(f"✓ Metadata saved to: {metadata_filename}\n")
 
-        # Cleanup state
-        simulation_state.cleanup_simulation(task_id)
-
-        # Return results with log path
-        return {
+        result_data = {
             'config': config.model_dump(mode='json'),
             'completed': not was_cancelled,
             'cancelled': was_cancelled,
@@ -1767,21 +1762,21 @@ async def run_simulation_simple(
             'task_id': task_id,
             'message': f'Cancelled after step {step_count[0]}' if was_cancelled else 'Simulation completed successfully'
         }
+        simulation_state.complete_simulation(task_id, log_filename=log_filename, completion_data=result_data)
+        return result_data
 
     except asyncio.CancelledError:
-        # Handle cancellation
         simulation_state.update_simulation_status(task_id, status="cancelled")
-        simulation_state.cleanup_simulation(task_id)
+        simulation_state.complete_simulation(task_id)
         raise
 
     except Exception as e:
-        # Handle errors
         simulation_state.update_simulation_status(
             task_id,
             status="error",
             error=str(e)
         )
-        simulation_state.cleanup_simulation(task_id)
+        simulation_state.complete_simulation(task_id)
         raise
 
 
@@ -1931,8 +1926,6 @@ def _inject_html_styles(html: str) -> str:
         # Best case: inject before closing head tag
         return html.replace('</head>', styles + '</head>')
     elif '<html' in html:
-        # Has html tag but no head - add head
-        import re
         return re.sub(r'(<html[^>]*>)', r'\1<head>' + styles + '</head>', html)
     elif '<body>' in html:
         # Has body but no html - inject at start of body
