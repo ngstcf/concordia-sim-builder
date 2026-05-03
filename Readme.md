@@ -9,7 +9,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 ![React](https://img.shields.io/badge/React-18+-blue)
 ![License](https://img.shields.io/badge/License-Apache%202.0-orange)
 
-**📖 Documentation:** [c3.unu.edu/projects/ai/simulator/](https://c3.unu.edu/projects/ai/simulator/)
+**📖 Documentation:** [c3.unu.edu/projects/ai/simulator/v2.1.html](https://c3.unu.edu/projects/ai/simulator/v2.1.html)
 
 ## ✨ Features
 

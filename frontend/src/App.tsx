@@ -76,7 +76,7 @@ function App() {
             <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 z-50">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>Simulation Engine v1.1.0 | Built on Google DeepMind Concordia</span>
+                  <span>Simulation Engine v2.1.0 | Built on Google DeepMind Concordia</span>
                   <span>Developed by Ng Chong</span>
                 </div>
               </div>
