@@ -88,6 +88,7 @@ GLM_SETUP.md
 # Custom documentation (keep untracked)
 docs/
 !docs/SIMULATION_TEMPLATES_GUIDE.md
+!docs/SIMULATION_BUILDING_GUIDE.md
 
 # Test scripts
 test_glm.py

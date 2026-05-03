@@ -4,9 +4,8 @@
 #
 # For development with unpinned dependencies, see requirements-dev.bak
 #
-# CONCORDIA: Installed from local clone (concordia-upstream/) via:
-#   pip install -e ./concordia-upstream
-# Do not include gdm-concordia here — it's managed separately.
+# Concordia framework (pinned — test all templates before upgrading)
+gdm-concordia==2.4.0
 
 # NLP / Embeddings
 sentence-transformers==5.2.0

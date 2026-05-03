@@ -11,8 +11,7 @@ pydantic>=2.5.0
 # Environment
 python-dotenv>=1.0.0
 
-# Core Dependencies (from main project)
-gdm-concordia
+# Core Dependencies (versions pinned in root requirements.txt)
 sentence-transformers
 
 # LLM Providers
