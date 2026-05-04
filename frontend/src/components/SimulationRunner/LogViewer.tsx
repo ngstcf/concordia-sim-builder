@@ -88,7 +88,7 @@ export default function LogViewer({ title, categories, entries }: LogViewerProps
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-96 overflow-y-auto p-2 font-mono text-[11px] leading-4"
+        className="h-[32rem] overflow-y-auto p-2 font-mono text-[11px] leading-4"
       >
         {filtered.length === 0 ? (
           <div className="text-gray-600 text-center py-8">Waiting for log output...</div>
