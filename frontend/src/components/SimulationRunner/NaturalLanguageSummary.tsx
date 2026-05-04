@@ -24,10 +24,20 @@ interface AnalyticsData {
   word_count: number;
   character_count: number;
   premise?: string;
+  gm_prefab?: string;
   agent_details?: Record<string, {
     actions: Array<{ step: number; text: string }>;
+    observations?: Array<{ step: number; text: string }>;
     goal: string;
     memories: string[];
+  }>;
+  has_grounded_variables?: boolean;
+  grounded_variables?: Array<{
+    name: string;
+    type: string;
+    description: string;
+    current_value: any;
+    history: Array<{ step: number; value: any }>;
   }>;
 }
 
@@ -166,7 +176,93 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
           }
           md += `\n`;
         }
+
+        const obs = details.observations || [];
+        if (obs.length > 0) {
+          md += `**Key Observations:**\n`;
+          obs.slice(0, 2).forEach((o) => {
+            const text = o.text.length > 150 ? o.text.substring(0, 150) + '...' : o.text;
+            md += `- [Step ${o.step}] ${text}\n`;
+          });
+          if (obs.length > 2) {
+            md += `- *...and ${obs.length - 2} more observation${obs.length - 2 > 1 ? 's' : ''}*\n`;
+          }
+          md += `\n`;
+        }
       });
+    }
+
+    // Grounded Variables Summary
+    const gvars = analytics.grounded_variables || [];
+    if (gvars.length > 0) {
+      md += `## Grounded Variables\n\n`;
+      md += `| Variable | Type | Initial | Final | Changes |\n`;
+      md += `|----------|------|---------|-------|--------|\n`;
+      gvars.forEach((v) => {
+        const history = v.history || [];
+        const initial = history.length > 0 ? history[0].value : v.current_value ?? '—';
+        const final_ = history.length > 0 ? history[history.length - 1].value : v.current_value ?? '—';
+        let changeCount = 0;
+        for (let i = 1; i < history.length; i++) {
+          if (history[i].value !== history[i - 1].value) changeCount++;
+        }
+        md += `| ${v.name} | ${v.type} | ${initial} | ${final_} | ${changeCount} |\n`;
+      });
+      md += `\n`;
+
+      const unchangedVars = gvars.filter((v) => {
+        const h = v.history || [];
+        return h.length <= 1 || h.every((e) => e.value === h[0].value);
+      });
+      if (unchangedVars.length > 0 && unchangedVars.length < gvars.length) {
+        md += `> **Note:** ${unchangedVars.map((v) => v.name).join(', ')} did not change during the simulation. This may indicate the GM did not narrate events affecting ${unchangedVars.length === 1 ? 'this variable' : 'these variables'}.\n\n`;
+      } else if (unchangedVars.length === gvars.length) {
+        md += `> **Warning:** No grounded variables changed during the simulation. The GM may not be outputting variable update tags. Check the Grounded Variables tab for details.\n\n`;
+      }
+    }
+
+    // Cooperation Profile (game-theoretic simulations)
+    if (analytics.gm_prefab === 'game_theoretic_and_dramaturgic__GameMaster' && analytics.agent_details) {
+      const coopData: Array<{ agent: string; cooperate: number; defect: number; other: number; total: number }> = [];
+      analytics.agents.forEach((agent) => {
+        const details = analytics.agent_details?.[agent];
+        if (!details) return;
+        let cooperate = 0, defect = 0, other = 0;
+        details.actions.forEach((a) => {
+          const upper = a.text.toUpperCase().trim();
+          if (upper === 'COOPERATE') cooperate++;
+          else if (upper === 'DEFECT') defect++;
+          else other++;
+        });
+        if (cooperate + defect > 0) {
+          coopData.push({ agent, cooperate, defect, other, total: cooperate + defect + other });
+        }
+      });
+
+      if (coopData.length > 0) {
+        md += `## Cooperation Profile\n\n`;
+        md += `| Agent | Cooperate | Defect | Cooperation Rate |\n`;
+        md += `|-------|-----------|--------|------------------|\n`;
+        coopData.forEach((d) => {
+          const rate = d.cooperate + d.defect > 0
+            ? ((d.cooperate / (d.cooperate + d.defect)) * 100).toFixed(0)
+            : '—';
+          md += `| ${d.agent} | ${d.cooperate} | ${d.defect} | ${rate}% |\n`;
+        });
+        md += `\n`;
+
+        const totalCoop = coopData.reduce((s, d) => s + d.cooperate, 0);
+        const totalDef = coopData.reduce((s, d) => s + d.defect, 0);
+        const overallRate = totalCoop + totalDef > 0 ? (totalCoop / (totalCoop + totalDef)) * 100 : 0;
+
+        if (overallRate > 75) {
+          md += `> Agents showed **high cooperation** (${overallRate.toFixed(0)}% overall). This suggests mutual trust or strong incentives for cooperation.\n\n`;
+        } else if (overallRate > 40) {
+          md += `> **Mixed strategies** observed (${overallRate.toFixed(0)}% cooperation). Agents varied between cooperation and defection, typical of iterated games with uncertain trust.\n\n`;
+        } else {
+          md += `> Agents showed **low cooperation** (${overallRate.toFixed(0)}% overall). Defection dominated, which may indicate insufficient incentives for mutual cooperation or breakdown of trust.\n\n`;
+        }
+      }
     }
 
     // Activity Metrics
@@ -354,7 +450,7 @@ export default function NaturalLanguageSummary({ filename, htmlContent }: Natura
             <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="text-lg font-semibold text-gray-900">AI Summary</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Summary</h3>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button

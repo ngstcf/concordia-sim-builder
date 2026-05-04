@@ -44,12 +44,12 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Gated by `DEBUG_ENABLED` and `LLM_LOGGING_ENABLED` env vars
 
 **Results & Analytics**
-- 9 result tabs: Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions & Observations, AI Summary, Analysis, Component Logs
-- Markdown rendering (react-markdown + remark-gfm) in Analysis and AI Summary tabs
-- Save Report download button for Analysis and AI Summary
+- 9 result tabs: Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions & Observations, Summary, Analysis, Component Logs
+- Markdown rendering (react-markdown + remark-gfm) in Analysis and Summary tabs
+- Save Report download button for Analysis and Summary
 - LLM provider, model, and duration metadata bar in results header
 - Grounded variables parser rewritten for v2.4 ENTRIES JSON with `<details>` tag fallback
-- AI Summary with agent overview table, participation imbalance detection, per-phase timeline
+- Summary with agent overview table, participation imbalance detection, per-phase timeline
 - Analysis prompts rewritten with full simulation metadata context, anti-fabrication guardrails
 - Per-agent observation extraction from v2.4 `__observation__` entries with cyan-styled display in Actions & Observations tab
 - AI Analysis prompts now receive observations, grounded variable definitions, and cooperation/game-theoretic data when available — conditional prompt sections adapt to each simulation's configuration
