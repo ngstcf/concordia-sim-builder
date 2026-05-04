@@ -79,6 +79,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Templates registered via dynamic `router.add_api_route()`
 
 ### Bug Fixes
+- Fixed grounded variables not updating during simulation — GM was not instructed to output variable changes, so the component's post_act extraction always returned empty. Injected tracking instructions into the premise (visible to the event resolution chain), added fast `[VARIABLES: k=v]` tag parsing before LLM fallback, and fixed history recording to capture post-update values
 - Fixed checkpoint saves failing silently — local `import re` inside `run_simulation_stream` shadowed the module-level import, causing a `NameError` in the checkpoint callback closure
 - Fixed off-by-one step numbering — Concordia's `checkpoint_counter` is 0-indexed; progress now correctly shows Step 1/N through N/N
 - Fixed SSE progress stream dropping during long simulations — added 5-second keepalive heartbeats between steps to prevent idle connection timeouts
