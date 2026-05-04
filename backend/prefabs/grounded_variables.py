@@ -9,6 +9,7 @@ Based on the existing WorldState and Inventory components in Concordia.
 """
 
 import dataclasses
+import re
 from typing import Any, Optional, Dict, List, Union
 from enum import Enum
 
@@ -139,28 +140,45 @@ class GroundedVariablesComponent(
         component_name: str,
         action_spec: Optional[entity_lib.ActionSpec] = None,
     ) -> str:
-        """Provide current variable values before the GM acts."""
-        return self.get_state()
+        """Provide current variable values and update instructions before the GM acts."""
+        lines = ["Current grounded variable values:"]
+        for name, value in self._current_values.items():
+            cfg = self._variable_configs[name]
+            line = f"  - {name}: {value}"
+            if cfg.update_rule:
+                line += f"  ({cfg.update_rule})"
+            lines.append(line)
+        lines.append("")
+        lines.append(
+            "IMPORTANT: After narrating what happens, you MUST append a"
+            " variable update line in exactly this format:"
+        )
+        lines.append("  [VARIABLES: name1=value1, name2=value2]")
+        lines.append(
+            "Include every variable that changed. If nothing changed,"
+            " write [VARIABLES: NONE]."
+        )
+        return "\n".join(lines)
 
     def post_act(self, event: str) -> str:
         """Process event and update variables if needed."""
         self._step_counter += 1
 
-        # Record current values in history
-        for name, value in self._current_values.items():
-            self._history[name].append((self._step_counter, value))
-
-        # Try to extract variable updates from the event
-        # This uses the LLM to identify if any variables should change
-        updates = self._extract_variable_updates(event)
+        # Try structured tag first, fall back to LLM extraction
+        updates = self._parse_variable_tag(event)
+        if not updates:
+            updates = self._extract_variable_updates(event)
 
         # Apply updates with validation
         for name, new_value in updates.items():
             if name in self._variable_configs:
                 validated_value = self._validate_value(name, new_value)
                 if validated_value is not None:
-                    old_value = self._current_values[name]
                     self._current_values[name] = validated_value
+
+        # Record values AFTER updates so history reflects end-of-step state
+        for name, value in self._current_values.items():
+            self._history[name].append((self._step_counter, value))
 
         return f"Variables updated: {list(updates.keys()) if updates else 'None'}"
 
@@ -187,56 +205,74 @@ class GroundedVariablesComponent(
         """Get all current variable values."""
         return self._current_values.copy()
 
+    _VARIABLE_TAG_RE = re.compile(
+        r'\[VARIABLES:\s*(.+?)\]', re.IGNORECASE
+    )
+
+    def _parse_variable_tag(self, event: str) -> Dict[str, Any]:
+        """Parse a [VARIABLES: k=v, ...] tag directly from the event text."""
+        match = self._VARIABLE_TAG_RE.search(event)
+        if not match:
+            return {}
+        payload = match.group(1).strip()
+        if payload.upper() == "NONE":
+            return {}
+        updates: Dict[str, Any] = {}
+        for pair in payload.split(','):
+            if '=' in pair:
+                name, value = pair.split('=', 1)
+                name = name.strip()
+                value = value.strip()
+                parsed = self._parse_value(name, value)
+                if parsed is not None:
+                    updates[name] = parsed
+        return updates
+
     def _extract_variable_updates(self, event: str) -> Dict[str, Any]:
         """Use LLM to extract variable updates from the event."""
-        # Build prompt for LLM
         variable_descriptions = []
         for name, cfg in self._variable_configs.items():
-            desc = f"{name} ({cfg.variable_type.value}, current: {self._current_values[name]})"
+            desc = f"  {name} = {self._current_values[name]} ({cfg.variable_type.value})"
             if cfg.description:
-                desc += f": {cfg.description}"
+                desc += f" — {cfg.description}"
             if cfg.update_rule:
-                desc += f" [Update rule: {cfg.update_rule}]"
+                desc += f" [rule: {cfg.update_rule}]"
             variable_descriptions.append(desc)
 
-        prompt = f"""Given the following event and the current state of grounded variables,
-identify which variables should be updated and what their new values should be.
+        prompt = f"""Analyze this simulation event and determine realistic variable changes.
 
 Event: {event}
 
-Variables:
+Current variables:
 {chr(10).join(variable_descriptions)}
 
-Respond with a comma-separated list of updates in the format: "variable_name=new_value".
-Only include variables that actually changed based on the event.
-If no variables changed, respond with "None".
+Think about what concretely happened: Was money spent? Did morale shift? Were tasks finished or blocked? Did conditions improve or worsen?
 
-Examples of valid responses:
-- "trust_level=7,anger_level=3"
-- "health=85,fatigue=true"
-- "None"
-"""
+Respond with ONLY a comma-separated list: variable_name=new_value
+If nothing changed, respond with ONLY: None
+
+Examples:
+budget_remaining=8500,tasks_completed=3
+team_morale=55
+None"""
 
         try:
-            from concordia.language_model import google_cloud_model
             response = self._model.sample_text(prompt)
+            clean = response.strip().split('\n')[0].strip()
 
-            # Parse response
-            updates = {}
-            if response.strip() != "None":
-                for update in response.split(','):
-                    if '=' in update:
-                        name, value = update.split('=', 1)
-                        name = name.strip()
-                        value = value.strip()
-                        # Try to parse value
-                        parsed = self._parse_value(name, value)
-                        if parsed is not None:
-                            updates[name] = parsed
-
+            updates: Dict[str, Any] = {}
+            if clean.upper() == "NONE":
+                return updates
+            for pair in clean.split(','):
+                if '=' in pair:
+                    name, value = pair.split('=', 1)
+                    name = name.strip()
+                    value = value.strip()
+                    parsed = self._parse_value(name, value)
+                    if parsed is not None:
+                        updates[name] = parsed
             return updates
-        except Exception as e:
-            # If LLM parsing fails, return empty dict
+        except Exception:
             return {}
 
     def _parse_value(self, name: str, value_str: str) -> Any:

@@ -387,8 +387,33 @@ def build_simulation(
     )
     instances.append(gm_instance)
 
-    # Process critical decision points and append to premise
+    # Append grounded variable tracking instructions to the premise so the
+    # GM's event resolution chain (which reads instructions) is aware of them.
     premise_text = config.premise
+    if config.game_master.grounded_variables:
+        var_lines = []
+        for var in config.game_master.grounded_variables:
+            v = var.model_dump() if hasattr(var, 'model_dump') else var
+            name = v['name']
+            vtype = v.get('variable_type', 'numerical')
+            desc = v.get('description', '')
+            line = f"  - {name} ({vtype}): {desc}"
+            if v.get('default_value') is not None:
+                line += f" [starts at {v['default_value']}]"
+            if v.get('update_rule'):
+                line += f" — {v['update_rule']}"
+            var_lines.append(line)
+
+        premise_text += (
+            "\n\nGROUNDED VARIABLES — you MUST track these quantitative"
+            " variables as the simulation unfolds. After every event you"
+            " narrate, append exactly one line in this format:\n"
+            "  [VARIABLES: name1=value1, name2=value2]\n"
+            "Include only variables that changed. If none changed, write"
+            " [VARIABLES: NONE].\n\n"
+            "Variables:\n" + "\n".join(var_lines)
+        )
+        debug_print(f"[DEBUG] Injected grounded variable tracking instructions into premise")
     debug_print(f"[DEBUG] Checking for critical decision points...")
     debug_print(f"[DEBUG] hasattr(config.game_master, 'critical_decision_points'): {hasattr(config.game_master, 'critical_decision_points')}")
     if hasattr(config.game_master, 'critical_decision_points'):
