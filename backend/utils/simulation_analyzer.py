@@ -100,6 +100,18 @@ class SimulationAnalyzer:
         except (json.JSONDecodeError, ValueError):
             return {}
 
+    def _resolve_entry_data(self, obj: Any, store: Dict[str, str], depth: int = 0) -> Any:
+        if depth > 5:
+            return obj
+        if isinstance(obj, dict):
+            if '_ref' in obj:
+                ref_val = store.get(obj['_ref'], obj)
+                return self._resolve_entry_data(ref_val, store, depth + 1)
+            return {k: self._resolve_entry_data(v, store, depth + 1) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._resolve_entry_data(item, store, depth + 1) for item in obj]
+        return obj
+
     def _resolve_refs(self, obj: Any, store: Dict[str, str], depth: int = 0) -> str:
         if depth > 3:
             return ''
@@ -140,15 +152,46 @@ class SimulationAnalyzer:
                 'full_content': content[:6000],
             })
 
-        # Extract agent actions
+        # Extract agent actions and observations from resolved entry data
         actions: Dict[str, List[str]] = {}
+        observations: Dict[str, List[Dict]] = {}
         for entry in entries:
-            if entry.get('component_name') == 'entity_action':
-                agent = entry.get('entity_name', 'Unknown')
+            if entry.get('entry_type') != 'entity':
+                continue
+            entity = entry.get('entity_name', '')
+            step = entry.get('step', 0)
+            if not entity:
+                continue
+
+            dedup = entry.get('deduplicated_data', {})
+            resolved = self._resolve_entry_data(dedup, content_store)
+            value_data = resolved.get('value', {})
+            if not isinstance(value_data, dict):
+                continue
+
+            if '__act__' in value_data:
+                act_data = value_data['__act__']
+                act_text = act_data.get('Value', '') if isinstance(act_data, dict) else str(act_data)
+                if act_text:
+                    actions.setdefault(entity, []).append(act_text[:1500])
+
+            if '__observation__' in value_data:
+                obs_data = value_data['__observation__']
+                obs_values = obs_data.get('Value', []) if isinstance(obs_data, dict) else []
+                if obs_values and isinstance(obs_values, list):
+                    last_obs = obs_values[-1]
+                    obs_text = re.sub(r'^\[observation\]\s*(\[\w+\]\s*)?', '', str(last_obs)).strip()
+                    if obs_text:
+                        observations.setdefault(entity, []).append({
+                            'step': step,
+                            'text': obs_text[:1500]
+                        })
+
+            # Fallback: also capture from component_name == 'entity_action'
+            if entry.get('component_name') == 'entity_action' and entity not in actions:
                 summary = entry.get('summary', '')
-                if agent not in actions:
-                    actions[agent] = []
-                actions[agent].append(summary[:1500])
+                if summary:
+                    actions.setdefault(entity, []).append(summary[:1500])
 
         # Extract final outcomes from last step
         final_outcomes = []
@@ -173,6 +216,7 @@ class SimulationAnalyzer:
             'title': title,
             'steps': steps,
             'agent_actions': actions,
+            'agent_observations': observations,
             'final_outcomes': final_outcomes,
             'nested_simulations': nested,
         }
@@ -227,6 +271,7 @@ class SimulationAnalyzer:
             'title': title,
             'steps': steps,
             'agent_actions': actions,
+            'agent_observations': {},
             'final_outcomes': outcomes,
             'nested_simulations': [],
         }
@@ -326,6 +371,41 @@ class SimulationAnalyzer:
                 formatted.append(f"  - {a[:300]}")
         return "\n".join(formatted)
 
+    def _format_observations_for_prompt(self, observations: Dict[str, List[Dict]], max_per_agent: int = 5) -> str:
+        if not observations:
+            return ""
+        formatted = []
+        for agent, obs_list in observations.items():
+            formatted.append(f"\n**{agent}** ({len(obs_list)} observations):")
+            for o in obs_list[:max_per_agent]:
+                formatted.append(f"  - [Step {o['step']}] {o['text'][:300]}")
+            if len(obs_list) > max_per_agent:
+                formatted.append(f"  ... ({len(obs_list) - max_per_agent} more)")
+        return "\n".join(formatted)
+
+    def _format_grounded_variables_for_prompt(self, metadata: Optional[Dict]) -> str:
+        if not metadata:
+            return ""
+        gvars = metadata.get('game_master', {}).get('grounded_variables', [])
+        if not gvars:
+            return ""
+        formatted = []
+        for v in gvars:
+            if not isinstance(v, dict):
+                continue
+            name = v.get('name', '?')
+            vtype = v.get('variable_type', 'numerical')
+            desc = v.get('description', '')
+            default = v.get('default_value')
+            rule = v.get('update_rule', '')
+            line = f"- **{name}** ({vtype}): {desc}"
+            if default is not None:
+                line += f" [initial: {default}]"
+            if rule:
+                line += f" — {rule}"
+            formatted.append(line)
+        return "\n".join(formatted)
+
     def _format_agents_for_prompt(self, metadata: Optional[Dict]) -> str:
         if not metadata or not metadata.get('agents'):
             return "Agent information not available"
@@ -337,6 +417,33 @@ class SimulationAnalyzer:
                 line += f" [components: {', '.join(comps.keys())}]"
             agents.append(line)
         return "\n".join(agents)
+
+    def _build_optional_data_sections(self, parsed_data: Dict, metadata: Optional[Dict]) -> str:
+        sections = []
+
+        obs = parsed_data.get('agent_observations', {})
+        if obs:
+            obs_text = self._format_observations_for_prompt(obs)
+            sections.append(f"**AGENT OBSERVATIONS (what each agent perceived):**\n{obs_text}")
+
+        gv_text = self._format_grounded_variables_for_prompt(metadata)
+        if gv_text:
+            sections.append(f"**GROUNDED VARIABLES (quantitative metrics tracked during the simulation):**\n{gv_text}")
+
+        gt = metadata.get('game_theoretic', {}) if metadata else {}
+        if gt:
+            gt_parts = []
+            scores = gt.get('scores', {})
+            if scores:
+                gt_parts.append("Scores: " + ', '.join(f"{k}: {v}" for k, v in scores.items()))
+            actions_by_player = gt.get('actions_by_player', {})
+            if actions_by_player:
+                for player, acts in actions_by_player.items():
+                    gt_parts.append(f"{player}'s choices: {acts}")
+            if gt_parts:
+                sections.append("**GAME-THEORETIC DATA (cooperation/defection choices and scores):**\n" + "\n".join(gt_parts))
+
+        return "\n\n".join(sections)
 
     # ── LLM Analysis Sections ──
 
@@ -368,6 +475,11 @@ Write a short diagnostic report (2-3 paragraphs max) covering:
 Do NOT write hypothetical agent analysis, goal assessments, or emergent dynamics for a simulation that never ran."""
 
         else:
+            optional_sections = self._build_optional_data_sections(parsed_data, metadata)
+            has_observations = bool(parsed_data.get('agent_observations'))
+            has_gvars = bool(metadata and metadata.get('game_master', {}).get('grounded_variables'))
+            has_game_theory = bool(metadata and metadata.get('game_theoretic'))
+
             prompt = f"""You are analyzing the results of a multi-agent simulation run on the Concordia platform. Concordia simulations place LLM-driven agents with distinct goals, memories, and psychological components into a shared scenario and let them interact over multiple steps. The Game Master (GM) narrates the world state and mediates agent actions.
 
 **SIMULATION SETUP:**
@@ -378,6 +490,8 @@ Do NOT write hypothetical agent analysis, goal assessments, or emergent dynamics
 
 **AGENT ACTIONS:**
 {self._format_actions_for_prompt(parsed_data.get('agent_actions', {}))}
+
+{optional_sections}
 
 **EXPLICIT OUTCOMES:**
 {chr(10).join(parsed_data.get('final_outcomes', [])[:5]) or 'No explicit outcomes section found in the log.'}
@@ -392,6 +506,9 @@ Write a 3-4 paragraph executive summary covering:
 2. **Key events and turning points** — The most significant moments: when positions shifted, when new information surfaced, when decisions were made. Cite specific step numbers.
 3. **Goal attainment** — For each agent, did they achieve their stated goal? Partially? Not at all? Be specific — if an agent's goal was "secure at least $1.2M," state whether they did.
 4. **Emergent dynamics** — Behavior that was not explicitly programmed but emerged from agent interactions: alliances, betrayals, creative solutions, deadlocks, emotional shifts. If psychological components (cognitive biases, emotions, values) were configured, note whether their effects were visible in agent behavior.
+{"5. **Observation-action coherence** — Did agents' actions follow logically from what they observed? Note any cases where an agent acted on information they could not have perceived." if has_observations else ""}
+{"6. **Grounded variable trajectories** — How did the tracked quantitative variables evolve? Were the changes consistent with the narrated events? Note any unexpected jumps or stagnation." if has_gvars else ""}
+{"7. **Cooperation dynamics** — Analyze the cooperation/defection patterns. Did agents converge toward mutual cooperation or defection? Were there strategy shifts?" if has_game_theory else ""}
 
 Ground every claim in specific evidence from the log. If information is missing or ambiguous, say so. Never fabricate events or quote dialogue that does not appear in the log."""
 
@@ -426,6 +543,9 @@ Then briefly assess the **agent mix**: Do the agents' goals create natural tensi
 Do NOT predict what agents "would have" done or assess goal achievement — there is no data to assess."""
         else:
             scenario = self._build_scenario_context(metadata)
+            optional_sections = self._build_optional_data_sections(parsed_data, metadata)
+            has_observations = bool(parsed_data.get('agent_observations'))
+
             prompt = f"""You are analyzing individual agent performance in a Concordia multi-agent simulation. Each agent is an LLM-driven character with a specific goal, memories, and optional psychological components (personality traits, cognitive biases, emotions, values).
 
 **SIMULATION SETUP:**
@@ -433,6 +553,8 @@ Do NOT predict what agents "would have" done or assess goal achievement — ther
 
 **AGENT ACTIONS:**
 {self._format_actions_for_prompt(parsed_data.get('agent_actions', {}))}
+
+{optional_sections}
 
 **TIMELINE:**
 {self._format_timeline_for_prompt(parsed_data.get('steps', []))}
@@ -444,6 +566,7 @@ For EACH agent in the simulation, provide:
 ### [Agent Name]
 **Role & Design Intent:** What this agent was designed to do (from their goal and components).
 **Goal Achievement:** Did they achieve their stated goal? Quote the goal and assess against evidence from the log. If the evidence is ambiguous, say so.
+{"**Observation Quality:** What did this agent observe at key moments? Did the observations accurately reflect the world state, or did the agent miss important information?" if has_observations else ""}
 **Behavioral Consistency:** Did their actions align with their configured memories and components? For example:
   - If they had a cognitive_bias (e.g., loss_aversion), did it manifest in their decisions?
   - If they had personality_traits (Big Five), did their communication style match?
@@ -497,10 +620,18 @@ Since no execution data exists, provide only **methodological observations** abo
 
 Keep this concise — 1-2 paragraphs per point. Do not speculate about simulation outcomes."""
         else:
+            optional_sections = self._build_optional_data_sections(parsed_data, metadata)
+            has_observations = bool(parsed_data.get('agent_observations'))
+
             prompt = f"""You are a research analyst examining results from a Concordia multi-agent simulation. Your task is to extract insights that would be valuable to a researcher or educator studying this scenario.
 
 **SIMULATION SETUP:**
 {scenario}
+
+**AGENT ACTIONS:**
+{self._format_actions_for_prompt(parsed_data.get('agent_actions', {}))}
+
+{optional_sections}
 
 **TIMELINE:**
 {self._format_timeline_for_prompt(parsed_data.get('steps', []))}
@@ -518,19 +649,21 @@ Provide insights in the following categories. Skip any category that does not ap
 2. **Psychological Component Effects**{' (components were configured on agents)' if has_components else ' (no components configured — note this)'}
    Did cognitive biases produce the expected reasoning distortions? Did personality traits shape communication style? Did emotions escalate or de-escalate? Did values create the expected moral trade-offs? If no components were used, note what adding them might reveal.
 
-3. **Information Dynamics**
+{"3. **Observation-Action Coherence**" + chr(10) + "   Did agents act on what they observed, or did they ignore or misinterpret observations? Were there information asymmetries where one agent observed something others did not, and did that create strategic advantage?" if has_observations else ""}
+
+4. **Information Dynamics**
    How did information flow between agents? Was private information (from player_specific_context or memories) revealed strategically? Did information asymmetry create realistic bargaining leverage?
 
-4. **Emergent Social Phenomena**
+5. **Emergent Social Phenomena**
    Cooperation, competition, trust-building, coalition formation, persuasion, free-riding, norm enforcement — which phenomena emerged? Were they consistent with the theoretical framework the simulation was designed to test?
 
-{"5. **Game-Theoretic Outcomes**" + chr(10) + "   Compare actual choices and scores to theoretical predictions (Nash equilibrium, Pareto optimality, etc.)." if has_game_theory else ""}
+{"6. **Game-Theoretic Outcomes**" + chr(10) + "   Compare actual choices and scores to theoretical predictions (Nash equilibrium, Pareto optimality, etc.). Analyze cooperation/defection ratios and whether agents converged on a strategy." if has_game_theory else ""}
 
-{"6. **Grounded Variable Trajectories**" + chr(10) + "   Did the tracked variables evolve in ways consistent with the simulation events? Were update rules followed by the GM?" if has_grounded_vars else ""}
+{"7. **Grounded Variable Trajectories**" + chr(10) + "   Did the tracked variables evolve in ways consistent with the simulation events? Were update rules followed by the GM? Identify variables that changed unexpectedly or remained flat when change was expected." if has_grounded_vars else ""}
 
-{"7. **Nested Simulation Integration**" + chr(10) + "   Did agents use findings from their inner simulations in the outer simulation? Was the extraction prompt effective?" if has_nested else ""}
+{"8. **Nested Simulation Integration**" + chr(10) + "   Did agents use findings from their inner simulations in the outer simulation? Was the extraction prompt effective?" if has_nested else ""}
 
-8. **Methodological Observations**
+9. **Methodological Observations**
    What worked well in this simulation design? What would you change for a re-run? Are there confounds or limitations in the setup?
 
 Cite specific evidence from the log for each insight. If a category lacks evidence, say so briefly and move on rather than speculating."""
@@ -549,9 +682,12 @@ Cite specific evidence from the log for each insight. If a category lacks eviden
 
         data_context = ""
         if has_data:
+            optional_sections = self._build_optional_data_sections(parsed_data, metadata)
             data_context = f"""
 **TIMELINE ({len(steps)} steps):**
 {self._format_timeline_for_prompt(steps, max_steps=10)}
+
+{optional_sections}
 """
         else:
             data_context = """

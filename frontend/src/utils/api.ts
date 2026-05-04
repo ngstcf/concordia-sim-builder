@@ -654,6 +654,10 @@ export interface SimulationAnalytics {
       step: number;
       text: string;
     }>;
+    observations?: Array<{
+      step: number;
+      text: string;
+    }>;
     goal: string;
     memories: string[];
   }>;

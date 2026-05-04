@@ -44,13 +44,15 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Gated by `DEBUG_ENABLED` and `LLM_LOGGING_ENABLED` env vars
 
 **Results & Analytics**
-- 9 result tabs: Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
+- 9 result tabs: Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions & Observations, AI Summary, Analysis, Component Logs
 - Markdown rendering (react-markdown + remark-gfm) in Analysis and AI Summary tabs
 - Save Report download button for Analysis and AI Summary
 - LLM provider, model, and duration metadata bar in results header
 - Grounded variables parser rewritten for v2.4 ENTRIES JSON with `<details>` tag fallback
 - AI Summary with agent overview table, participation imbalance detection, per-phase timeline
 - Analysis prompts rewritten with full simulation metadata context, anti-fabrication guardrails
+- Per-agent observation extraction from v2.4 `__observation__` entries with cyan-styled display in Actions & Observations tab
+- AI Analysis prompts now receive observations, grounded variable definitions, and cooperation/game-theoretic data when available — conditional prompt sections adapt to each simulation's configuration
 
 **Checkpoint System**
 - Checkpoint metadata saved alongside every checkpoint (regular, watchdog, emergency) with agents, LLM info, premise
@@ -86,6 +88,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Added automatic polling recovery when SSE stream disconnects — frontend detects the drop, shows a "Connection lost" banner, and polls `/status/{task_id}` every 5 seconds until results are available
 - Completed simulations now retained in backend state (last 20) so the status endpoint returns results even after the SSE stream ends
 - Added mount-time recovery — on page refresh or Vite HMR reload, frontend checks `/status` for running simulations and auto-reconnects with polling
+- Fixed observation count showing 0 in Statistical Dashboard — v2.4 parser checked `entry_type` and `summary` fields but observations are stored under `__observation__` key in resolved `deduplicated_data.value` dicts
 
 ### Templates (31 total)
 

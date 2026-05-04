@@ -1,17 +1,18 @@
 /**
  * ActionsView Component
- * Displays agent-specific actions extracted from simulation logs
+ * Displays agent-specific actions and observations extracted from simulation logs
  */
 import { useState, useEffect } from 'react';
 import { getSimulationAnalytics } from '../../utils/api';
 
-interface AgentAction {
+interface AgentEntry {
   step: number | null;
   text: string;
 }
 
 interface AgentDetails {
-  actions: AgentAction[];
+  actions: AgentEntry[];
+  observations?: AgentEntry[];
   goal: string;
   memories: string[];
 }
@@ -70,7 +71,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
   if (!filename) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Agent Actions</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions & Observations</h3>
         <div className="text-center py-8">
           <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -86,7 +87,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Agent Actions</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions & Observations</h3>
         <div className="flex items-center justify-center py-8">
           <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -120,7 +121,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
   if (!analytics || analytics.agents.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Agent Actions</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions & Observations</h3>
         <div className="text-center py-8">
           <p className="text-sm text-gray-500">No agent actions found in this simulation</p>
         </div>
@@ -139,7 +140,7 @@ export default function ActionsView({ filename }: ActionsViewProps) {
             <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <h3 className="text-lg font-semibold text-gray-900">Agent Actions</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Actions & Observations</h3>
           </div>
 
           {/* Agent Selector Dropdown */}
@@ -148,11 +149,16 @@ export default function ActionsView({ filename }: ActionsViewProps) {
             onChange={(e) => setSelectedAgent(e.target.value)}
             className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[300px]"
           >
-            {analytics.agents.map((agent) => (
-              <option key={agent} value={agent}>
-                {agent} ({analytics.agent_details?.[agent]?.actions.length || 0} actions)
-              </option>
-            ))}
+            {analytics.agents.map((agent) => {
+              const details = analytics.agent_details?.[agent];
+              const aC = details?.actions.length || 0;
+              const oC = details?.observations?.length || 0;
+              return (
+                <option key={agent} value={agent}>
+                  {agent} ({aC} actions, {oC} observations)
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
@@ -228,6 +234,38 @@ export default function ActionsView({ filename }: ActionsViewProps) {
                 </div>
               )}
             </div>
+
+            {/* Observations List */}
+            {(currentAgent.observations?.length ?? 0) > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                  Observations ({currentAgent.observations!.length})
+                </h4>
+                <div className="space-y-3">
+                  {currentAgent.observations!.map((obs, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex items-start gap-3">
+                        {obs.step !== null && (
+                          <div className="flex-shrink-0">
+                            <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-cyan-100 text-cyan-800 text-xs font-semibold">
+                              {obs.step}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900 leading-relaxed">
+                            {obs.text}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1016,6 +1016,7 @@ async def get_simulation_analytics(filename: str):
                 agent_names_set = set()
                 agent_action_counts = {}
                 agent_action_texts = {}
+                agent_observation_texts = {}
                 agent_goals = {}
                 max_step = 0
                 observation_count = 0
@@ -1039,7 +1040,7 @@ async def get_simulation_analytics(filename: str):
                     if entity and entity not in excluded_entities and entry_type == 'entity':
                         agent_names_set.add(entity)
 
-                    # Count actions and extract action text from entity entries
+                    # Count actions, observations, and extract action text from entity entries
                     if entry_type == 'entity' and entity not in excluded_entities:
                         resolved = _resolve_ref(dedup_data)
                         value_data = resolved.get('value', {})
@@ -1063,13 +1064,28 @@ async def get_simulation_analytics(filename: str):
                                 goal_text = goal_data.get('Value', '') if isinstance(goal_data, dict) else str(goal_data)
                                 if goal_text:
                                     agent_goals[entity] = goal_text
+
+                            if '__observation__' in value_data:
+                                observation_count += 1
+                                obs_data = value_data['__observation__']
+                                obs_values = obs_data.get('Value', []) if isinstance(obs_data, dict) else []
+                                if obs_values and isinstance(obs_values, list):
+                                    last_obs = obs_values[-1]
+                                    obs_text = re.sub(r'^\[observation\]\s*(\[\w+\]\s*)?', '', str(last_obs)).strip()
+                                    if obs_text and entity:
+                                        if entity not in agent_observation_texts:
+                                            agent_observation_texts[entity] = []
+                                        agent_observation_texts[entity].append({
+                                            "step": step,
+                                            "text": obs_text
+                                        })
                         else:
                             has_action = '__act__' in str(value_data) if value_data else False
                             if has_action:
                                 agent_action_counts[entity] = agent_action_counts.get(entity, 0) + 1
 
-                    # Count observations
-                    if 'observation' in entry_type.lower() or '[observation]' in summary.lower():
+                    # Fallback observation count for non-entity entries
+                    elif 'observation' in entry_type.lower() or '[observation]' in summary.lower():
                         observation_count += 1
 
                     # Build timeline (one entry per step)
@@ -1098,10 +1114,11 @@ async def get_simulation_analytics(filename: str):
                         goal = agent_metadata[agent]["goal"]
                     analytics["agent_details"][agent] = {
                         "actions": agent_action_texts.get(agent, []),
+                        "observations": agent_observation_texts.get(agent, []),
                         "goal": goal,
                         "memories": []
                     }
-                    debug_print(f"[DEBUG] Agent '{agent}': goal='{goal[:80]}...', actions={len(agent_action_texts.get(agent, []))}")
+                    debug_print(f"[DEBUG] Agent '{agent}': goal='{goal[:80]}...', actions={len(agent_action_texts.get(agent, []))}, observations={len(agent_observation_texts.get(agent, []))}")
 
                 # Update word/character counts from structured data
                 full_text = ' '.join(all_text_parts)
