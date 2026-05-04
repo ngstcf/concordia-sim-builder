@@ -246,7 +246,7 @@ def get_available_providers() -> list[dict]:
         {
             "provider": LLMProvider.DEEPSEEK,
             "name": "DeepSeek",
-            "models": ["deepseek-chat", "deepseek-v4-flash", "deepseek-v4-pro"],
+            "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
             "requires_api_key": True
         },
         {
