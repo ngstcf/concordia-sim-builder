@@ -296,10 +296,28 @@ concordia-sim-builder/
 │       ├── vaccine-hesitancy-study.md
 │       ├── phishing-attack-simulation.md
 │       └── urban-gentrification-simulation.md
-├── logs/                            # Auto-generated simulation logs
+├── logs/                            # Simulation logs (see inventory below)
 ├── CHANGELOG.md
 └── requirements.txt                 # Python dependencies (gdm-concordia pinned)
 ```
+
+## Simulation Logs
+
+The `logs/` directory contains 7 completed simulation runs. Each simulation produces three files:
+
+- **`.html`** — Concordia simulation log (structured entries with full narrative)
+- **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration)
+- **`_analysis.md`** — LLM-powered analysis report (executive summary, team effectiveness, insights, recommendations)
+
+| # | Scenario | Agents | Agent LLM | GM LLM | Duration |
+|---|----------|--------|-----------|--------|----------|
+| 1 | **Peace Negotiation** — Russia-Ukraine talks at Istanbul, Jan 2026 | 2 (Agent R, Agent U) | DeepSeek V4 Flash | Claude Sonnet 4.6 | 29 min |
+| 2 | **Strategic Game** — Prisoner's Dilemma behavioral economics experiment | 2 (Alex, Sam) | OpenAI O3-Mini | Claude Sonnet 4.6 | 3 min |
+| 3 | **Flood Evacuation** — Coastal town Category 3 hurricane response (SDG 11/13) | 5 (Sarah Williams, Robert Thompson, Javier Rodriguez, Eleanor O'Brien, Pastor Moses) | DeepSeek V4 Flash | GPT-5.5 | 57 min |
+| 4 | **Software Team** — Fintech startup payment processing sprint | 3 (Project Manager, Senior Developer, Junior Developer) | GPT-5.4 Mini | Claude Opus 4.7 | 49 min |
+| 5 | **Conversational Debate** — AI tutors vs human teachers roundtable | 3 (Dr. Chen, Mr. Patel, Ms. Jackson) | Claude Haiku 4.5 | GPT-5.5 | 7 min |
+| 6 | **Labor Strike** — Collective action and wage negotiation (SDG 8) | 4 (Elena Vasquez, David Kim, Amina Johnson, Richard Sterling) | DeepSeek V4 Flash | GPT-5.5 | 73 min |
+| 7 | **Fishery Management** — Tragedy of the commons in marine resources (SDG 14) | 4 (Hiroshi Tanaka, Maria Santos, Okonkwo Nnamdi, Dr. Lisa Chen) | OpenAI O3-Mini | GPT-5 | 133 min |
 
 ## Troubleshooting
 
