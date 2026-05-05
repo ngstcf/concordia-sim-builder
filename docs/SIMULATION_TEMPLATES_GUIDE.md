@@ -159,6 +159,101 @@ Memories are facts loaded into the agent's long-term memory before the simulatio
 
 **Mixing prefabs in one simulation:** You can use different prefabs for different agents. For example, one `basic_with_plan__Entity` commander + two `basic__Entity` crew members. Or one `basic_scripted__Entity` moderator + four `basic__Entity` participants.
 
+#### Configuring Prefab Settings — A Worked Example
+
+When you select a prefab, additional settings appear in the Agent Editor. These control internal behavior that is invisible from the outside but shapes how the agent thinks. Here is a concrete example showing how to configure an agent from scratch.
+
+**Scenario:** A crisis management simulation with a team lead who plans ahead, two analysts who reason differently, and a scripted news anchor who delivers updates.
+
+**Agent 1: Team Lead (basic_with_plan)**
+
+Select `basic_with_plan__Entity` as the prefab. A **Time Horizon** field appears — this controls how far ahead the agent plans.
+
+| Setting | Value | Why |
+|---|---|---|
+| Time Horizon | "the next 6 hours" | The crisis is urgent. A shorter horizon keeps plans concrete ("evacuate building B") rather than abstract ("improve long-term safety"). Leave it blank to let the LLM decide the horizon based on context. |
+
+The planning prefab internally generates a plan each turn and updates it as the situation evolves. A specific time horizon prevents the agent from planning for next week when the building is on fire right now.
+
+**Agent 2: Senior Analyst (basic)**
+
+Select `basic__Entity`. Three numeric settings appear:
+
+| Setting | Default | Recommended | Why |
+|---|---|---|---|
+| Observation History Length | 1000000 | Leave as default | How many past observations the agent retains. The default effectively means "remember everything." Only reduce this if you want an agent that forgets older events. |
+| Situation Perception History Length | 25 | 10 | How many past assessments the agent reviews when asking "What situation am I in?" A lower value makes the agent more responsive to recent changes — useful in a fast-moving crisis where yesterday's assessment is irrelevant. |
+| Person-by-Situation History Length | 5 | 3 | How many past interactions the agent reviews when asking "What would someone like me do?" A lower value means the agent relies more on current character than past behavior patterns. |
+
+For most simulations, the defaults work fine. Adjust these when you want to model specific cognitive effects — a low situation perception history simulates an agent that adapts quickly but forgets context, while a high value simulates a cautious analyst who weighs all available history.
+
+**Agent 3: Junior Analyst (minimal with custom reasoning)**
+
+Select `minimal__Entity`. A **Custom Instructions** field appears, plus the ability to add **Custom Reasoning Steps**.
+
+| Setting | Value | Why |
+|---|---|---|
+| Custom Instructions | "You are methodical and always cite evidence before making claims. When uncertain, you say so explicitly." | Overrides the default behavioral frame. This is the most direct way to shape a minimal agent's personality. |
+
+Then add Custom Reasoning Steps (each is a question the agent asks itself every turn):
+
+| Step | Question | Answer Prefix | Memories | Add to Memory |
+|---|---|---|---|---|
+| 1 | "What new information have I received?" | "I have learned that..." | 5 | No |
+| 2 | "Does this change our risk assessment?" | "Based on this, I think..." | 3 | Yes |
+| 3 | "What should I recommend to the team lead?" | "I recommend..." | 3 | No |
+
+The reasoning steps create a structured thought process. Step 2 adds its answer to memory (`Add to Memory: Yes`) so the agent accumulates a running risk assessment that informs future turns.
+
+**Agent 4: News Anchor (basic_scripted)**
+
+Select `basic_scripted__Entity`. A **Scripted Prompts** section appears where you add dialogue lines:
+
+| Speaker | Line |
+|---|---|
+| News Anchor | "Breaking: authorities report structural damage in the east wing. Evacuation of floors 3-5 is underway." |
+| News Anchor | "Update: fire department confirms the source is a chemical spill in Lab 4. Hazmat teams are en route." |
+| News Anchor | "Latest: all personnel accounted for. Building management is assessing whether re-entry is safe." |
+
+The scripted agent delivers these lines in exact order, one per turn, regardless of what other agents say. Use this for controlled information injection — you know exactly what news the analysts will react to and when.
+
+**Alternative — context_aware_scripted:** If you want the news anchor to adapt its tone based on the discussion (e.g., more urgent if the team lead sounds panicked), use `context_aware_scripted__Entity` instead. The lines become a topic guide rather than a rigid teleprompter.
+
+#### When to Use Generate Backstory vs. Writing Memories by Hand
+
+The **Generate Backstory** button (in the Agent Editor, next to the Pre-loaded Memories header) uses the LLM to produce a set of formative memory episodes from the agent's name and an optional context prompt. It calls Concordia's `FormativeMemoriesInitializer` behind the scenes.
+
+**Use Generate Backstory when:**
+
+| Situation | Example | Why Generate Works |
+|---|---|---|
+| You need rich, varied backgrounds quickly | 6 agents in a community simulation, each needing distinct life histories | Writing 7-10 unique memories per agent by hand for 6 agents is 42-60 individual facts. Generation produces them in seconds. |
+| You want to study how backstory shapes behavior | Same scenario, same goals, but Agent A "grew up in poverty" vs. "grew up wealthy" | Generate twice with different context prompts, then compare simulation outcomes. The generated memories will be internally consistent with the context you provide. |
+| The backstory itself is not the variable you are studying | You care about negotiation dynamics, not whether each agent's childhood is perfectly crafted | Generated memories are good enough to give agents personality depth without consuming your design time on something that is not the focus of your research. |
+
+**Write memories by hand when:**
+
+| Situation | Example | Why Hand-Written Is Better |
+|---|---|---|
+| Specific facts must be exact | "Agent knows the budget is $2M" or "Agent witnessed the incident on March 3" | Generated memories are creative but imprecise. If a simulation depends on an agent knowing a specific number or date, write it yourself. |
+| You are studying memory content itself | Comparing how agents behave with 3 vs. 10 memories, or testing whether a specific memory changes outcomes | Generation gives you less control over exactly what gets produced. |
+| The scenario has tight informational constraints | Agent A must know X but not Y, Agent B must know Y but not X | Generated memories may include facts that break your information asymmetry. |
+
+**Combining both approaches:** The most effective workflow is to generate a backstory first, then edit the results. Click **Generate Backstory**, review the memories it produces, delete any that conflict with your scenario, and add hand-written facts that must be exact. Generated memories are appended to existing memories, so you can write the critical facts first and then generate the "color."
+
+**Example workflow for a 4-agent simulation:**
+
+1. Write 2-3 essential memories per agent by hand (identity, key constraint, critical knowledge)
+2. Click **Generate Backstory** on each agent with a brief context prompt:
+   - Agent 1 context: "experienced crisis manager, calm under pressure, military background"
+   - Agent 2 context: "newly promoted, eager to prove herself, background in environmental science"
+   - Agent 3 context: "risk-averse, has seen colleagues injured in past incidents, nearing retirement"
+   - Agent 4 context: *(leave blank — the LLM will invent a plausible background from the agent's name alone)*
+3. Review generated memories — delete any that contradict your scenario or each other
+4. Run the simulation
+
+This gives you agents with 8-12 rich, varied memories each, with the critical facts guaranteed and the rest filled in by the LLM.
+
 ### Game Master Parameters
 
 The Game Master (GM) is the narrator and referee. It is NOT an agent — it does not have a goal or memories in the same way. Instead, its behavior is shaped by several configuration surfaces:
