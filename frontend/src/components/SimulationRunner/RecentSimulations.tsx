@@ -230,7 +230,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
               </button>
             )}
             <button
-              onClick={loadRecentSimulations}
+              onClick={() => { loadRecentSimulations(); loadCheckpointInfo(); }}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
             >
               Refresh
