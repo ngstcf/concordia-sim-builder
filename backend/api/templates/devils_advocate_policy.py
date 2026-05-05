@@ -121,15 +121,74 @@ to decide whether the framework proceeds to public consultation next month.""",
             "prefab": "dialogic__GameMaster",
             "name": "Minister's Facilitator",
             "acting_order": "game_master_choice",
-            "parameters": {
-                "grounded_variables_intro": (
-                    "Track key outcomes throughout this advisory session:\n"
-                    "- Framework robustness: How many pillars survive scrutiny without major amendments (0-4)\n"
-                    "- Flaws identified: Count of concrete weaknesses the devil's advocate surfaces\n"
-                    "- Amendments proposed: Count of specific, actionable changes agreed upon\n"
-                    "- Consensus level: Whether advisors converge (approve/amend/reject)\n"
-                    "- Argument quality: Track evidence-based vs. assertion-based claims"
-                )
+            "parameters": {},
+            "grounded_variables": [
+                {
+                    "name": "framework_robustness",
+                    "variable_type": "numerical",
+                    "description": "Number of the 4 framework pillars that survive scrutiny without requiring major amendments",
+                    "default_value": 4,
+                    "min_value": 0,
+                    "max_value": 4,
+                    "update_rule": "Decreases when a pillar is shown to have fundamental flaws that cannot be patched with minor amendments"
+                },
+                {
+                    "name": "flaws_identified",
+                    "variable_type": "numerical",
+                    "description": "Count of concrete weaknesses, unintended consequences, or implementation gaps surfaced by the devil's advocate",
+                    "default_value": 0,
+                    "min_value": 0,
+                    "max_value": 20,
+                    "update_rule": "Increases each time a specific, substantive flaw is articulated (not repetitions of the same point)"
+                },
+                {
+                    "name": "amendments_proposed",
+                    "variable_type": "numerical",
+                    "description": "Count of specific, actionable amendments that at least 2 advisors agree should be made",
+                    "default_value": 0,
+                    "min_value": 0,
+                    "max_value": 15,
+                    "update_rule": "Increases when a concrete amendment is proposed and receives support from at least one other advisor"
+                },
+                {
+                    "name": "consensus_level",
+                    "variable_type": "categorical",
+                    "description": "Current level of agreement among the three advisors on the framework's fate",
+                    "default_value": "undecided",
+                    "allowed_values": ["deadlock", "undecided", "leaning_reject", "leaning_amend", "leaning_approve", "consensus_reject", "consensus_amend", "consensus_approve"],
+                    "update_rule": "Shifts based on the direction of debate — moves toward consensus when advisors align, toward deadlock when positions harden"
+                },
+                {
+                    "name": "argument_quality",
+                    "variable_type": "percentage",
+                    "description": "Percentage of arguments that are evidence-based (citing data, precedent, or concrete scenarios) vs. assertion-based",
+                    "default_value": 50,
+                    "min_value": 0,
+                    "max_value": 100,
+                    "update_rule": "Increases when advisors cite specific data, international precedent, or concrete scenarios; decreases when arguments rely on vague assertions or appeals to authority"
+                },
+                {
+                    "name": "concessions_exchanged",
+                    "variable_type": "numerical",
+                    "description": "Number of substantive concessions made by any advisor (yielding a position in exchange for progress)",
+                    "default_value": 0,
+                    "min_value": 0,
+                    "max_value": 10,
+                    "update_rule": "Increases when an advisor explicitly yields a position or accepts a modification they previously opposed"
+                }
+            ],
+            "params": {
+                "extra_components": {
+                    "grounded_variables_intro": (
+                        "Track key outcomes throughout this advisory session:\n"
+                        "- framework_robustness: How many of the 4 pillars survive scrutiny without major amendments\n"
+                        "- flaws_identified: Count of concrete weaknesses the devil's advocate surfaces\n"
+                        "- amendments_proposed: Count of specific, actionable changes agreed upon\n"
+                        "- consensus_level: Whether advisors are converging toward approve, amend, reject, or deadlock\n"
+                        "- argument_quality: Percentage of evidence-based vs assertion-based claims\n"
+                        "- concessions_exchanged: Count of substantive concessions made by any advisor"
+                    )
+                }
             }
         },
         "shared_memories": [

@@ -184,14 +184,81 @@ TEMPLATE = {
                 "prefab": "generic__GameMaster",
                 "name": "Community Health Discussion",
                 "acting_order": "game_master_choice",
+                "parameters": {},
+                "grounded_variables": [
+                    {
+                        "name": "vaccine_acceptance_count",
+                        "variable_type": "numerical",
+                        "description": "Number of participants who have decided to get vaccinated (out of 5)",
+                        "default_value": 2,
+                        "min_value": 0,
+                        "max_value": 5,
+                        "update_rule": "Increases when a participant explicitly states intent to vaccinate, decreases if someone reverses their position"
+                    },
+                    {
+                        "name": "hesitancy_level",
+                        "variable_type": "categorical",
+                        "description": "Overall group hesitancy level based on the balance of expressed concerns vs. reassurances",
+                        "default_value": "moderate_hesitancy",
+                        "allowed_values": ["strong_hesitancy", "moderate_hesitancy", "mild_hesitancy", "mostly_accepting", "strong_acceptance"],
+                        "update_rule": "Shifts toward acceptance when concerns are addressed with evidence, shifts toward hesitancy when fears are amplified or misinformation goes uncorrected"
+                    },
+                    {
+                        "name": "misinformation_claims",
+                        "variable_type": "numerical",
+                        "description": "Count of factually inaccurate claims made during the discussion",
+                        "default_value": 0,
+                        "min_value": 0,
+                        "max_value": 20,
+                        "update_rule": "Increases when a participant makes a claim that contradicts established medical evidence"
+                    },
+                    {
+                        "name": "corrections_made",
+                        "variable_type": "numerical",
+                        "description": "Count of times misinformation was addressed with evidence-based corrections",
+                        "default_value": 0,
+                        "min_value": 0,
+                        "max_value": 20,
+                        "update_rule": "Increases when a participant or facilitator counters a false claim with specific evidence or data"
+                    },
+                    {
+                        "name": "trust_in_medical_institutions",
+                        "variable_type": "percentage",
+                        "description": "Group average trust in medical institutions and health authorities (0=complete distrust, 100=full trust)",
+                        "default_value": 45,
+                        "min_value": 0,
+                        "max_value": 100,
+                        "update_rule": "Increases when personal experiences or evidence strengthen credibility of medical sources, decreases when institutional failures or conflicts of interest are raised"
+                    },
+                    {
+                        "name": "emotional_tone",
+                        "variable_type": "categorical",
+                        "description": "Dominant emotional tone of the discussion",
+                        "default_value": "anxious",
+                        "allowed_values": ["fearful", "anxious", "tense", "neutral", "cautiously_hopeful", "reassured", "polarized"],
+                        "update_rule": "Shifts based on the balance of fear-inducing vs reassuring exchanges; becomes polarized if participants split into opposing camps"
+                    },
+                    {
+                        "name": "personal_stories_shared",
+                        "variable_type": "numerical",
+                        "description": "Count of personal experiences or anecdotes shared by participants",
+                        "default_value": 0,
+                        "min_value": 0,
+                        "max_value": 20,
+                        "update_rule": "Increases when a participant shares a personal vaccination experience, family story, or firsthand account"
+                    }
+                ],
                 "params": {
                     "extra_components": {
                         "grounded_variables_intro": (
-                            "Track key outcomes throughout this discussion:\n"
-                            "- Vaccine acceptance: Count who decides to get vaccinated\n"
-                            "- Attitude shifts: Note changes in participants' stances\n"
-                            "- Information quality: Track accurate vs. inaccurate claims\n"
-                            "- Emotional tone: Monitor fear, hope, anger, reassurance"
+                            "Track key outcomes throughout this community health discussion:\n"
+                            "- vaccine_acceptance_count: How many participants have decided to get vaccinated\n"
+                            "- hesitancy_level: Overall group hesitancy from strong_hesitancy to strong_acceptance\n"
+                            "- misinformation_claims: Count of factually inaccurate claims made\n"
+                            "- corrections_made: Count of evidence-based corrections to misinformation\n"
+                            "- trust_in_medical_institutions: Group average trust level (0-100%)\n"
+                            "- emotional_tone: Dominant emotional tone of the discussion\n"
+                            "- personal_stories_shared: Count of personal experiences shared by participants"
                         )
                     }
                 }
