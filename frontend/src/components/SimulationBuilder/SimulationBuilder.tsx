@@ -7,6 +7,7 @@ import { useSimulation } from '../../contexts/SimulationContext';
 import { validateConfig } from '../../utils/api';
 import ScenarioConfig from './ScenarioConfig';
 import AgentList from './AgentList';
+import AvailableActionsEditor from './AvailableActionsEditor';
 import GameMasterConfig from './GameMasterConfig';
 import TemplatePicker from './TemplatePicker';
 import PlayerContextEditor from './PlayerContextEditor';
@@ -57,6 +58,7 @@ export default function SimulationBuilder() {
         <div className="lg:col-span-2 space-y-6">
           <ScenarioConfig />
           <AgentList />
+          <AvailableActionsEditor />
         </div>
 
         {/* Right Column - Game Master & Memories */}

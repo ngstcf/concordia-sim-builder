@@ -115,8 +115,18 @@ def build_simulation(
             entity_params['goal'] = agent_config.goal
 
         # Add custom memory if provided
-        if agent_config.memories:
-            entity_params['memory'] = create_memory_bank(embedder, agent_config.memories)
+        agent_memories = list(agent_config.memories) if agent_config.memories else []
+
+        # Inject per-agent available actions into memories
+        if hasattr(agent_config, 'available_actions') and agent_config.available_actions:
+            actions_str = ', '.join(agent_config.available_actions)
+            agent_memories.append(
+                f"When deciding what to do, {agent_config.name} can choose from: {actions_str}."
+            )
+            debug_print(f"[DEBUG] Injected {len(agent_config.available_actions)} per-agent actions for {agent_config.name}")
+
+        if agent_memories:
+            entity_params['memory'] = create_memory_bank(embedder, agent_memories)
 
         # Add additional components if specified
         if agent_config.components:
@@ -432,6 +442,26 @@ def build_simulation(
         debug_print(f"[DEBUG] New premise length: {len(premise_text)}")
     else:
         debug_print(f"[DEBUG] No critical decision points found")
+
+    # Inject available actions into premise if defined
+    if hasattr(config, 'available_actions') and config.available_actions:
+        action_lines = []
+        for action in config.available_actions:
+            a = action.model_dump() if hasattr(action, 'model_dump') else action
+            line = f"  - {a['name']}"
+            if a.get('description'):
+                line += f": {a['description']}"
+            if a.get('condition'):
+                line += f" (available when: {a['condition']})"
+            action_lines.append(line)
+        premise_text += (
+            "\n\nAVAILABLE ACTIONS — agents should ONLY choose from"
+            " these actions when deciding what to do:\n"
+            + "\n".join(action_lines)
+            + "\nWhen asking agents what they do, present these as"
+            " their available choices."
+        )
+        debug_print(f"[DEBUG] Injected {len(action_lines)} available actions into premise")
 
     # Inject Measurements into all instances for data capture
     if config.engine_type == EngineType.ASYNCHRONOUS:

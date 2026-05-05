@@ -29,6 +29,9 @@ from backend.models.schemas import (
     GeneratedPersona,
     PersonaGenerationResponse,
     FormativeMemoryRequest,
+    CensusGenerationRequest,
+    CensusGenerationResponse,
+    BatchRunRequest,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -1862,6 +1865,168 @@ async def get_simulation_analytics(filename: str):
         raise HTTPException(status_code=500, detail=f"Error analyzing log file: {str(e)}")
 
 
+@router.get("/logs/{filename}/export-csv")
+async def export_simulation_csv(filename: str, data_type: str = "actions"):
+    """Export simulation data as CSV.
+
+    data_type: 'actions' (per-step agent actions), 'variables' (grounded variable histories), or 'both'
+    """
+    import os
+    from pathlib import Path
+    from fastapi.responses import StreamingResponse
+    from backend.utils.data_exporter import (
+        export_agent_actions_csv,
+        export_grounded_variables_csv,
+        export_combined_csv,
+    )
+
+    safe_filename = os.path.basename(filename)
+    log_path = Path("logs") / safe_filename
+
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    metadata_path = str(log_path.with_suffix('.metadata.json'))
+    html_path = str(log_path)
+
+    try:
+        if data_type == "variables":
+            if not os.path.exists(metadata_path):
+                raise HTTPException(status_code=404, detail="Metadata file not found")
+            csv_content = export_grounded_variables_csv(metadata_path)
+            dl_name = safe_filename.replace('.html', '_variables.csv')
+        elif data_type == "both":
+            csv_content = export_combined_csv(html_path, metadata_path)
+            dl_name = safe_filename.replace('.html', '_full_export.csv')
+        else:
+            csv_content = export_agent_actions_csv(html_path, metadata_path)
+            dl_name = safe_filename.replace('.html', '_actions.csv')
+
+        return StreamingResponse(
+            iter([csv_content]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{dl_name}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+
+@router.get("/logs/{filename}/export-json")
+async def export_simulation_json(filename: str):
+    """Export full structured simulation data as JSON."""
+    import os
+    from pathlib import Path
+    from backend.utils.data_exporter import export_full_json
+
+    safe_filename = os.path.basename(filename)
+    log_path = Path("logs") / safe_filename
+
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    metadata_path = str(log_path.with_suffix('.metadata.json'))
+    html_path = str(log_path)
+
+    try:
+        result = export_full_json(html_path, metadata_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+
+# ── Batch Runs ────────────────────────────────────────────────────────
+
+@router.post("/batch/execute")
+async def execute_batch(request: BatchRunRequest):
+    """Execute a batch of simulation runs with optional parameter sweeps."""
+    from backend.services.batch_runner import batch_runner
+
+    sweep_params = [p.model_dump() for p in request.sweep_parameters]
+
+    return StreamingResponse(
+        batch_runner.run_batch(
+            config=request.config,
+            llm_settings=request.llm_settings,
+            gm_llm_settings=request.gm_llm_settings,
+            num_runs=request.num_runs,
+            sweep_parameters=sweep_params,
+            batch_name=request.batch_name,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/batch/list")
+async def list_batches():
+    """List all completed batch runs."""
+    from backend.services.batch_runner import batch_runner
+    return {"batches": batch_runner.list_batches()}
+
+
+@router.get("/batch/{batch_id}/status")
+async def get_batch_status(batch_id: str):
+    """Get current status of a batch run."""
+    from backend.services.batch_runner import batch_runner
+
+    batch = batch_runner.get_batch(batch_id)
+    if not batch:
+        batch_file = Path("logs") / f"batch_{batch_id}.json"
+        if batch_file.exists():
+            with open(batch_file) as f:
+                return json.load(f)
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return batch
+
+
+@router.post("/batch/{batch_id}/cancel")
+async def cancel_batch(batch_id: str):
+    """Cancel a running batch."""
+    from backend.services.batch_runner import batch_runner
+
+    if batch_runner.cancel_batch(batch_id):
+        return {"status": "cancelled", "batch_id": batch_id}
+    raise HTTPException(status_code=404, detail="Batch not found or not running")
+
+
+@router.get("/batch/{batch_id}/export-csv")
+async def export_batch_csv(batch_id: str):
+    """Export aggregated CSV from all runs in a batch."""
+    import os
+    from backend.utils.data_exporter import export_agent_actions_csv
+
+    batch_file = Path("logs") / f"batch_{batch_id}.json"
+    if not batch_file.exists():
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    with open(batch_file) as f:
+        batch_data = json.load(f)
+
+    rows = ["run_index,parameters,log_filename,status,elapsed_seconds"]
+    for result in batch_data.get('run_results', []):
+        params = ';'.join(f"{k}={v}" for k, v in result.get('parameters', {}).items())
+        rows.append(
+            f"{result.get('run_index', '')},{params},"
+            f"{result.get('log_filename', '')},{result.get('status', '')},"
+            f"{result.get('elapsed_seconds', '')}"
+        )
+
+    csv_content = '\n'.join(rows) + '\n'
+    dl_name = f"batch_{batch_id}_summary.csv"
+
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{dl_name}"'},
+    )
+
+
 @router.post("/cancel/{task_id}")
 async def cancel_simulation(task_id: str):
     """
@@ -2360,6 +2525,98 @@ async def generate_personas(request: PersonaGenerationRequest):
             status_code=500,
             detail=f"Persona generation failed: {str(e)}"
         )
+
+
+@router.post("/generate-personas-census")
+async def generate_personas_census(request: CensusGenerationRequest):
+    """Generate agent personas by sampling from a demographic distribution."""
+    from backend.services.census_generator import (
+        sample_agents_from_distribution,
+        enrich_with_llm,
+    )
+
+    try:
+        personas, summary = sample_agents_from_distribution(
+            dimensions=request.distribution.dimensions,
+            joint_profiles=request.distribution.joint_profiles,
+            num_agents=request.num_agents,
+            seed=request.seed,
+            context=request.context,
+        )
+
+        if request.enrich_with_llm:
+            if not request.llm_settings:
+                raise HTTPException(
+                    status_code=400,
+                    detail="llm_settings required when enrich_with_llm is True"
+                )
+            from backend.services.llm_factory import get_model_and_embedder
+            model, _ = get_model_and_embedder(request.llm_settings)
+            personas = await enrich_with_llm(
+                personas, request.context, model, request.num_memories
+            )
+
+        generated = [
+            GeneratedPersona(
+                name=p['name'],
+                goal=p.get('goal', ''),
+                memories=p.get('memories', []),
+                description=p.get('description', ''),
+            )
+            for p in personas
+        ]
+
+        return CensusGenerationResponse(
+            personas=generated,
+            distribution_summary=summary,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Census-based generation failed: {str(e)}"
+        )
+
+
+@router.post("/upload-distribution")
+async def upload_distribution(file: bytes = None):
+    """Parse an uploaded CSV or JSON file into a distribution spec.
+
+    Accepts the file content as the request body with appropriate Content-Type.
+    """
+    from fastapi import Request
+
+    # This endpoint is called with raw file content; we'll handle it via the
+    # request body approach below. For the frontend, we use FormData.
+    pass
+
+
+@router.post("/parse-distribution")
+async def parse_distribution(payload: dict):
+    """Parse distribution data from JSON or CSV content string.
+
+    Accepts: {"format": "json"|"csv", "content": "..."}
+    """
+    from backend.services.census_generator import parse_csv_distribution, parse_json_distribution
+
+    fmt = payload.get("format", "json")
+    content = payload.get("content", "")
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty content")
+
+    try:
+        if fmt == "csv":
+            result = parse_csv_distribution(content)
+        else:
+            result = parse_json_distribution(content)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse distribution: {str(e)}")
 
 
 # ── Saved Configurations ──────────────────────────────────────────────

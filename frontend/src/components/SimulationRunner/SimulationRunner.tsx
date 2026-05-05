@@ -14,6 +14,7 @@ import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
+import BatchRunner from './BatchRunner';
 import LogViewer from './LogViewer';
 import type { LogEntry } from './LogViewer';
 
@@ -248,6 +249,7 @@ export default function SimulationRunner() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showBatchRunner, setShowBatchRunner] = useState(false);
   const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -934,17 +936,31 @@ export default function SimulationRunner() {
           {/* Run/Cancel Buttons */}
           <div className="flex gap-3">
             {!running ? (
-              <button
-                onClick={handleRun}
-                disabled={validation ? !validation.valid : undefined}
-                className={`flex-1 py-3 px-6 rounded-xl text-base font-semibold transition-all ${
-                  validation && !validation.valid
-                    ? 'bg-gray-300 cursor-not-allowed text-gray-500'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
-                }`}
-              >
-                Run Simulation
-              </button>
+              <>
+                <button
+                  onClick={handleRun}
+                  disabled={validation ? !validation.valid : undefined}
+                  className={`flex-1 py-3 px-6 rounded-xl text-base font-semibold transition-all ${
+                    validation && !validation.valid
+                      ? 'bg-gray-300 cursor-not-allowed text-gray-500'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                  }`}
+                >
+                  Run Simulation
+                </button>
+                <button
+                  onClick={() => setShowBatchRunner(true)}
+                  disabled={validation ? !validation.valid : undefined}
+                  className={`py-3 px-4 rounded-xl text-sm font-semibold transition-all ${
+                    validation && !validation.valid
+                      ? 'bg-gray-200 cursor-not-allowed text-gray-400'
+                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                  }`}
+                  title="Run multiple times with parameter sweeps"
+                >
+                  Batch
+                </button>
+              </>
             ) : isStepControlled && controllerState ? (
               <div className="flex-1 space-y-3">
                 <div className="flex gap-2">
@@ -1273,6 +1289,57 @@ export default function SimulationRunner() {
                     Download
                   </button>
                 )}
+                {results.log_filename && (
+                  <div className="relative group">
+                    <button
+                      className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors"
+                      onClick={async () => {
+                        try {
+                          const { exportSimulationCSV } = await import('../../utils/api');
+                          const blob = await exportSimulationCSV(results.log_filename, 'both');
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = results.log_filename.replace('.html', '_export.csv');
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        } catch (e) {
+                          console.error('CSV export failed:', e);
+                        }
+                      }}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export CSV
+                    </button>
+                  </div>
+                )}
+                {results.log_filename && (
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100 transition-colors"
+                    onClick={async () => {
+                      try {
+                        const { exportSimulationJSON } = await import('../../utils/api');
+                        const data = await exportSimulationJSON(results.log_filename);
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = results.log_filename.replace('.html', '_export.json');
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        console.error('JSON export failed:', e);
+                      }
+                    }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    Export JSON
+                  </button>
+                )}
               </div>
 
               {/* Log file info */}
@@ -1527,6 +1594,10 @@ export default function SimulationRunner() {
           )}
         </div>
       </div>
+
+      {showBatchRunner && (
+        <BatchRunner onClose={() => setShowBatchRunner(false)} />
+      )}
     </div>
   );
 }

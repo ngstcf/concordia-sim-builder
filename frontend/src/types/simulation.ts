@@ -73,6 +73,14 @@ export interface VariableConfig {
   update_rule?: string;
 }
 
+// Available Action
+export interface AvailableAction {
+  name: string;
+  description: string;
+  available_to?: string[];
+  condition?: string;
+}
+
 // Agent Configuration
 export interface AgentConfig {
   id: string;
@@ -82,6 +90,7 @@ export interface AgentConfig {
   memories: string[];
   components?: Record<string, any>;
   randomize_choices: boolean;
+  available_actions?: string[];
   nested_simulation?: NestedSimulationConfig;
 }
 
@@ -122,6 +131,7 @@ export interface SimulationConfig {
   shared_memories: string[];
   player_specific_context?: Record<string, string>;
   checkpoint_interval?: number;
+  available_actions?: AvailableAction[];
 }
 
 // LLM Settings
@@ -217,6 +227,52 @@ export interface GeneratedPersona {
 
 export interface PersonaGenerationResponse {
   personas: GeneratedPersona[];
+}
+
+// Census/Distribution-based Generation
+export interface CensusDistributionSpec {
+  dimensions?: Record<string, Record<string, number>>;
+  joint_profiles?: Array<Record<string, any>>;
+}
+
+export interface CensusGenerationRequest {
+  distribution: CensusDistributionSpec;
+  num_agents: number;
+  context?: string;
+  enrich_with_llm?: boolean;
+  num_memories?: number;
+  seed?: number | null;
+  llm_settings?: LLMSettings;
+}
+
+export interface CensusGenerationResponse {
+  personas: GeneratedPersona[];
+  distribution_summary: Record<string, Record<string, number>>;
+}
+
+// Batch Run
+export interface SweepParameter {
+  field: string;
+  values: any[];
+}
+
+export interface BatchRunRequest {
+  config: SimulationConfig;
+  llm_settings: LLMSettings;
+  gm_llm_settings?: LLMSettings;
+  num_runs: number;
+  sweep_parameters: SweepParameter[];
+  batch_name?: string;
+}
+
+export interface BatchRunResult {
+  run_index: number;
+  parameters: Record<string, string>;
+  repeat: number;
+  status: string;
+  elapsed_seconds?: number;
+  log_filename?: string;
+  error?: string;
 }
 
 // API Response wrappers

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { generatePersonas } from '../../utils/api';
+import { generatePersonas, generatePersonasCensus, parseDistribution } from '../../utils/api';
 import AgentEditor from './AgentEditor';
 
 const PREFAB_BADGES: Record<string, { label: string; color: string }> = {
@@ -37,6 +37,7 @@ export default function AgentList() {
 
   // Persona generator state
   const [showGenerator, setShowGenerator] = useState(false);
+  const [genTab, setGenTab] = useState<'llm' | 'census'>('llm');
   const [genContext, setGenContext] = useState('');
   const [genAxes, setGenAxes] = useState('');
   const [genCount, setGenCount] = useState(5);
@@ -44,6 +45,14 @@ export default function AgentList() {
   const [generating, setGenerating] = useState(false);
   const [generatedPersonas, setGeneratedPersonas] = useState<GeneratedPersona[]>([]);
   const [genError, setGenError] = useState('');
+
+  // Census generator state
+  const [censusJson, setCensusJson] = useState('{\n  "age": {"18-25": 0.3, "26-40": 0.4, "41-60": 0.2, "60+": 0.1},\n  "income": {"low": 0.4, "medium": 0.35, "high": 0.25}\n}');
+  const [censusCount, setCensusCount] = useState(10);
+  const [censusSeed, setCensusSeed] = useState<string>('');
+  const [censusEnrich, setCensusEnrich] = useState(false);
+  const [censusContext, setCensusContext] = useState('');
+  const [censusSummary, setCensusSummary] = useState<Record<string, Record<string, number>> | null>(null);
 
   const handleAddAgent = () => {
     const newAgent = {
@@ -111,6 +120,49 @@ export default function AgentList() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleGenerateCensus = async () => {
+    if (!censusJson.trim()) return;
+    setGenerating(true);
+    setGenError('');
+    setGeneratedPersonas([]);
+    setCensusSummary(null);
+    try {
+      const parsed = await parseDistribution('json', censusJson);
+      const result = await generatePersonasCensus({
+        distribution: parsed,
+        num_agents: censusCount,
+        context: censusContext,
+        enrich_with_llm: censusEnrich,
+        num_memories: genMemories,
+        seed: censusSeed ? parseInt(censusSeed) : null,
+        llm_settings: censusEnrich ? llmSettings : undefined,
+      });
+      setGeneratedPersonas(result.personas.map(p => ({ ...p, selected: true })));
+      setCensusSummary(result.distribution_summary);
+    } catch (err: any) {
+      setGenError(err?.response?.data?.detail || err?.message || 'Census generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    if (file.name.endsWith('.csv')) {
+      try {
+        const parsed = await parseDistribution('csv', text);
+        setCensusJson(JSON.stringify(parsed.dimensions || parsed.joint_profiles, null, 2));
+      } catch (err: any) {
+        setGenError('Failed to parse CSV: ' + (err?.response?.data?.detail || err?.message));
+      }
+    } else {
+      setCensusJson(text);
+    }
+    e.target.value = '';
   };
 
   const handleAddGenerated = () => {
@@ -279,20 +331,40 @@ export default function AgentList() {
                   </svg>
                   Generate Agent Personas
                 </h3>
-                <button onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); }} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); setCensusSummary(null); }} className="text-gray-400 hover:text-gray-600">
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Uses Concordia's persona generators to create diverse agent populations from a scenario description.
-              </p>
+              {generatedPersonas.length === 0 && (
+                <div className="flex gap-1 mt-3">
+                  <button
+                    onClick={() => setGenTab('llm')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                      genTab === 'llm' ? 'bg-green-100 text-green-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    LLM Generation
+                  </button>
+                  <button
+                    onClick={() => setGenTab('census')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                      genTab === 'census' ? 'bg-green-100 text-green-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    Census / Distribution
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              {generatedPersonas.length === 0 ? (
+              {generatedPersonas.length === 0 && genTab === 'llm' ? (
                 <div className="space-y-4">
+                  <p className="text-xs text-gray-500">
+                    Uses Concordia's persona generators to create diverse agent populations from a scenario description.
+                  </p>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Scenario Context</label>
                     <textarea
@@ -340,8 +412,91 @@ export default function AgentList() {
                     </div>
                   )}
                 </div>
+              ) : generatedPersonas.length === 0 && genTab === 'census' ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-500">
+                    Sample agents from a demographic distribution. Upload a JSON/CSV or edit the distribution below.
+                  </p>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700">Distribution (JSON)</label>
+                      <label className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer">
+                        Upload CSV/JSON
+                        <input type="file" accept=".csv,.json" className="hidden" onChange={handleCsvUpload} />
+                      </label>
+                    </div>
+                    <textarea
+                      rows={6}
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-xs font-mono focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      value={censusJson}
+                      onChange={e => setCensusJson(e.target.value)}
+                      placeholder='{"age": {"18-25": 0.3, "26-40": 0.4}, "income": {"low": 0.5, "high": 0.5}}'
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Marginals: {`{"dim": {"cat": prob}}`} or joint: {`[{"weight": 0.3, "dim": "val"}]`}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Scenario Context (optional)</label>
+                    <textarea
+                      rows={2}
+                      className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      value={censusContext}
+                      onChange={e => setCensusContext(e.target.value)}
+                      placeholder="A neighborhood in Macau undergoing urban development..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Number of Agents</label>
+                      <input
+                        type="number" min={1} max={100}
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                        value={censusCount}
+                        onChange={e => setCensusCount(parseInt(e.target.value) || 10)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Seed (optional)</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                        value={censusSeed}
+                        onChange={e => setCensusSeed(e.target.value.replace(/\D/g, ''))}
+                        placeholder="For reproducibility"
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={censusEnrich}
+                      onChange={e => setCensusEnrich(e.target.checked)}
+                      className="h-4 w-4 text-green-600 rounded"
+                    />
+                    Enrich with LLM (generate natural-language memories)
+                  </label>
+                  {genError && (
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                      <p className="text-sm text-red-700">{genError}</p>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-3">
+                  {censusSummary && (
+                    <div className="bg-gray-50 rounded-md p-3 text-xs">
+                      <p className="font-medium text-gray-700 mb-1">Distribution Summary</p>
+                      <div className="flex flex-wrap gap-3">
+                        {Object.entries(censusSummary).map(([dim, counts]) => (
+                          <div key={dim}>
+                            <span className="font-medium text-gray-600">{dim}:</span>{' '}
+                            {Object.entries(counts).map(([cat, n]) => `${cat} (${n})`).join(', ')}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-gray-700 font-medium">
                       Generated {generatedPersonas.length} personas
@@ -390,7 +545,7 @@ export default function AgentList() {
               {generatedPersonas.length > 0 ? (
                 <>
                   <button
-                    onClick={() => setGeneratedPersonas([])}
+                    onClick={() => { setGeneratedPersonas([]); setCensusSummary(null); }}
                     className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
                     Back
@@ -406,18 +561,28 @@ export default function AgentList() {
               ) : (
                 <>
                   <button
-                    onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); }}
+                    onClick={() => { setShowGenerator(false); setGeneratedPersonas([]); setCensusSummary(null); }}
                     className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
                     Cancel
                   </button>
-                  <button
-                    onClick={handleGenerate}
-                    disabled={generating || !genContext.trim() || !genAxes.trim()}
-                    className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generating ? 'Generating...' : 'Generate Personas'}
-                  </button>
+                  {genTab === 'llm' ? (
+                    <button
+                      onClick={handleGenerate}
+                      disabled={generating || !genContext.trim() || !genAxes.trim()}
+                      className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {generating ? 'Generating...' : 'Generate Personas'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGenerateCensus}
+                      disabled={generating || !censusJson.trim()}
+                      className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {generating ? 'Sampling...' : `Sample ${censusCount} Agents`}
+                    </button>
+                  )}
                 </>
               )}
             </div>

@@ -63,6 +63,10 @@ class AgentConfig(BaseModel):
     memories: List[str] = Field(default_factory=list, description="Pre-loaded memories")
     components: Optional[Dict[str, Any]] = Field(None, description="Additional components")
     randomize_choices: bool = Field(True, description="Whether to randomize action choices")
+    available_actions: Optional[List[str]] = Field(
+        None,
+        description="Per-agent available action names; overrides global list if set"
+    )
     nested_simulation: Optional[NestedSimulationConfig] = Field(
         None,
         description="Optional nested simulation this agent can run"
@@ -94,6 +98,14 @@ class VariableConfig(BaseModel):
     max_value: Optional[float] = Field(None, description="Maximum value (for numerical/percentage)")
     allowed_values: Optional[List[str]] = Field(None, description="Allowed values (for categorical)")
     update_rule: Optional[str] = Field(None, description="Description of how variable updates")
+
+
+class AvailableAction(BaseModel):
+    """An available action that agents can choose from."""
+    name: str = Field(..., description="Action name (e.g., 'go_to_work')")
+    description: str = Field("", description="What this action means")
+    available_to: Optional[List[str]] = Field(None, description="Agent IDs that can use this; None means all")
+    condition: Optional[str] = Field(None, description="When this action is available (free text)")
 
 
 class ContribComponentConfig(BaseModel):
@@ -169,6 +181,10 @@ class SimulationConfig(BaseModel):
         ge=1,
         le=100,
         description="Save partial checkpoint every N steps (0 to disable)"
+    )
+    available_actions: Optional[List[AvailableAction]] = Field(
+        None,
+        description="Global set of available actions. When set, agents choose from these."
     )
 
     class Config:
@@ -376,6 +392,54 @@ class GeneratedPersona(BaseModel):
 class PersonaGenerationResponse(BaseModel):
     """Response containing generated personas."""
     personas: List[GeneratedPersona]
+
+
+class CensusDistributionSpec(BaseModel):
+    """Demographic distribution specification for census-based agent generation."""
+    dimensions: Optional[Dict[str, Dict[str, float]]] = Field(
+        None,
+        description="Independent marginals: {dim_name: {category: probability}}"
+    )
+    joint_profiles: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Joint profiles: [{weight: float, dim1: val1, ...}]"
+    )
+
+
+class CensusGenerationRequest(BaseModel):
+    """Request to generate agents from a demographic distribution."""
+    distribution: CensusDistributionSpec = Field(..., description="Demographic distribution spec")
+    num_agents: int = Field(10, ge=1, le=100, description="Number of agents to generate")
+    context: str = Field("", description="Scenario context for memory enrichment")
+    enrich_with_llm: bool = Field(False, description="Use LLM to generate richer memories")
+    num_memories: int = Field(5, ge=1, le=15, description="Memories per agent (if LLM enrichment)")
+    seed: Optional[int] = Field(None, description="Random seed for reproducibility")
+    llm_settings: Optional[LLMSettings] = Field(None, description="Required if enrich_with_llm is True")
+
+
+class CensusGenerationResponse(BaseModel):
+    """Response containing census-generated personas."""
+    personas: List[GeneratedPersona]
+    distribution_summary: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict,
+        description="Actual counts per dimension after sampling"
+    )
+
+
+class SweepParameter(BaseModel):
+    """A parameter to sweep across batch runs."""
+    field: str = Field(..., description="Parameter field path (e.g., 'temperature', 'max_steps')")
+    values: List[Any] = Field(..., min_length=1, description="Values to sweep over")
+
+
+class BatchRunRequest(BaseModel):
+    """Request to execute a batch of simulation runs."""
+    config: SimulationConfig
+    llm_settings: LLMSettings
+    gm_llm_settings: Optional[LLMSettings] = None
+    num_runs: int = Field(3, ge=1, le=50, description="Number of runs per parameter combination")
+    sweep_parameters: List[SweepParameter] = Field(default_factory=list)
+    batch_name: Optional[str] = Field(None, description="Human-readable batch name")
 
 
 # Resolve forward references

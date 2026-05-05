@@ -86,6 +86,7 @@ docs/**
 !docs/SIMULATION_BUILDING_GUIDE.md
 !docs/TIMEOUT_CONFIGURATION.md
 !docs/TEMPLATE_CREATION_GUIDE.md
+!docs/QUANTITATIVE_RESEARCH_FEATURES.md
 !docs/research-use-cases/
 docs/research-use-cases/*
 !docs/research-use-cases/vaccine-hesitancy-study.md

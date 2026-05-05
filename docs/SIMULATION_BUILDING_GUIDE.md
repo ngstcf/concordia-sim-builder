@@ -746,6 +746,7 @@ You can save simulation configurations for reuse and share them with others:
 ## Further Reading
 
 - **[Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md)** — Detailed documentation of all 32 built-in templates, agent prefab types, psychological components, Game Master configuration, and engine types. Use it as a reference when customizing templates or building advanced simulations.
+- **[Quantitative Research Features](QUANTITATIVE_RESEARCH_FEATURES.md)** — Structured data export (CSV/JSON), census-based agent generation, action constraints, and batch runs with parameter sweeps for quantitative social science research.
 - **Built-in templates** — Load from the Template Picker in the builder. Covers game theory, policy, social dynamics, SDG scenarios, and more.
 - **Concordia library** — The underlying simulation framework by Google DeepMind.
 - **Agent-based modeling** — A methodology for studying complex systems through individual agent interactions.

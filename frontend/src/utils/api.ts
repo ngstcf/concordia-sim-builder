@@ -985,4 +985,127 @@ export async function deleteSavedConfig(slug: string): Promise<void> {
   await api.delete(`/api/simulations/configs/${slug}`);
 }
 
+export async function generatePersonasCensus(request: {
+  distribution: { dimensions?: Record<string, Record<string, number>>; joint_profiles?: Array<Record<string, any>> };
+  num_agents: number;
+  context?: string;
+  enrich_with_llm?: boolean;
+  num_memories?: number;
+  seed?: number | null;
+  llm_settings?: any;
+}): Promise<{
+  personas: Array<{ name: string; goal: string; memories: string[]; description: string }>;
+  distribution_summary: Record<string, Record<string, number>>;
+}> {
+  const response = await api.post('/api/simulations/generate-personas-census', request);
+  return response.data;
+}
+
+export async function parseDistribution(
+  format: 'json' | 'csv',
+  content: string
+): Promise<{ dimensions?: Record<string, Record<string, number>>; joint_profiles?: Array<Record<string, any>> }> {
+  const response = await api.post('/api/simulations/parse-distribution', { format, content });
+  return response.data;
+}
+
+export async function exportSimulationCSV(
+  filename: string,
+  dataType: 'actions' | 'variables' | 'both' = 'actions'
+): Promise<Blob> {
+  const response = await api.get(
+    `/api/simulations/logs/${encodeURIComponent(filename)}/export-csv`,
+    { params: { data_type: dataType }, responseType: 'blob' }
+  );
+  return response.data;
+}
+
+export async function exportSimulationJSON(filename: string): Promise<any> {
+  const response = await api.get(
+    `/api/simulations/logs/${encodeURIComponent(filename)}/export-json`
+  );
+  return response.data;
+}
+
+export function executeBatchStream(
+  request: any,
+  onEvent: (event: any) => void,
+  onError?: (error: any) => void,
+): { cancel: () => void } {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const response = await fetch('/api/simulations/batch/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onEvent(data);
+            } catch { /* skip parse errors */ }
+          }
+        }
+      }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        onError?.(e);
+      }
+    }
+  })();
+
+  return { cancel: () => controller.abort() };
+}
+
+export async function listBatches(): Promise<{
+  batches: Array<{
+    batch_id: string;
+    batch_name: string;
+    status: string;
+    total_runs: number;
+    completed_runs: number;
+    failed_runs: number;
+    started_at: string;
+  }>;
+}> {
+  const response = await api.get('/api/simulations/batch/list');
+  return response.data;
+}
+
+export async function getBatchStatus(batchId: string): Promise<any> {
+  const response = await api.get(`/api/simulations/batch/${batchId}/status`);
+  return response.data;
+}
+
+export async function cancelBatch(batchId: string): Promise<void> {
+  await api.post(`/api/simulations/batch/${batchId}/cancel`);
+}
+
+export async function exportBatchCSV(batchId: string): Promise<Blob> {
+  const response = await api.get(
+    `/api/simulations/batch/${batchId}/export-csv`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+}
+
 export default api;
