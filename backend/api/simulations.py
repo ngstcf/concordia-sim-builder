@@ -269,6 +269,8 @@ async def get_provider_models(
                 return False
             if model_id.startswith(below_gpt4):
                 return False
+            if model_id in ('gpt-4', 'gpt-4-turbo'):
+                return False
             if any(kw in model_id for kw in skip_keywords):
                 return False
             if date_suffix_re.search(model_id):

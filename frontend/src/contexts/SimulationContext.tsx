@@ -72,7 +72,7 @@ const defaultLLMSettings: LLMSettings = {
   model_name: '',
   embedder_model: 'all-MiniLM-L6-v2',
   temperature: 0.5,
-  max_tokens: 9000,
+  max_tokens: 16384,
   request_timeout: 120
 };
 

@@ -230,6 +230,10 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   };
 
   const handleGenerateBackstory = async () => {
+    if (!llmSettings.model_name) {
+      alert('Please configure an LLM provider and model in the Run panel before generating backstories.');
+      return;
+    }
     setGeneratingBackstory(true);
     try {
       const result = await generateFormativeMemories({

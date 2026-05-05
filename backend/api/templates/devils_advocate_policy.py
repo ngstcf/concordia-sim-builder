@@ -46,8 +46,8 @@ to decide whether the framework proceeds to public consultation next month.""",
                         }
                     },
                     "values": {
-                        "core_values": ["rule_of_law", "evidence_based_policy", "institutional_legitimacy"],
-                        "value_conflict": "pragmatic_compromise_vs_regulatory_ambition"
+                        "core_values": ["rule of law", "evidence-based policy", "institutional legitimacy"],
+                        "value_conflict": "pragmatic compromise vs regulatory ambition"
                     }
                 }
             },
@@ -79,8 +79,8 @@ to decide whether the framework proceeds to public consultation next month.""",
                         }
                     },
                     "values": {
-                        "core_values": ["intellectual_honesty", "practical_effectiveness", "accountability"],
-                        "value_conflict": "regulatory_ambition_vs_implementation_reality"
+                        "core_values": ["intellectual honesty", "practical effectiveness", "accountability"],
+                        "value_conflict": "regulatory ambition vs implementation reality"
                     }
                 }
             },
@@ -111,8 +111,8 @@ to decide whether the framework proceeds to public consultation next month.""",
                         }
                     },
                     "values": {
-                        "core_values": ["consensus_building", "institutional_effectiveness", "pragmatism"],
-                        "value_conflict": "principled_position_vs_workable_compromise"
+                        "core_values": ["consensus building", "institutional effectiveness", "pragmatism"],
+                        "value_conflict": "principled position vs workable compromise"
                     }
                 }
             }

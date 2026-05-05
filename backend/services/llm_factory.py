@@ -231,13 +231,13 @@ def get_available_providers() -> list[dict]:
         {
             "provider": LLMProvider.OPENAI,
             "name": "OpenAI",
-            "models": ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo"],
+            "models": ["gpt-4o", "gpt-3.5-turbo"],
             "requires_api_key": True
         },
         {
             "provider": LLMProvider.AZURE,
             "name": "Azure OpenAI",
-            "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "o3-mini"],  # Example deployment names
+            "models": ["gpt-4o", "gpt-4o-mini", "o3-mini"],  # Example deployment names
             "requires_api_key": False,  # Loaded from AZURE_OAI_KEY env var
             "requires_api_version": False,  # Loaded from AZURE_OAI_API_VERSION env var (with default)
             "requires_base_url": False,  # Loaded from AZURE_OAI_ENDPOINT env var

@@ -90,6 +90,10 @@ export default function AgentList() {
 
   const handleGenerate = async () => {
     if (!genContext.trim() || !genAxes.trim()) return;
+    if (!llmSettings.model_name) {
+      setGenError('Please configure an LLM provider and model in the Run panel first.');
+      return;
+    }
     setGenerating(true);
     setGenError('');
     setGeneratedPersonas([]);
