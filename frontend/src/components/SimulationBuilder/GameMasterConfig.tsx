@@ -5,7 +5,6 @@
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
 import { getPrefabs, getContribComponents } from '../../utils/api';
-import Editor from '@monaco-editor/react';
 import type { VariableConfig, ContribComponentConfig } from '../../types/simulation';
 import SceneEditor from './SceneEditor';
 import QuestionnaireBuilder from './QuestionnaireBuilder';
@@ -26,10 +25,7 @@ export default function GameMasterConfig() {
     (config.game_master.grounded_variables || []).map((v, i) => ({ ...v, id: `var-${i}` }))
   );
   const [showVariables, setShowVariables] = useState(false);
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [showExample, setShowExample] = useState(false);
   const [showCriticalDecisions, setShowCriticalDecisions] = useState(false);
-  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   const [showContribComponents, setShowContribComponents] = useState(false);
   const [contribRegistry, setContribRegistry] = useState<Array<{
     id: string; name: string; description: string; category: string;
@@ -136,69 +132,6 @@ export default function GameMasterConfig() {
   };
 
   // Get prefab-specific example
-  const getPrefabExample = (): string => {
-    switch (config.game_master.prefab) {
-      case 'generic__GameMaster':
-        return JSON.stringify({
-          critical_decision_points: [
-            {
-              step: 10,
-              description: "Budget allocation vote - Council must decide between competing priorities",
-              options: ["Approve affordable housing", "Approve commercial development", "Table decision"]
-            },
-            {
-              step: 15,
-              description: "Rent control proposal - Tenant advocates vs property owners",
-              options: ["Pass rent control", "Reject rent control", "Compromise with phased implementation"]
-            }
-          ],
-          extra_components: {
-            grounded_variables_intro: "Track key outcomes:\n- Median rent changes\n- Displacement rates\n- Business survival\n- Policy decisions"
-          }
-        }, null, 2);
-
-      case 'interviewer__GameMaster':
-        return JSON.stringify({
-          questionnaires: [
-            {
-              name: "Job Satisfaction",
-              description: "Annual employee satisfaction survey",
-              questionnaire_type: "multiple_choice",
-              observation_preprompt: "Please answer the following questions about your job satisfaction.",
-              questions: [
-                {
-                  statement: "I am satisfied with my current role and responsibilities.",
-                  dimension: "job_satisfaction",
-                  preprompt: "On a scale of 1 (Strongly Disagree) to 5 (Strongly Agree),",
-                  choices: ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
-                  ascending_scale: true
-                }
-              ]
-            }
-          ]
-        }, null, 2);
-
-      case 'game_theoretic_and_dramaturgic__GameMaster':
-        return JSON.stringify({
-          scenes: [{
-            scene_type: {
-              name: "decision",
-              game_master_name: "Game Master",
-              action_spec: {
-                call_to_action: "What does {name} do?",
-                options: ["COOPERATE", "DEFECT"]
-              }
-            },
-            participants: ["Agent1", "Agent2"],
-            num_rounds: 4
-          }]
-        }, null, 2);
-
-      default:
-        return JSON.stringify({}, null, 2);
-    }
-  };
-
   const addVariable = () => {
     const newVar: VariableConfigWithId = {
       id: `var-${Date.now()}`,
@@ -950,138 +883,6 @@ export default function GameMasterConfig() {
           </p>
         </div>
 
-        {/* Advanced Parameters (JSON) - Collapsible by default */}
-        <div className="border-t border-gray-200 pt-6">
-          <button
-            type="button"
-            onClick={() => setShowAdvancedJson(!showAdvancedJson)}
-            className="w-full flex items-center justify-between text-left"
-          >
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                <span className="flex items-center">
-                  <svg className="h-4 w-4 text-gray-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                  </svg>
-                  Advanced JSON Configuration
-                </span>
-              </label>
-              <p className="mt-1 text-xs text-gray-500">
-                Direct JSON editing for prefab-specific parameters and advanced configuration
-              </p>
-            </div>
-            <svg className={`w-5 h-5 text-gray-400 transform transition-transform ${showAdvancedJson ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {showAdvancedJson && (
-            <div className="mt-4 space-y-4">
-              {/* Precedence Warning */}
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
-                <p className="text-xs text-amber-900">
-                  <strong>⚠️ Precedence Notice:</strong> Configuration in this JSON editor <strong>takes precedence</strong> over template values and UI builders above. If you define the same fields (like <code className="bg-amber-100 px-1 rounded">critical_decision_points</code> or <code className="bg-amber-100 px-1 rounded">extra_components.grounded_variables_intro</code>) here, those values will override the ones configured in the visual builders.
-                </p>
-              </div>
-
-              {/* Example Section */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-700">
-                    Example for {config.game_master.prefab}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowExample(!showExample)}
-                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
-                  >
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {showExample ? 'Hide' : 'Show'} Example
-                  </button>
-                </div>
-
-                {showExample && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-blue-800">
-                        Example for {config.game_master.prefab}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGameMaster({ ...config.game_master, parameters: JSON.parse(getPrefabExample()) });
-                          setShowExample(false);
-                        }}
-                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
-                      >
-                        Use This Example
-                      </button>
-                    </div>
-                    <pre className="text-xs font-mono text-gray-700 overflow-x-auto bg-white p-2 rounded border border-blue-100">
-                      {getPrefabExample()}
-                    </pre>
-                  </div>
-                )}
-              </div>
-
-              {/* JSON Editor */}
-              <div>
-                <label htmlFor="gm-parameters" className="block text-xs font-medium text-gray-700 mb-1">
-                  Parameters (JSON)
-                  {config.game_master.prefab === 'game_theoretic_and_dramaturgic__GameMaster' && (
-                    <span className="ml-2 text-amber-600">
-                      • Note: num_rounds must equal max_steps
-                    </span>
-                  )}
-                </label>
-
-                <div className="border border-gray-300 rounded-md overflow-hidden" style={{ height: '300px' }}>
-                  <Editor
-                    height="300px"
-                    defaultLanguage="json"
-                    value={config.game_master.parameters ? JSON.stringify(config.game_master.parameters, null, 2) : ''}
-                    onChange={(value) => {
-                      try {
-                        const params = value ? JSON.parse(value) : {};
-                        setGameMaster({ ...config.game_master, parameters: params });
-                        setJsonError(null);
-                      } catch (err) {
-                        setJsonError('Invalid JSON: ' + (err as Error).message);
-                      }
-                    }}
-                    theme="vs-light"
-                    options={{
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      fontSize: 12,
-                      lineNumbers: 'on',
-                      folding: true,
-                      automaticLayout: true,
-                      tabSize: 2,
-                      wordWrap: 'on',
-                      formatOnPaste: true,
-                      formatOnType: true,
-                    }}
-                  />
-                </div>
-
-                {jsonError && (
-                  <p className="mt-1 text-xs text-red-600">
-                    ⚠️ {jsonError}
-                  </p>
-                )}
-
-                {!jsonError && config.game_master.parameters && Object.keys(config.game_master.parameters).length > 0 && (
-                  <p className="mt-1 text-xs text-green-600">
-                    ✓ Valid JSON ({Object.keys(config.game_master.parameters).length} top-level key{Object.keys(config.game_master.parameters).length !== 1 ? 's' : ''})
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

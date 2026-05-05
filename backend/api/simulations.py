@@ -4,9 +4,16 @@ API endpoints for simulation management and execution.
 Template data lives in backend.api.templates (one file per template).
 """
 import json
+import os
+import re
+import time
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
+
+SAVED_CONFIGS_DIR = Path(__file__).resolve().parent.parent.parent / "backend" / "saved_configs"
+SAVED_CONFIGS_DIR.mkdir(exist_ok=True)
 
 from backend.api.templates import TEMPLATES
 
@@ -2348,3 +2355,73 @@ async def generate_personas(request: PersonaGenerationRequest):
             status_code=500,
             detail=f"Persona generation failed: {str(e)}"
         )
+
+
+# ── Saved Configurations ──────────────────────────────────────────────
+
+def _slugify(name: str) -> str:
+    slug = name.lower().strip()
+    slug = re.sub(r'[^a-z0-9]+', '-', slug)
+    return slug.strip('-')[:80] or 'untitled'
+
+
+@router.get("/configs")
+async def list_saved_configs():
+    configs = []
+    for f in sorted(SAVED_CONFIGS_DIR.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+            configs.append({
+                "slug": f.stem,
+                "name": data.get("name", f.stem),
+                "saved_at": data.get("saved_at"),
+                "agent_count": len(data.get("config", {}).get("agents", [])),
+                "engine_type": data.get("config", {}).get("engine_type", "sequential"),
+            })
+        except (json.JSONDecodeError, OSError):
+            continue
+    return {"configs": configs}
+
+
+@router.post("/configs")
+async def save_config(body: dict):
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    config = body.get("config")
+    llm_settings = body.get("llm_settings")
+    if not config:
+        raise HTTPException(status_code=400, detail="Config is required")
+
+    slug = _slugify(name)
+    path = SAVED_CONFIGS_DIR / f"{slug}.json"
+
+    payload = {
+        "name": name,
+        "config": config,
+        "llm_settings": llm_settings,
+        "gm_llm_settings": body.get("gm_llm_settings"),
+        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    path.write_text(json.dumps(payload, indent=2))
+    return {"slug": slug, "name": name}
+
+
+@router.get("/configs/{slug}")
+async def get_saved_config(slug: str):
+    path = SAVED_CONFIGS_DIR / f"{slug}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Corrupted configuration file")
+
+
+@router.delete("/configs/{slug}")
+async def delete_saved_config(slug: str):
+    path = SAVED_CONFIGS_DIR / f"{slug}.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    path.unlink()
+    return {"deleted": slug}

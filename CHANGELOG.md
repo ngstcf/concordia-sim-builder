@@ -29,12 +29,15 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Grouped component dropdown by category in AgentEditor
 
 **Builder UX**
+- Save/Load configurations — named configs stored on server, "My Configs" panel with load/delete, overwrite-on-save support
+- Export/Import JSON — full config including LLM settings, backward-compatible with legacy config-only files
 - Scene editor and questionnaire builder visual editor components
 - Searchable template picker with filtering, sorting, and tags
 - Configurable checkpoint interval (1-100, default 5) with UI control
 - Early termination toggle (`can_terminate_simulation` flag)
 - Collapsible left sidebar with viewport-filling simulation log
 - Request timeout configuration per simulation
+- Removed redundant Advanced JSON Configuration panel (visual builders cover all GM parameters)
 
 **Live Log Streaming**
 - Real-time terminal output mirrored to frontend via SSE (`stdout` tee interceptor)

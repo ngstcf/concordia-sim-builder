@@ -61,7 +61,7 @@ Each simulation produces three output files:
 - **Separate GM LLM** — Independent model selection for Game Master
 - **Checkpoint System** — Automatic checkpoints with metadata, watchdog emergency saves, scenario-named files
 - **Simulation Management** — Mid-run cancellation with partial results, per-simulation delete, server shutdown
-- **Import/Export** — Save and share simulation configurations as JSON
+- **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
 For the complete building guide, see [SIMULATION_BUILDING_GUIDE.md](docs/SIMULATION_BUILDING_GUIDE.md).
 
@@ -201,8 +201,10 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/models/{provider}` | GET | List models for a provider |
 | `/api/simulations/validate` | POST | Validate simulation configuration |
 | `/api/simulations/execute` | POST | Run simulation with real-time SSE streaming |
-| `/api/simulations/export-template` | GET | Get blank configuration template |
-| `/api/simulations/import` | POST | Import configuration from JSON |
+| `/api/simulations/configs` | GET | List saved configurations |
+| `/api/simulations/configs` | POST | Save a named configuration |
+| `/api/simulations/configs/{slug}` | GET | Load a saved configuration |
+| `/api/simulations/configs/{slug}` | DELETE | Delete a saved configuration |
 
 ### Simulation Control
 

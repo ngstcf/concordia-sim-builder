@@ -460,10 +460,10 @@ After the simulation completes, check:
 - Run the original sequential version too (reload the template without modifications)
 - Compare: Are contributions more goal-directed and less reactive in simultaneous mode? Does Dr. Chen get equal airtime? Do arguments build cumulatively or repeat?
 
-### Step 9: Export Your Variation
+### Step 9: Save Your Variation
 
-1. Click **Export JSON** to save your modified configuration
-2. You can share this JSON with classmates or reload it later with **Import JSON**
+1. Click **Save** in the builder toolbar and enter a name — your configuration is stored on the server
+2. Click **My Configs** to reload it later, or use **Export**/**Import** to share as a JSON file
 
 ---
 
@@ -731,21 +731,21 @@ In the **Game Master** panel, expand the **Critical Decision Points** section:
 
 ---
 
-## Importing and Exporting
+## Saving and Sharing Configurations
 
-You can save and share simulation configurations as JSON:
+You can save simulation configurations for reuse and share them with others:
 
-- **Export**: Click **Export JSON** in the builder toolbar to download your current configuration
-- **Import**: Click **Import JSON** to load a previously saved configuration
-- **Templates**: Load any built-in template and modify it to create your own variation
-
-This makes it easy to share simulation designs with classmates or build on others' work.
+- **Save**: Click **Save** to store the current configuration (scenario + LLM settings) on the server under a name you choose. Saving with the same name overwrites the previous version.
+- **My Configs**: Click **My Configs** to browse, load, or delete your saved configurations.
+- **Export**: Click **Export** to download the full configuration as a JSON file for sharing or backup.
+- **Import**: Click **Import** to load a configuration from a JSON file.
+- **Templates**: Load any built-in template and modify it to create your own variation, then Save it for later.
 
 ---
 
 ## Further Reading
 
-- **[Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md)** — Detailed documentation of all 31 built-in templates, agent prefab types, psychological components, Game Master configuration, and engine types. Use it as a reference when customizing templates or building advanced simulations.
+- **[Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md)** — Detailed documentation of all 32 built-in templates, agent prefab types, psychological components, Game Master configuration, and engine types. Use it as a reference when customizing templates or building advanced simulations.
 - **Built-in templates** — Load from the Template Picker in the builder. Covers game theory, policy, social dynamics, SDG scenarios, and more.
 - **Concordia library** — The underlying simulation framework by Google DeepMind.
 - **Agent-based modeling** — A methodology for studying complex systems through individual agent interactions.

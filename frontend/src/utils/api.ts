@@ -941,4 +941,43 @@ export function connectLogStream(
   return es;
 }
 
+// ── Saved Configurations ──────────────────────────────────────────────
+
+export interface SavedConfigSummary {
+  slug: string;
+  name: string;
+  saved_at: string | null;
+  agent_count: number;
+  engine_type: string;
+}
+
+export async function listSavedConfigs(): Promise<SavedConfigSummary[]> {
+  const res = await api.get('/api/simulations/configs');
+  return res.data.configs;
+}
+
+export async function saveConfig(body: {
+  name: string;
+  config: SimulationConfig;
+  llm_settings: LLMSettings;
+  gm_llm_settings?: LLMSettings | null;
+}): Promise<{ slug: string; name: string }> {
+  const res = await api.post('/api/simulations/configs', body);
+  return res.data;
+}
+
+export async function loadSavedConfig(slug: string): Promise<{
+  name: string;
+  config: SimulationConfig;
+  llm_settings: LLMSettings;
+  gm_llm_settings?: LLMSettings | null;
+}> {
+  const res = await api.get(`/api/simulations/configs/${slug}`);
+  return res.data;
+}
+
+export async function deleteSavedConfig(slug: string): Promise<void> {
+  await api.delete(`/api/simulations/configs/${slug}`);
+}
+
 export default api;

@@ -71,6 +71,9 @@ Peace-Negotiation-Simulation-Readme.md
 concordia_cheatsheet.md
 negotiatepeace.py
 
+# User-saved simulation configs (per-instance data)
+backend/saved_configs/*.json
+
 # Untracked documentation
 blog_article.md
 documentation.html
