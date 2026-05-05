@@ -4,6 +4,20 @@ A web interface for Google DeepMind's [Concordia](https://github.com/google-deep
 
 Configure agents, psychological components, and scenarios through forms. Run simulations powered by LLMs. Analyze results with built-in analytics including timeline visualization, cooperation metrics, grounded variables tracking, and AI-powered deep content analysis.
 
+## Why a Builder?
+
+Concordia is a powerful research framework, but coding a simulation from scratch requires significant Python expertise. A single scenario typically involves 500–800+ lines of hand-written code: prose-based location descriptions, game rule strings, per-agent memory lists, prefab wiring, engine setup, and a custom runner script — all before the first simulation step executes.
+
+| Without the Builder | With the Builder |
+|---------------------|------------------|
+| Write hundreds of lines of Python per scenario | Configure through form fields and dropdowns |
+| Discover valid prefabs by reading library source | Browse prefabs with descriptions and defaults |
+| Invalid configs fail at runtime, after spending API credits | Real-time validation catches errors before execution |
+| Terminal-only output, no way to pause or inspect mid-run | Play/Pause/Step/Stop controls with live log streaming |
+| Kill the process to stop; restart from scratch to retry | Cancel with partial results saved; adjust and re-run |
+| Build your own output pipeline | Structured HTML report, 9-tab analytics dashboard, AI-powered analysis |
+| Every new scenario is a new coding effort | Over 30 ready-to-run templates covering research, policy, game theory, and more |
+
 ![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
 ![Version](https://img.shields.io/badge/Version-2.4.0-green)
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
