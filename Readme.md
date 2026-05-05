@@ -181,12 +181,11 @@ Frontend: `http://localhost:5173`
 | Category | Templates |
 |----------|-----------|
 | **Quick Start** | Coffee Shop Demo (5 steps), Peace Negotiation (20 steps) |
-| **Prefab Demos** | Planning Agent, Scripted Entity, Context-Aware Moderator, Dialogic Conversation |
-| **Game Theory** | Strategic Game (Prisoner's Dilemma), Marketplace, Sealed-Bid Auction |
-| **SDG Research** | State Formation (16), Labor Action (8), Fishery Management (14), Disaster Response (11/13), Inequality Mobility (10) |
-| **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack |
-| **v2.4 Features** | Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative memories), Clinical Trial Ethics (measurements), Diplomatic Crisis (nested sim) |
-| **Advanced** | Rational Negotiators, Social Media, Puppet, Conversational Debate, Spaceship Crisis, AI Policy Red Team |
+| **Prefab Demos** | Planning Agent, Scripted Entity, Context-Aware Moderator, Dialogic Conversation, Strategic Game, Interviewer, Formative Memories, Marketplace |
+| **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack, AI Policy Red Team |
+| **General Scenarios** | Rational Negotiators, Philosophy Roundtable, Social Media Debate, Sealed-Bid Auction, Wizard-of-Oz CS Training, Spaceship Crisis |
+| **Advanced Scenarios** | Nested Simulation, Grounded Variables, Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative mem), Ethics Board (measurements), Diplomatic Crisis (nested sim) |
+| **SDG Scenarios** | State Formation (16), Labor Strike (8), Fishery Management (14), Flood Evacuation (11/13), Educational Opportunity (10) |
 
 See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for detailed parameter documentation and research guides for all templates.
 

@@ -12,37 +12,38 @@ You can run templates as-is or modify them to fit your needs. All parameters are
 
 | Template | Category | Engine | Agents | Components | PSC | What It Teaches |
 |---|---|---|---|---|---|---|
-| Coffee Shop Demo | Basic | Sequential | 2 | — | — | Minimal setup, how agents interact |
-| Peace Negotiation | Basic | Sequential | 2 | values, emotion | ✓ | Negotiation dynamics, measurable goals, shared memories |
-| Planning Agent | Prefab Types | Sequential | 3 | personality_traits | ✓ | Agents that form and follow plans |
-| Scripted Entity | Prefab Types | Sequential | 5 | personality_traits | — | Agents with pre-written dialogue lines |
-| Context-Aware Moderator | Prefab Types | Sequential | 4 | personality_traits, emotion | — | Scripted agents that adapt to context |
-| Dialogic Conversation | Prefab Types | Sequential | 2 | personality_traits, emotion | ✓ | Natural back-and-forth dialogue |
-| Strategic Game | Prefab Types | Sequential | 2 | cognitive_bias, personality_traits, values | ✓ | Game theory with action choices |
-| Interviewer | Prefab Types | Sequential | 1 | personality_traits, emotion | — | Structured questionnaire surveys |
-| Formative Memories | Prefab Types | Sequential | 3 | personality_traits, emotion | ✓ | Rich character backstories |
-| Marketplace | Prefab Types | Sequential | 3 | personality_traits | — | Trading with BUY/SELL/HOLD actions |
+| Coffee Shop Demo | Quick Start | Sequential | 2 | — | — | Minimal setup, how agents interact |
+| Peace Negotiation | Quick Start | Sequential | 2 | values, emotion | ✓ | Negotiation dynamics, measurable goals, shared memories |
+| Planning Agent | Prefab Demos | Sequential | 3 | personality_traits | ✓ | Agents that form and follow plans |
+| Scripted Entity | Prefab Demos | Sequential | 5 | personality_traits | — | Agents with pre-written dialogue lines |
+| Context-Aware Moderator | Prefab Demos | Sequential | 4 | personality_traits, emotion | — | Scripted agents that adapt to context |
+| Dialogic Conversation | Prefab Demos | Sequential | 2 | personality_traits, emotion | ✓ | Natural back-and-forth dialogue |
+| Strategic Game | Prefab Demos | Sequential | 2 | cognitive_bias, personality_traits, values | ✓ | Game theory with action choices |
+| Interviewer | Prefab Demos | Sequential | 1 | personality_traits, emotion | — | Structured questionnaire surveys |
+| Formative Memories | Prefab Demos | Sequential | 3 | personality_traits, emotion | ✓ | Rich character backstories |
+| Marketplace | Prefab Demos | Sequential | 3 | personality_traits | — | Trading with BUY/SELL/HOLD actions |
 | Vaccine Hesitancy Study | Research | Sequential | 5 | personality_traits, cognitive_bias, emotion, values, social_identity, TPB | ✓ | Full psychological component stack |
 | Phishing Attack Simulation | Research | Sequential | 4 | cognitive_bias | — | Nested simulations (sims within sims) |
 | Urban Gentrification | Research | Sequential | 6 | personality_traits, cognitive_bias, values, social_identity | ✓ | Grounded variables + decision points |
-| Nested Simulation Demo | Advanced | Sequential | 2 | — | — | Agent-level mini-simulations |
-| Grounded Variables Demo | Advanced | Sequential | 3 | — | ✓ | Tracking numeric/categorical metrics |
-| Rational Negotiators | New in v2.4 | Sequential | 2 | personality_traits, values | ✓ | Utility-maximizing rational agents |
-| Philosophy Roundtable | New in v2.4 | Sequential | 3 | personality_traits, values | ✓ | Dialogue-optimized conversational agents |
-| Social Media Debate | New in v2.4 | Asynchronous | 4 | social_identity, cognitive_bias | ✓ | Async engine for social media dynamics |
-| Sealed-Bid Auction | New in v2.4 | Simultaneous | 4 | cognitive_bias, personality_traits | ✓ | Simultaneous engine (all act at once) |
-| Wizard-of-Oz CS Training | New in v2.4 | Simultaneous | 3 | emotion, personality_traits | ✓ | Human-controlled puppet agents |
-| Spaceship Crisis | New in v2.4 | Sequential | 3 | personality_traits, emotion, values | ✓ | Planning agents in crisis scenarios |
+| AI Policy Red Team | Research | Sequential | 3 | personality_traits, values | ✓ | Devil's advocate policy stress-testing |
+| Rational Negotiators | General Scenarios | Sequential | 2 | personality_traits, values | ✓ | Utility-maximizing rational agents |
+| Philosophy Roundtable | General Scenarios | Sequential | 3 | personality_traits, values | ✓ | Dialogue-optimized conversational agents |
+| Social Media Debate | General Scenarios | Asynchronous | 4 | social_identity, cognitive_bias | ✓ | Async engine for social media dynamics |
+| Sealed-Bid Auction | General Scenarios | Simultaneous | 4 | cognitive_bias, personality_traits | ✓ | Simultaneous engine (all act at once) |
+| Wizard-of-Oz CS Training | General Scenarios | Simultaneous | 3 | emotion, personality_traits | ✓ | Human-controlled puppet agents |
+| Spaceship Crisis | General Scenarios | Sequential | 3 | personality_traits, emotion, values | ✓ | Planning agents in crisis scenarios |
+| Nested Simulation Demo | Advanced Scenarios | Sequential | 2 | — | — | Agent-level mini-simulations |
+| Grounded Variables Demo | Advanced Scenarios | Sequential | 3 | — | ✓ | Tracking numeric/categorical metrics |
+| Hostage Negotiation (Step Control) | Advanced Scenarios | Step Controller | 3 | personality_traits, emotion | ✓ | Step controller engine, play/pause/step controls |
+| Colony Survival (Contrib GM) | Advanced Scenarios | Sequential | 4 | personality_traits | ✓ | All 5 contrib GM components working together |
+| Bookstore Reunion (Formative Mem) | Advanced Scenarios | Sequential | 3 | personality_traits | ✓ | Formative memories generation (Generate Backstory) |
+| Ethics Board (Measurements) | Advanced Scenarios | Sequential | 4 | personality_traits, values | ✓ | Measurements/metrics channels, Component Logs |
+| Diplomatic Crisis (Nested Sim) | Advanced Scenarios | Sequential | 3 | personality_traits | ✓ | Nested sim with back-channel strategy extraction |
 | State Formation | SDG Scenarios | Sequential | 4 | values, cognitive_bias | ✓ | Institution-building (SDG 16) |
 | Labor Strike | SDG Scenarios | Sequential | 4 | emotion, values, social_identity | ✓ | Collective action (SDG 8) |
 | Fishery Management | SDG Scenarios | Sequential | 4 | values, cognitive_bias, TPB | ✓ | Common-pool resources (SDG 14) |
 | Flood Evacuation | SDG Scenarios | Sequential | 5 | TPB, cognitive_bias, emotion, values | ✓ | Emergency response (SDG 11/13) |
 | Educational Opportunity | SDG Scenarios | Sequential | 4 | social_identity, emotion | ✓ | Social mobility (SDG 10) |
-| Hostage Negotiation (Step Control) | Advanced | Step Controller | 3 | personality_traits, emotion | ✓ | Step controller engine, play/pause/step controls |
-| Colony Survival (Contrib GM) | Advanced | Sequential | 4 | personality_traits | ✓ | All 5 contrib GM components working together |
-| Bookstore Reunion (Formative Mem) | Advanced | Sequential | 3 | personality_traits | ✓ | Formative memories generation (Generate Backstory) |
-| Ethics Board (Measurements) | Advanced | Sequential | 4 | personality_traits, values | ✓ | Measurements/metrics channels, Component Logs |
-| Diplomatic Crisis (Nested Sim) | Advanced | Sequential | 3 | personality_traits | ✓ | Nested sim with back-channel strategy extraction |
 
 **Legend:** Components = psychological components on agents. PSC = player-specific context (private information per agent). TPB = theory of planned behavior.
 
@@ -433,7 +434,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ## Template Details
 
-### Basic Templates
+### Quick Start
 
 #### Coffee Shop Encounter
 
@@ -538,7 +539,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ---
 
-### Prefab Type Examples
+### Prefab Demos
 
 #### Planning Agent (Strategic Planning Scenario)
 
@@ -974,7 +975,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ---
 
-### Research Templates
+### Research
 
 #### Vaccine Hesitancy — Psychological Component Study
 
@@ -1173,7 +1174,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ---
 
-### Advanced Templates
+### Advanced Scenarios
 
 #### Nested Simulation Demo
 
@@ -1618,7 +1619,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 ---
 
-### New in v2.4
+### General Scenarios
 
 #### Rational Budget Negotiation
 

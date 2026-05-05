@@ -548,6 +548,11 @@ export async function getNestedSimStrategyTemplate(): Promise<SimulationTemplate
   return response.data;
 }
 
+export async function getDevilsAdvocatePolicyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/devils-advocate-policy');
+  return response.data;
+}
+
 /**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
