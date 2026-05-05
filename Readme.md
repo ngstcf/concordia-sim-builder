@@ -14,7 +14,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
-- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 31 templates with research setups and experiment suggestions
+- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 32 templates with research setups and experiment suggestions
 - [Timeout Configuration](docs/TIMEOUT_CONFIGURATION.md) — Tuning LLM, watchdog, and frontend timeouts
 
 **Research Use Cases:**
@@ -45,7 +45,7 @@ Each simulation produces three output files:
 ## Features
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
-- **31 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and more (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
+- **32 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and more (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
 - **Multi-Agent System** — Define agents with unique goals, memories, psychological components, and behavioral prefabs
 - **Psychological Components** — Personality, cognitive bias, social identity, emotions, values, Theory of Planned Behavior
 - **Multiple Simulation Engines** — Sequential, asynchronous, simultaneous, and step controller (play/pause/step/stop)
@@ -175,7 +175,7 @@ npm run dev
 
 Frontend: `http://localhost:5173`
 
-## Templates (31)
+## Templates (32)
 
 | Category | Templates |
 |----------|-----------|
@@ -185,7 +185,7 @@ Frontend: `http://localhost:5173`
 | **SDG Research** | State Formation (16), Labor Action (8), Fishery Management (14), Disaster Response (11/13), Inequality Mobility (10) |
 | **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack |
 | **v2.4 Features** | Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative memories), Clinical Trial Ethics (measurements), Diplomatic Crisis (nested sim) |
-| **Advanced** | Rational Negotiators, Social Media, Puppet, Conversational Debate, Spaceship Crisis |
+| **Advanced** | Rational Negotiators, Social Media, Puppet, Conversational Debate, Spaceship Crisis, AI Policy Red Team |
 
 See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for detailed parameter documentation and research guides for all templates.
 
@@ -245,7 +245,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (31 templates) |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (32 templates) |
 
 ## Supported Prefabs
 
