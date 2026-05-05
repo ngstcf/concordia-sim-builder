@@ -1,68 +1,8 @@
 # Concordia Compatibility Changelog
 
-## Version 2.5.0 (Current - 2026-05-05)
+## Version 2.4.0 (Current - 2026-05-05)
 
-Four quantitative research features for data-driven social science workflows: structured data export, census-based agent generation, action constraints, and batch runs with parameter sweeps.
-
-### New Features
-
-**Structured Data Export (CSV/JSON)**
-- Export agent actions as CSV (step, agent_name, action, observation) from any completed simulation log
-- Export grounded variable histories as CSV (step, variable_name, variable_type, value)
-- Combined CSV export with `data_type` column to distinguish action vs. variable rows
-- Full JSON export combining both datasets with metadata (total_steps, agent list, variable list)
-- Export CSV and Export JSON buttons in the results header, alongside existing HTML download
-- REST endpoints: `GET /logs/{filename}/export-csv?data_type=actions|variables|both`, `GET /logs/{filename}/export-json`
-- Parses Concordia v2.4 structured log format (ENTRIES/CONTENT_STORE with `_ref` resolution)
-
-**Census/Distribution-Based Agent Generation**
-- Generate agents from statistical distributions instead of hand-crafting each one
-- Two distribution formats: independent marginals (per-dimension proportions) and joint profiles (correlated attribute bundles with weights)
-- CSV and JSON file upload for distribution specs
-- Deterministic sampling with optional random seed for reproducibility
-- Optional LLM enrichment converts demographic profiles into natural-language backstories and goals
-- New "Census / Distribution" tab in the persona generator modal alongside existing LLM generation
-- Distribution summary table shown after generation
-- REST endpoints: `POST /generate-personas-census`, `POST /parse-distribution`
-
-**Structured Action Constraints**
-- Define available actions globally that agents must choose from, replacing open-ended free-text responses
-- Per-action name, description, and optional condition (e.g., "only after round 3")
-- Global actions injected into the simulation premise as an AVAILABLE ACTIONS section
-- Per-agent action overrides via agent editor — restrict individual agents to a subset of global actions
-- Per-agent actions injected as additional memories in the agent's memory bank
-- New Available Actions editor in the simulation builder (collapsible card-style list, blue tag pills when collapsed)
-
-**Batch Runs with Parameter Sweeps**
-- Run the same simulation N times with optional parameter variations
-- Parameter sweep over temperature and max_steps with comma-separated values
-- Cartesian product of sweep values × runs per combination
-- Sequential execution reusing existing `run_simulation_stream()` per run
-- Real-time SSE progress: batch_start, run_complete, batch_complete, batch_cancelled events
-- Live progress bar and per-run results table (index, parameters, status, elapsed time)
-- Batch metadata saved to `logs/batch_{id}.json`, individual runs prefixed with `batch_{id}_run{i}_`
-- Aggregated CSV export from all completed runs in a batch
-- Cancel support — stops after current run finishes
-- REST endpoints: `POST /batch/execute` (SSE), `GET /batch/list`, `GET /batch/{id}/status`, `POST /batch/{id}/cancel`, `GET /batch/{id}/export-csv`
-- Batch button in the run panel alongside Run Simulation
-
-**Documentation**
-- New [Quantitative Research Features Guide](docs/QUANTITATIVE_RESEARCH_FEATURES.md) covering all four features with examples, API reference, and an end-to-end research workflow
-- Cross-reference added to Simulation Building Guide
-
-### New Files
-- `backend/utils/data_exporter.py` — CSV/JSON export from Concordia v2.4 HTML logs and metadata
-- `backend/services/census_generator.py` — distribution sampling, LLM enrichment, CSV/JSON parsing
-- `backend/services/batch_runner.py` — batch orchestrator with SSE streaming
-- `frontend/src/components/SimulationBuilder/AvailableActionsEditor.tsx` — action constraints UI
-- `frontend/src/components/SimulationRunner/BatchRunner.tsx` — batch run modal
-- `docs/QUANTITATIVE_RESEARCH_FEATURES.md` — user guide
-
----
-
-## Version 2.4.0 (2026-05-03)
-
-Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new simulation engines, GM components, and a redesigned frontend.
+Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new simulation engines, GM components, a redesigned frontend, and quantitative research features.
 
 ### Breaking Changes from v2.1.0
 - Concordia v2.4 removed `concordia.utils.html` — replaced all `PythonObjectToHTMLConverter` calls with `SimulationLog.to_html()`
@@ -142,6 +82,14 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 **Codebase**
 - Refactored `simulations.py` (6200 → 2100 lines): 26 templates extracted into `backend/api/templates/` package
 - Templates registered via dynamic `router.add_api_route()`
+
+**Quantitative Research Features**
+- Structured data export (CSV/JSON) — export agent actions and grounded variable histories as tabular data from any simulation log; REST endpoints `GET /logs/{filename}/export-csv` and `export-json`; Export CSV/JSON buttons in results header
+- Census/distribution-based agent generation — generate agents from statistical distributions (independent marginals or joint profiles); CSV/JSON file upload; deterministic seeding; optional LLM enrichment; new "Census / Distribution" tab in persona generator modal; REST endpoints `POST /generate-personas-census`, `POST /parse-distribution`
+- Structured action constraints — define available actions globally (name, description, condition) injected into premise as AVAILABLE ACTIONS section; per-agent action overrides injected as memories; new Available Actions editor in simulation builder
+- Batch runs with parameter sweeps — run simulations N times with optional sweep over temperature/max_steps; SSE progress streaming; live progress bar and results table; batch metadata and per-run logs saved to `logs/`; aggregated CSV export; REST endpoints `POST /batch/execute`, `GET /batch/{id}/status`, `POST /batch/{id}/cancel`, `GET /batch/{id}/export-csv`
+- New files: `backend/utils/data_exporter.py`, `backend/services/census_generator.py`, `backend/services/batch_runner.py`, `frontend/src/components/SimulationBuilder/AvailableActionsEditor.tsx`, `frontend/src/components/SimulationRunner/BatchRunner.tsx`
+- New documentation: [Quantitative Research Features Guide](docs/QUANTITATIVE_RESEARCH_FEATURES.md)
 
 ### Bug Fixes
 - Fixed grounded variables not updating during simulation — GM was not instructed to output variable changes, so the component's post_act extraction always returned empty. Injected tracking instructions into the premise (visible to the event resolution chain), added fast `[VARIABLES: k=v]` tag parsing before LLM fallback, and fixed history recording to capture post-update values
