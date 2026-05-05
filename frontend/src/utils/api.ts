@@ -553,6 +553,11 @@ export async function getDevilsAdvocatePolicyTemplate(): Promise<SimulationTempl
   return response.data;
 }
 
+export async function getMusicCareerCrossroadsTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/music-career-crossroads');
+  return response.data;
+}
+
 /**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')

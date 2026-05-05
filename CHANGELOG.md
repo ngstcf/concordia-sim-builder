@@ -93,7 +93,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Added mount-time recovery — on page refresh or Vite HMR reload, frontend checks `/status` for running simulations and auto-reconnects with polling
 - Fixed observation count showing 0 in Statistical Dashboard — v2.4 parser checked `entry_type` and `summary` fields but observations are stored under `__observation__` key in resolved `deduplicated_data.value` dicts
 
-### Templates (32 total)
+### Templates (33 total)
 
 **Original (v2.1.0):**
 1. Peace Negotiation - Russia-Ukraine talks
@@ -124,7 +124,8 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 24. Clinical Trial Ethics Board - Measurements demo
 25. Diplomatic Crisis - Nested simulation demo
 26. AI Policy Red Team - Devil's advocate policy stress-test
-27-32. Additional templates (see SIMULATION_TEMPLATES_GUIDE.md)
+27. Music Career Crossroads - Career deliberation with financial planning
+28-33. Additional templates (see SIMULATION_TEMPLATES_GUIDE.md)
 
 ---
 

@@ -36,6 +36,7 @@ from .formative_memories_demo import TEMPLATE as _formative_memories_demo
 from .measurements_demo import TEMPLATE as _measurements_demo
 from .nested_sim_strategy import TEMPLATE as _nested_sim_strategy
 from .devils_advocate_policy import TEMPLATE as _devils_advocate_policy
+from .music_career_crossroads import TEMPLATE as _music_career_crossroads
 
 TEMPLATES: dict[str, dict] = {
     "peace-negotiation": _peace_negotiation,
@@ -70,4 +71,5 @@ TEMPLATES: dict[str, dict] = {
     "measurements-demo": _measurements_demo,
     "nested-sim-strategy": _nested_sim_strategy,
     "devils-advocate-policy": _devils_advocate_policy,
+    "music-career-crossroads": _music_career_crossroads,
 }

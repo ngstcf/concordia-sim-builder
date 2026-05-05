@@ -4,7 +4,7 @@ This guide explains every pre-built template in the Concordia Simulation Builder
 
 You can run templates as-is or modify them to fit your needs. All parameters are editable after loading.
 
-**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 31 templates include research-grade agent configurations with 7-10 memories per agent, psychological components, player-specific context, and measurable goals.
+**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 33 templates include research-grade agent configurations with 7-10 memories per agent, psychological components, player-specific context, and measurable goals.
 
 ---
 
@@ -26,6 +26,7 @@ You can run templates as-is or modify them to fit your needs. All parameters are
 | Phishing Attack Simulation | Research | Sequential | 4 | cognitive_bias | — | Nested simulations (sims within sims) |
 | Urban Gentrification | Research | Sequential | 6 | personality_traits, cognitive_bias, values, social_identity | ✓ | Grounded variables + decision points |
 | AI Policy Red Team | Research | Sequential | 3 | personality_traits, values | ✓ | Devil's advocate policy stress-testing |
+| Music Career Crossroads | Research | Sequential | 5 | personality_traits, values | ✓ | Career deliberation, financial planning, grounded variables + decision points |
 | Rational Negotiators | General Scenarios | Sequential | 2 | personality_traits, values | ✓ | Utility-maximizing rational agents |
 | Philosophy Roundtable | General Scenarios | Sequential | 3 | personality_traits, values | ✓ | Dialogue-optimized conversational agents |
 | Social Media Debate | General Scenarios | Asynchronous | 4 | social_identity, cognitive_bias | ✓ | Async engine for social media dynamics |
@@ -1171,6 +1172,55 @@ You can also set it via JSON import/export using a `player_specific_context` key
 **Academic connections:** Urban gentrification theory (Glass 1964, Smith 1996), rent gap theory, displacement and community change (Marcuse 1985), inclusionary zoning effectiveness (Calavita & Mallach 2010), stakeholder analysis in urban planning, SDG 11 (Sustainable Cities).
 
 **Platform features demonstrated:** Grounded variables (11 metrics: numerical, percentage, boolean, categorical), critical_decision_points with scripted votes, player_specific_context for all 6 agents, action-oriented goals with policy verbs, 14 shared memories, 30 steps (longest template), 6 agents (largest cast).
+
+---
+
+#### Music Career Crossroads — Career Deliberation & Financial Planning
+
+**Learning objectives:** Observe how identity-vocation conflict shapes career decisions under financial pressure. Study how advisors with different lived experiences (pivot, persist, plan) frame the same dilemma differently. Track whether financial data or emotional arguments have more influence on decision-making.
+
+**Setup overview:**
+
+| Field | Value |
+|---|---|
+| Engine | Sequential |
+| Steps | 20 |
+| Agents | 5 |
+| GM | dialogic__GameMaster |
+| Grounded variables | 7 (career_direction, financial_clarity, monthly_income_gap, action_items_committed, emotional_readiness, advisor_consensus, music_income_potential) |
+| Critical decision points | 2 (step 7: hourly rate confrontation, step 14: financial independence number) |
+
+**Premise:** Jordan Kim, a 26-year-old singer-songwriter, has been pursuing music full-time for 4 years. Earning $600/month from music and $1,200/month from a barista job against $2,300 in expenses — a $500/month deficit. Student loans: $28,000. Savings: $3,100. No health insurance. Jordan gathers five trusted people to deliberate three options: commit fully to music, pivot to a stable career, or build a hybrid path. The goal is financial independence by age 30.
+
+**Agent design (5 agents):**
+
+| Agent | Role | Perspective |
+|---|---|---|
+| **Jordan Kim** (26) | The musician | At the crossroads — 4 years in, running a monthly deficit, questioning whether talent is enough |
+| **Sandra Kim** (54) | Jordan's mother, math teacher | Calculated Jordan's music hourly rate at $2.80/hour. Wants a plan with numbers, not dreams |
+| **Dev Okafor** (27) | College bandmate, now software engineer | Pivoted 18 months ago, earns $78K, paid off loans in 14 months — but still grieves the music |
+| **Rae Castillo** (29) | Working musician, financially independent | $4,200/month from 5 music income streams — took 7 years to build. Thinks Jordan is romanticizing the wrong version of a music career |
+| **Marcus Wei** (34) | Financial planner for creative professionals | No opinions on career, only numbers. 60% of his musician clients eventually pivot |
+
+**Player-specific context highlights:** Jordan has a 10-day deadline on a supervisor promotion with health benefits (hidden from group). Dev knows about a $65K music-tech job but hasn't mentioned it. Sandra's undisclosed divorce adds financial urgency. Rae just lost a $600/month teaching contract. Marcus's projection shows loans unpaid until age 42 on the current path.
+
+**Critical decision points:** Step 7 forces a reckoning when Sandra reveals the $2.80/hour calculation. Step 14 shifts from abstract debate to concrete planning when Marcus asks Jordan to name a specific financial independence number.
+
+**Key research questions:**
+- Does financial data (hourly rate, deficit projections) shift career direction more than lived experience (Dev's pivot story, Rae's persistence story)?
+- How does sunk cost reasoning ("I've invested 4 years") interact with forward-looking financial analysis?
+- Do advisors converge on a recommendation despite starting from different positions?
+- At what point does Jordan's emotional state shift from avoidance to resolution?
+
+**Experiment variations:**
+- Remove Marcus (financial planner) — does the conversation stay emotional without a numbers anchor?
+- Double Jordan's music income to $1,200/month (breakeven) — does removing the deficit urgency change the recommendation?
+- Replace Dev with a second working musician — does the absence of a successful pivot story shift consensus toward music?
+- Set max_steps to 10 — does time pressure force faster emotional resolution or more avoidance?
+
+**Academic connections:** Career decision-making under uncertainty (Lent et al. 1994), sunk cost in career persistence (Staw 1976), identity-vocation conflict in creative professionals (Bridgstock 2005), financial planning for artists (Menger 1999), survivorship bias in career advice, deliberative alignment theory.
+
+**Platform features demonstrated:** Grounded variables (7 metrics: categorical career direction, percentage financial clarity, numerical income gap), critical_decision_points at steps 7 and 14, player_specific_context for all 5 agents with hidden information, dialogic GM with game_master_choice acting order, 20 steps.
 
 ---
 

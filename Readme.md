@@ -14,7 +14,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
-- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 32 templates with research setups and experiment suggestions
+- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 33 templates with research setups and experiment suggestions
 - [Template Creation Guide](docs/TEMPLATE_CREATION_GUIDE.md) — Developer guide for adding new simulation templates
 - [Timeout Configuration](docs/TIMEOUT_CONFIGURATION.md) — Tuning LLM, watchdog, and frontend timeouts
 
@@ -46,7 +46,7 @@ Each simulation produces three output files:
 ## Features
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
-- **32 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and more (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
+- **33 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and more (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
 - **Multi-Agent System** — Define agents with unique goals, memories, psychological components, and behavioral prefabs
 - **Psychological Components** — Personality, cognitive bias, social identity, emotions, values, Theory of Planned Behavior
 - **Multiple Simulation Engines** — Sequential, asynchronous, simultaneous, and step controller (play/pause/step/stop)
@@ -176,13 +176,13 @@ npm run dev
 
 Frontend: `http://localhost:5173`
 
-## Templates (32)
+## Templates (33)
 
 | Category | Templates |
 |----------|-----------|
 | **Quick Start** | Coffee Shop Demo (5 steps), Peace Negotiation (20 steps) |
 | **Prefab Demos** | Planning Agent, Scripted Entity, Context-Aware Moderator, Dialogic Conversation, Strategic Game, Interviewer, Formative Memories, Marketplace |
-| **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack, AI Policy Red Team |
+| **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack, AI Policy Red Team, Music Career Crossroads |
 | **General Scenarios** | Rational Negotiators, Philosophy Roundtable, Social Media Debate, Sealed-Bid Auction, Wizard-of-Oz CS Training, Spaceship Crisis |
 | **Advanced Scenarios** | Nested Simulation, Grounded Variables, Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative mem), Ethics Board (measurements), Diplomatic Crisis (nested sim) |
 | **SDG Scenarios** | State Formation (16), Labor Strike (8), Fishery Management (14), Flood Evacuation (11/13), Educational Opportunity (10) |
@@ -247,7 +247,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (32 templates) |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (33 templates) |
 
 ## Supported Prefabs
 

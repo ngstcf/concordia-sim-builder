@@ -31,6 +31,7 @@ import {
   getMeasurementsDemoTemplate,
   getNestedSimStrategyTemplate,
   getDevilsAdvocatePolicyTemplate,
+  getMusicCareerCrossroadsTemplate,
 } from '../../utils/api';
 
 export interface TemplateMetadata {
@@ -133,6 +134,7 @@ export const TEMPLATES: TemplateMetadata[] = [
   { id: 'measurements-demo', name: 'Ethics Board (Measurements)', description: 'Run and check Component Logs tab for per-component measurement channels', category: 'Advanced Scenarios', tags: ['sequential', 'measurements', 'grounded-vars', 'player-context', 'components'], agentCount: 4, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster', agentNames: ['Dr. Elaine Marsh', 'Dr. Raj Patel', 'Maria Santos', 'Dr. Kevin Liu'], keywords: 'ethics board measurements metrics logging' },
   { id: 'nested-sim-strategy', name: 'Diplomatic Crisis (Nested Sim)', description: 'Ambassador runs a back-channel mini-simulation before the formal UN session', category: 'Advanced Scenarios', tags: ['sequential', 'nested-sim', 'grounded-vars', 'player-context', 'components'], agentCount: 3, stepCount: 15, engineType: 'sequential', gmPrefab: 'generic__GameMaster', agentNames: ['Ambassador Nakamura', 'Deputy Ambassador Wei', 'Ambassador Chen'], keywords: 'diplomacy UN nested simulation back-channel strategy' },
   { id: 'devils-advocate-policy', name: 'AI Policy Red Team', description: 'Government advisory panel stress-tests a draft AI regulation framework with an assigned devil\'s advocate', category: 'Research', tags: ['sequential', 'grounded-vars', 'player-context', 'components'], agentCount: 3, stepCount: 15, engineType: 'sequential', gmPrefab: 'dialogic__GameMaster', agentNames: ['Dr. Okafor', 'Kwame Mensah', 'Ms. Tanaka'], keywords: 'AI regulation policy red team devil advocate governance adversarial debate' },
+  { id: 'music-career-crossroads', name: 'Music Career Crossroads', description: 'A 26-year-old musician deliberates whether to commit to music, pivot careers, or build a hybrid path toward financial independence', category: 'Research', tags: ['sequential', 'grounded-vars', 'player-context', 'components', 'critical-decisions'], agentCount: 5, stepCount: 20, engineType: 'sequential', gmPrefab: 'dialogic__GameMaster', agentNames: ['Jordan Kim', 'Sandra Kim', 'Dev Okafor', 'Rae Castillo', 'Marcus Wei'], keywords: 'music career decision financial independence pivot creative arts deliberation' },
 ];
 
 export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
@@ -168,6 +170,7 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = 
   'measurements-demo': getMeasurementsDemoTemplate,
   'nested-sim-strategy': getNestedSimStrategyTemplate,
   'devils-advocate-policy': getDevilsAdvocatePolicyTemplate,
+  'music-career-crossroads': getMusicCareerCrossroadsTemplate,
 };
 
 export const ALL_CATEGORIES: TemplateCategory[] = ['Quick Start', 'Prefab Demos', 'Research', 'General Scenarios', 'Advanced Scenarios', 'SDG Scenarios'];
