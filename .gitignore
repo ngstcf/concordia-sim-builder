@@ -76,7 +76,6 @@ backend/saved_configs/*.json
 
 # Untracked documentation
 blog_article.md
-documentation.html
 simulation_for_sdgs.md
 GLM_SETUP.md
 
@@ -113,7 +112,6 @@ reports/
 
 # Research use cases
 research-use-cases/
-documentation.html
 
 # Upstream Concordia clone (installed as editable dependency)
 concordia-upstream/
