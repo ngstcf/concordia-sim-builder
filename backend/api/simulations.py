@@ -738,9 +738,9 @@ async def delete_checkpoint_files():
     Delete all checkpoint files from the logs directory.
 
     Checkpoint files include:
-    - Regular checkpoints: '*_checkpoint_stepN.html'
-    - Emergency checkpoints: '*_EMERGENCY_CHECKPOINT.html'
-    - Watchdog emergency: '*_WATCHDOG_EMERGENCY*.html'
+    - Regular checkpoints: '*_checkpoint_stepN.html' + '.metadata.json'
+    - Emergency checkpoints: '*_EMERGENCY_CHECKPOINT.html' + '.metadata.json'
+    - Watchdog emergency: '*_WATCHDOG_EMERGENCY*.html' + '.metadata.json'
 
     Returns:
         Summary of deleted files
@@ -757,13 +757,18 @@ async def delete_checkpoint_files():
                 "deleted_count": 0
             }
 
-        # Find all checkpoint files (regular, emergency, and watchdog)
+        # Find all checkpoint files and their metadata (regular, emergency, and watchdog)
         checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
+        checkpoint_meta = list(logs_dir.glob("*_checkpoint_step*.metadata.json"))
         emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
+        emergency_meta = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.metadata.json"))
         watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
+        watchdog_meta = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.metadata.json"))
 
         # Combine all checkpoint types
-        all_checkpoint_files = checkpoint_files + emergency_files + watchdog_files
+        all_checkpoint_files = (checkpoint_files + checkpoint_meta +
+                                emergency_files + emergency_meta +
+                                watchdog_files + watchdog_meta)
 
         deleted_count = 0
         deleted_files = []
