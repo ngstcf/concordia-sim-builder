@@ -58,6 +58,7 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
   const [customInstructions, setCustomInstructions] = useState('');
   const [fixedResponses, setFixedResponses] = useState<Array<{ key: string; value: string }>>([]);
   const [reasoningSteps, setReasoningSteps] = useState<Array<{ question: string; answer_prefix: string; num_memories: number; add_to_memory: boolean }>>([]);
+  const [endStatement, setEndStatement] = useState('');
   const [generatingBackstory, setGeneratingBackstory] = useState(false);
   const [backstoryContext, setBackstoryContext] = useState('');
   const [showBackstoryDialog, setShowBackstoryDialog] = useState(false);
@@ -107,9 +108,10 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
       setFixedResponses(fr ? Object.entries(fr).map(([key, value]) => ({ key, value })) : []);
       const rs = comps.reasoning_steps as Array<any> | undefined;
       setReasoningSteps(rs || []);
+      setEndStatement((comps.end_statement as string) || '');
 
       // Load existing component configurations (excluding script and prefab params)
-      const prefabParamKeys = ['script', 'observation_history_length', 'situation_perception_history_length', 'person_by_situation_history_length', 'force_time_horizon', 'custom_instructions', 'fixed_responses', 'reasoning_steps'];
+      const prefabParamKeys = ['script', 'observation_history_length', 'situation_perception_history_length', 'person_by_situation_history_length', 'force_time_horizon', 'custom_instructions', 'fixed_responses', 'reasoning_steps', 'end_statement'];
       const existingComponents = agent.components || {};
       const componentEntries = Object.entries(existingComponents)
         .filter(([key]) => !prefabParamKeys.includes(key))
@@ -160,6 +162,9 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
     if (prefab === 'minimal__Entity' && reasoningSteps.length > 0) {
       const validSteps = reasoningSteps.filter(s => s.question.trim());
       if (validSteps.length > 0) components.reasoning_steps = validSteps;
+    }
+    if (prefab === 'context_aware_scripted__Entity' && endStatement.trim()) {
+      components.end_statement = endStatement;
     }
 
     updateAgent(agentId, {
@@ -760,6 +765,20 @@ export default function AgentEditor({ agentId, onClose }: AgentEditorProps) {
               <p className="mt-2 text-xs text-gray-500">
                 Prompts will be executed in order. Drag to reorder.
               </p>
+
+              {prefab === 'context_aware_scripted__Entity' && (
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Closing Statement</label>
+                  <textarea
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                    value={endStatement}
+                    onChange={e => setEndStatement(e.target.value)}
+                    placeholder="Optional: Statement delivered automatically when all scripted prompts are exhausted. Leave empty for a generic closing."
+                  />
+                  <p className="text-[11px] text-gray-500 mt-0.5">After all prompts are used, the agent delivers this statement and then goes silent.</p>
+                </div>
+              )}
             </div>
           )}
 
