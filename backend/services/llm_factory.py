@@ -19,6 +19,13 @@ _llm_activity = {
 }
 _llm_activity_lock = threading.Lock()
 
+_active_task_id: Optional[str] = None
+
+
+def set_active_task_id(task_id: Optional[str]):
+    global _active_task_id
+    _active_task_id = task_id
+
 
 def get_llm_activity() -> dict:
     with _llm_activity_lock:
@@ -76,6 +83,12 @@ class TemperatureConfiguredModel(language_model.LanguageModel):
                 timeout = float(env_timeout)
             except ValueError:
                 pass
+
+        if _active_task_id:
+            from backend.services.simulation_state import simulation_state
+            if simulation_state.should_cancel(_active_task_id):
+                from backend.services.simulation_runner import SimulationCancelled
+                raise SimulationCancelled(f"Cancelled during LLM call (task {_active_task_id})")
 
         with _llm_activity_lock:
             _llm_activity['last_call_start'] = time.time()

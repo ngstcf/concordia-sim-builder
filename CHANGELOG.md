@@ -77,6 +77,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 
 **Simulation Management**
 - Effective cancellation mid-run: step callbacks check `should_cancel` and raise `SimulationCancelled`
+- LLM-level cancel interrupt — cancel flag checked before every LLM call via `TemperatureConfiguredModel`, reducing blind window from an entire step (~8-12 LLM calls) to a single call (~5-30s)
 - Partial results saved on cancel (HTML log + metadata)
 - Per-simulation delete endpoint (`DELETE /api/simulations/logs/{filename}`)
 - Server shutdown endpoint and Kill Server button

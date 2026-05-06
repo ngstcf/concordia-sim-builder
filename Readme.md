@@ -74,7 +74,7 @@ Each simulation produces three output files:
 - **8 LLM Providers** — OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
 - **Separate GM LLM** — Independent model selection for Game Master
 - **Checkpoint System** — Automatic checkpoints with metadata, watchdog emergency saves, scenario-named files
-- **Simulation Management** — Mid-run cancellation with partial results, per-simulation delete, server shutdown
+- **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
 - **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
 For the complete building guide, see [SIMULATION_BUILDING_GUIDE.md](docs/SIMULATION_BUILDING_GUIDE.md).

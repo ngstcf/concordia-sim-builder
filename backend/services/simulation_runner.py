@@ -361,14 +361,19 @@ async def run_simulation_stream(
             })
 
         def run_simulation_blocking():
-            kwargs = dict(
-                max_steps=max_steps,
-                get_state_callback=sync_progress_callback,
-            )
-            if step_ctrl is not None:
-                kwargs['step_controller'] = step_ctrl
-                kwargs['step_callback'] = step_data_callback
-            return sim.play(**kwargs)
+            from backend.services.llm_factory import set_active_task_id
+            set_active_task_id(task_id)
+            try:
+                kwargs = dict(
+                    max_steps=max_steps,
+                    get_state_callback=sync_progress_callback,
+                )
+                if step_ctrl is not None:
+                    kwargs['step_controller'] = step_ctrl
+                    kwargs['step_callback'] = step_data_callback
+                return sim.play(**kwargs)
+            finally:
+                set_active_task_id(None)
 
         # Watchdog settings - detect when simulation hangs
         # Can be overridden via WATCHDOG_TIMEOUT_SECONDS environment variable
@@ -1272,6 +1277,8 @@ async def run_simulation_simple(
         for gm in sim.game_masters:
             debug_print(f"[DEBUG] Game Master: {gm.name}, type: {type(gm).__name__}")
 
+        from backend.services.llm_factory import set_active_task_id
+        set_active_task_id(task_id)
         was_cancelled = False
         try:
             results = sim.play(
@@ -1286,6 +1293,8 @@ async def run_simulation_simple(
             raw_log = sim.get_raw_log()
             results = _raw_log_to_html(raw_log)
             print(f"[CANCEL] Saved partial results ({len(str(results))} chars)")
+        finally:
+            set_active_task_id(None)
         debug_print(f"[DEBUG] Simulation play completed, results type: {type(results).__name__}")
 
         # Try to get step count from results
