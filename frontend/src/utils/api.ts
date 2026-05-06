@@ -558,6 +558,21 @@ export async function getMusicCareerCrossroadsTemplate(): Promise<SimulationTemp
   return response.data;
 }
 
+export async function getUpstreamSocialMediaTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/upstream-social-media');
+  return response.data;
+}
+
+export async function getUpstreamAiCompanionPhilosophyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/upstream-ai-companion-philosophy');
+  return response.data;
+}
+
+export async function getUpstreamAiCompanionTrigUpsellTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/upstream-ai-companion-trig-upsell');
+  return response.data;
+}
+
 /**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')

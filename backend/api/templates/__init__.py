@@ -37,6 +37,9 @@ from .measurements_demo import TEMPLATE as _measurements_demo
 from .nested_sim_strategy import TEMPLATE as _nested_sim_strategy
 from .devils_advocate_policy import TEMPLATE as _devils_advocate_policy
 from .music_career_crossroads import TEMPLATE as _music_career_crossroads
+from .upstream_social_media import TEMPLATE as _upstream_social_media
+from .upstream_ai_companion_philosophy import TEMPLATE as _upstream_ai_companion_philosophy
+from .upstream_ai_companion_trig_upsell import TEMPLATE as _upstream_ai_companion_trig_upsell
 
 TEMPLATES: dict[str, dict] = {
     "peace-negotiation": _peace_negotiation,
@@ -72,4 +75,7 @@ TEMPLATES: dict[str, dict] = {
     "nested-sim-strategy": _nested_sim_strategy,
     "devils-advocate-policy": _devils_advocate_policy,
     "music-career-crossroads": _music_career_crossroads,
+    "upstream-social-media": _upstream_social_media,
+    "upstream-ai-companion-philosophy": _upstream_ai_companion_philosophy,
+    "upstream-ai-companion-trig-upsell": _upstream_ai_companion_trig_upsell,
 }
