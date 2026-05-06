@@ -253,7 +253,7 @@ export default function SimulationRunner() {
   const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stopped' | null>(null);
+  const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stepping' | 'stopped' | null>(null);
   const [stepDataLog, setStepDataLog] = useState<Array<{ step: number; acting_entity: string; action: string }>>([]);
   const isStepControlled = config?.engine_type === 'step_controller';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -304,6 +304,8 @@ export default function SimulationRunner() {
     setShowLogs(prev => {
       const next = !prev;
       if (next) {
+        logEsRef.current?.close();
+        logEsRef.current = null;
         setLogEntries([]);
         logEsRef.current = connectLogStream(
           (entry) => setLogEntries(prev => {
@@ -594,10 +596,11 @@ export default function SimulationRunner() {
       // onStepData
       (data) => {
         setStepDataLog(prev => [...prev, { step: data.step, acting_entity: data.acting_entity, action: data.action }]);
+        setControllerState('paused');
       },
       // onControllerState
       (data) => {
-        setControllerState(data.state as 'playing' | 'paused' | 'stopped');
+        setControllerState(data.state as 'playing' | 'paused' | 'stepping' | 'stopped');
         if (data.task_id) setTaskId(data.task_id);
       },
       // gmLlmSettings
@@ -965,7 +968,7 @@ export default function SimulationRunner() {
               <div className="flex-1 space-y-3">
                 <div className="flex gap-2">
                   <button
-                    onClick={() => taskId && simulationPlay(taskId)}
+                    onClick={() => taskId && simulationPlay(taskId).then(() => setControllerState('playing'))}
                     disabled={controllerState === 'playing'}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
                       controllerState === 'playing'
@@ -977,7 +980,7 @@ export default function SimulationRunner() {
                     Play
                   </button>
                   <button
-                    onClick={() => taskId && simulationPause(taskId)}
+                    onClick={() => taskId && simulationPause(taskId).then(() => setControllerState('paused'))}
                     disabled={controllerState === 'paused'}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all ${
                       controllerState === 'paused'
@@ -989,15 +992,21 @@ export default function SimulationRunner() {
                     Pause
                   </button>
                   <button
-                    onClick={() => taskId && simulationStep(taskId)}
-                    disabled={controllerState === 'playing'}
+                    onClick={() => taskId && simulationStep(taskId).then(() => setControllerState('stepping'))}
+                    disabled={controllerState === 'playing' || controllerState === 'stepping'}
                     className="flex-1 py-2 px-4 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:bg-blue-300 disabled:cursor-not-allowed"
                   >
                     <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 15,12 5,21"/><rect x="16" y="3" width="3" height="18"/></svg>
                     Step
                   </button>
                   <button
-                    onClick={() => taskId && simulationStop(taskId)}
+                    onClick={async () => {
+                      if (!taskId) return;
+                      await simulationStop(taskId);
+                      setControllerState('stopped');
+                      await cancelSimulation(taskId);
+                      setCancelling(true);
+                    }}
                     className="py-2 px-4 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-all"
                   >
                     <svg className="inline mr-1.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
@@ -1005,23 +1014,26 @@ export default function SimulationRunner() {
                   </button>
                 </div>
                 <div className={`text-center text-xs font-medium py-1.5 rounded-lg ${
+                  controllerState === 'stepping' ? 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse' :
                   controllerState === 'paused' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
                   controllerState === 'playing' ? 'bg-green-50 text-green-700 border border-green-200' :
                   'bg-gray-50 text-gray-600 border border-gray-200'
                 }`}>
+                  {controllerState === 'stepping' && 'Executing step — waiting for LLM...'}
                   {controllerState === 'paused' && 'Paused — click Step or Play to continue'}
                   {controllerState === 'playing' && 'Running continuously...'}
                   {controllerState === 'stopped' && 'Stopped'}
                 </div>
                 {stepDataLog.length > 0 && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto">
                     <p className="text-xs font-semibold text-gray-500 mb-2">Step Log</p>
                     {stepDataLog.map((entry, i) => (
-                      <div key={i} className="text-xs text-gray-700 py-1 border-b border-gray-100 last:border-0">
-                        <span className="font-mono text-gray-400 mr-2">#{entry.step}</span>
-                        <span className="font-semibold text-blue-700">{entry.acting_entity}</span>
-                        <span className="text-gray-400 mx-1">—</span>
-                        <span className="text-gray-600 truncate">{entry.action.slice(0, 120)}{entry.action.length > 120 ? '...' : ''}</span>
+                      <div key={i} className="text-xs text-gray-700 py-2 border-b border-gray-100 last:border-0">
+                        <div className="flex items-baseline gap-2 mb-0.5">
+                          <span className="font-mono text-gray-400">#{entry.step}</span>
+                          <span className="font-semibold text-blue-700">{entry.acting_entity}</span>
+                        </div>
+                        <p className="text-gray-600 pl-6">{entry.action}</p>
                       </div>
                     ))}
                   </div>

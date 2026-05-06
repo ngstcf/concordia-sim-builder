@@ -103,6 +103,11 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Completed simulations now retained in backend state (last 20) so the status endpoint returns results even after the SSE stream ends
 - Added mount-time recovery — on page refresh or Vite HMR reload, frontend checks `/status` for running simulations and auto-reconnects with polling
 - Fixed observation count showing 0 in Statistical Dashboard — v2.4 parser checked `entry_type` and `summary` fields but observations are stored under `__observation__` key in resolved `deduplicated_data.value` dicts
+- Fixed step controller buttons (Play/Pause/Step/Stop) not updating UI state — API calls succeeded but frontend never updated `controllerState` from the response
+- Fixed Step button giving no visual feedback — added "Stepping" state with pulsing indicator while waiting for LLM, and removed 120-char action text truncation in Step Log
+- Fixed Stop button not actually ending the simulation — now calls `cancelSimulation()` in addition to stopping the step controller
+- Fixed Kill Server button not killing all worker processes — replaced single-process `os.kill` with port-based `lsof`/`kill` to catch reloader + all workers
+- Fixed duplicate messages in Live Logs — React StrictMode double-mount opened two SSE connections to `/logs/stream`; now closes existing connection before opening a new one
 
 ### Templates (38 total)
 

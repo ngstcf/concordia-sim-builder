@@ -5,6 +5,7 @@ Main application entry point.
 """
 import os
 import signal
+import subprocess
 
 # Load environment variables from .env file FIRST
 # This must happen before any other imports that depend on debug_print
@@ -83,13 +84,12 @@ async def health_check():
 
 @app.post("/api/server/shutdown")
 async def shutdown_server():
-    """Kill server + reloader parent immediately."""
-    ppid = os.getppid()
-    try:
-        os.kill(ppid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    os._exit(1)
+    """Kill all processes on our port, then exit."""
+    subprocess.Popen(
+        ['sh', '-c', 'sleep 0.3 && kill -9 $(lsof -ti :8000) 2>/dev/null'],
+        start_new_session=True,
+    )
+    return {"status": "shutting_down"}
 
 
 # Serve frontend static files in production
