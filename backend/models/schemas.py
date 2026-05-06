@@ -176,6 +176,10 @@ class SimulationConfig(BaseModel):
         None,
         description="Character-specific context (for formative memories initializer)"
     )
+    player_specific_memories: Optional[Dict[str, List[str]]] = Field(
+        None,
+        description="Per-character memory lists (for formative memories initializer)"
+    )
     checkpoint_interval: int = Field(
         5,
         ge=1,

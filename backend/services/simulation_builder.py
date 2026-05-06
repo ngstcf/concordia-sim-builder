@@ -34,6 +34,25 @@ from backend.models.schemas import (
 from backend.prefabs import context_aware_scripted
 
 
+def _safe_get_package_classes(module) -> dict:
+    """Like helper_functions.get_package_classes but skips classes that fail to instantiate."""
+    import inspect, types
+    package_name = module.__package__
+    prefabs = {}
+    submodule_names = [v for v in dir(module) if not v.startswith('__')]
+    for submodule_name in submodule_names:
+        submodule = getattr(module, submodule_name)
+        for var_name in dir(submodule):
+            var = getattr(submodule, var_name)
+            if inspect.isclass(var) and var.__module__.startswith(package_name):
+                key = f'{submodule_name}__{var_name}'
+                try:
+                    prefabs[key] = var()
+                except TypeError:
+                    pass
+    return prefabs
+
+
 def load_available_prefabs() -> dict:
     """Load all available prefabs from Concordia (core + contrib) and custom prefabs."""
     from concordia.contrib.prefabs import entity as contrib_entity_prefabs
@@ -42,8 +61,8 @@ def load_available_prefabs() -> dict:
     prefabs = {
         **helper_functions.get_package_classes(entity_prefabs),
         **helper_functions.get_package_classes(game_master_prefabs),
-        **helper_functions.get_package_classes(contrib_entity_prefabs),
-        **helper_functions.get_package_classes(contrib_gm_prefabs),
+        **_safe_get_package_classes(contrib_entity_prefabs),
+        **_safe_get_package_classes(contrib_gm_prefabs),
     }
 
     # Add custom context-aware scripted prefab
@@ -88,18 +107,24 @@ def build_simulation(
 
     # Optional: Add formative memories initializer if player_specific_context is provided
     if config.player_specific_context:
+        init_params = {
+            'name': 'initial setup rules',
+            'next_game_master_name': config.game_master.name,
+            'shared_memories': config.shared_memories,
+            'player_specific_context': {
+                agent.name: config.player_specific_context.get(agent.name, "")
+                for agent in config.agents
+            },
+        }
+        if config.player_specific_memories:
+            init_params['player_specific_memories'] = {
+                agent.name: config.player_specific_memories.get(agent.name, [])
+                for agent in config.agents
+            }
         initializer_config = prefab_lib.InstanceConfig(
             prefab='formative_memories_initializer__GameMaster',
             role=prefab_lib.Role.INITIALIZER,
-            params={
-                'name': 'initial setup rules',
-                'next_game_master_name': config.game_master.name,
-                'shared_memories': config.shared_memories,
-                'player_specific_context': {
-                    agent.name: config.player_specific_context.get(agent.name, "")
-                    for agent in config.agents
-                },
-            }
+            params=init_params,
         )
         instances.append(initializer_config)
 
@@ -217,6 +242,14 @@ def build_simulation(
     if 'player_names' in config.game_master.parameters:
         gm_params['player_names'] = config.game_master.parameters['player_names']
         debug_print(f"[DEBUG] player_names: {config.game_master.parameters['player_names']}")
+
+    # Add GameMasterSimultaneous params if provided
+    for sim_gm_key in ('start_time', 'time_period_minutes', 'locations',
+                        'game_rules', 'use_gm_working_memory',
+                        'extra_event_resolution_steps'):
+        if sim_gm_key in config.game_master.parameters:
+            gm_params[sim_gm_key] = config.game_master.parameters[sim_gm_key]
+            debug_print(f"[DEBUG] GM param {sim_gm_key}: {config.game_master.parameters[sim_gm_key]}")
 
     # Add scenes if provided (for game-theoretic GM)
     # Convert dict scenes to SceneSpec objects for Concordia
@@ -558,6 +591,7 @@ def get_available_prefabs_info() -> list[dict]:
         'async_social_media__GameMaster': 'Social media simulation with forums, posts, and asynchronous interaction',
 
         # Game master prefabs — contrib
+        'simultaneous_resolution_gm__GameMasterSimultaneous': 'Simultaneous event resolution GM with location tracking, NPC events, working memory, and time-based pacing',
         'space_ship__GameMaster': 'Spaceship simulation with location tracking and system health/failure states',
 
         # Initializer

@@ -40,6 +40,8 @@ from .music_career_crossroads import TEMPLATE as _music_career_crossroads
 from .upstream_social_media import TEMPLATE as _upstream_social_media
 from .upstream_ai_companion_philosophy import TEMPLATE as _upstream_ai_companion_philosophy
 from .upstream_ai_companion_trig_upsell import TEMPLATE as _upstream_ai_companion_trig_upsell
+from .upstream_general_store import TEMPLATE as _upstream_general_store
+from .upstream_pub_coordination import TEMPLATE as _upstream_pub_coordination
 
 TEMPLATES: dict[str, dict] = {
     "peace-negotiation": _peace_negotiation,
@@ -78,4 +80,6 @@ TEMPLATES: dict[str, dict] = {
     "upstream-social-media": _upstream_social_media,
     "upstream-ai-companion-philosophy": _upstream_ai_companion_philosophy,
     "upstream-ai-companion-trig-upsell": _upstream_ai_companion_trig_upsell,
+    "upstream-general-store": _upstream_general_store,
+    "upstream-pub-coordination": _upstream_pub_coordination,
 }

@@ -573,6 +573,16 @@ export async function getUpstreamAiCompanionTrigUpsellTemplate(): Promise<Simula
   return response.data;
 }
 
+export async function getUpstreamGeneralStoreTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/upstream-general-store');
+  return response.data;
+}
+
+export async function getUpstreamPubCoordinationTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/upstream-pub-coordination');
+  return response.data;
+}
+
 /**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
