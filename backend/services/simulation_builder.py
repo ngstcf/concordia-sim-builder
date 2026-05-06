@@ -68,6 +68,17 @@ def load_available_prefabs() -> dict:
     # Add custom context-aware scripted prefab
     prefabs['context_aware_scripted__Entity'] = context_aware_scripted.Entity()
 
+    # Ensure GameMasterSimultaneous is available even if upstream __init__.py
+    # doesn't export simultaneous_resolution_gm (it's not exported by default).
+    if 'simultaneous_resolution_gm__GameMasterSimultaneous' not in prefabs:
+        try:
+            from concordia.contrib.prefabs.game_master import simultaneous_resolution_gm
+            prefabs['simultaneous_resolution_gm__GameMasterSimultaneous'] = (
+                simultaneous_resolution_gm.GameMasterSimultaneous()
+            )
+        except (ImportError, TypeError):
+            pass
+
     return prefabs
 
 

@@ -35,6 +35,7 @@ TEMPLATE = {
 | `config.game_master` | Yes | See Game Master Config |
 | `config.shared_memories` | No | World knowledge every agent starts with |
 | `config.player_specific_context` | No | Private info per character (keyed by agent name) |
+| `config.player_specific_memories` | No | Per-character memory lists for the formative memories initializer (keyed by agent name) |
 | `config.checkpoint_interval` | No | Range 1-100, default 5. Save every N steps |
 
 ---
@@ -187,7 +188,20 @@ Memories are the most direct way to shape agent behavior. Each memory is a strin
 | `dialogic__GameMaster` | Conversation-driven scenarios (debates, roundtables) |
 | `game_theoretic_and_dramaturgic__GameMaster` | Strategic games with payoff structures |
 | `interviewer__GameMaster` | Interview and survey formats |
+| `async_social_media__GameMaster` | Social media forum with posts and asynchronous interaction |
+| `simultaneous_resolution_gm__GameMasterSimultaneous` | Simultaneous event resolution with location tracking, NPC events, and working memory |
+| `space_ship__GameMaster` | Spaceship simulation with system health and failure states |
 | `formative_memories_initializer__GameMaster` | Generate agent backstories from context |
+
+The `simultaneous_resolution_gm__GameMasterSimultaneous` prefab accepts these parameters in `game_master.parameters`:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `start_time` | string | — | Simulation start time (e.g. `"Tuesday, March 3, 2026 at 8:30 AM"`) |
+| `time_period_minutes` | int | 15 | Real-time minutes each step represents |
+| `locations` | string | — | Comma-separated location names |
+| `game_rules` | string | — | Detailed game rules for the GM |
+| `use_gm_working_memory` | bool | true | Enable GM working memory component |
 
 ### Acting Order
 
@@ -435,7 +449,91 @@ TEMPLATES: dict[str, dict] = {
 }
 ```
 
-The template will appear in the web UI template picker and be accessible via `GET /api/simulations/templates/my-template`.
+The template is now served by the API at `GET /api/simulations/templates/my-template`, but it won't appear in the web UI template picker until you register it in the frontend.
+
+---
+
+## Adding to the Template Chooser
+
+The template picker is a searchable, filterable grid in the Simulation Builder. Three frontend files need updating.
+
+### 1. Add a loader function in `frontend/src/utils/api.ts`
+
+```typescript
+export async function getMyTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/my-template');
+  return response.data;
+}
+```
+
+The function name is arbitrary but should match the pattern `get<Name>Template`.
+
+### 2. Add metadata in `frontend/src/components/SimulationBuilder/templateMetadata.ts`
+
+**Import the loader** at the top of the file:
+
+```typescript
+import { ..., getMyTemplate } from '../../utils/api';
+```
+
+**Add a metadata entry** to the `TEMPLATES` array:
+
+```typescript
+{
+  id: 'my-template',              // Must match TEMPLATE_LOADERS key
+  name: 'Budget Committee',       // Display name in the picker
+  description: 'Three department heads negotiate next year\'s budget allocation.',
+  category: 'General Scenarios',  // See categories below
+  tags: ['sequential', 'player-context'],  // See tags below
+  agentCount: 3,
+  stepCount: 10,
+  engineType: 'sequential',
+  gmPrefab: 'dialogic__GameMaster',
+  agentNames: ['Director of Programs', 'Director of Operations', 'Director of Fundraising'],
+  keywords: 'budget nonprofit negotiation allocation',  // For search
+}
+```
+
+**Add the loader** to the `TEMPLATE_LOADERS` map:
+
+```typescript
+'my-template': getMyTemplate,
+```
+
+### 3. Categories and tags
+
+**Categories** (pick one):
+
+| Category | Use For |
+|----------|---------|
+| `Quick Start` | Simple 2-agent demos under 10 steps |
+| `Prefab Demos` | Showcasing a specific prefab or component |
+| `Research` | Research-oriented scenarios |
+| `General Scenarios` | General-purpose simulations |
+| `Advanced Scenarios` | Templates using advanced features (nested sims, step controller, etc.) |
+| `SDG Scenarios` | UN Sustainable Development Goals scenarios |
+| `Upstream Examples` | Adapted from Google DeepMind's upstream Concordia examples |
+
+**Feature tags** (include all that apply):
+
+| Tag | When to Use |
+|-----|-------------|
+| `sequential` / `simultaneous` / `async` / `interview` / `step-controller` | Matches the engine type |
+| `player-context` | Template has `player_specific_context` |
+| `grounded-vars` | Template has `grounded_variables` |
+| `nested-sim` | Any agent has a `nested_simulation` |
+| `scenes` | GM uses scene-based structure |
+| `game-theory` | Uses `game_theoretic_and_dramaturgic__GameMaster` |
+| `scripted` | Uses scripted entity prefabs |
+| `questionnaire` | Uses `interviewer__GameMaster` with questionnaires |
+| `critical-decisions` | Template has `critical_decision_points` |
+| `sdg` | SDG-related scenario |
+| `contrib-gm` | Uses `contrib_components` on the GM |
+| `formative-mem` | Relies on formative memory generation |
+| `measurements` | Designed to showcase measurement channels |
+| `upstream` | Adapted from upstream Concordia |
+
+**Keywords** — space-separated terms for free-text search. Include the domain, key concepts, and any non-obvious terms users might search for.
 
 ---
 
@@ -452,6 +550,10 @@ Before committing a new template:
 - [ ] `max_steps` is appropriate (5-10 for quick demos, 15-25 for full scenarios)
 - [ ] Template loads without errors: `python -c "from backend.api.templates import TEMPLATES; print(len(TEMPLATES))"`
 - [ ] Registered in `__init__.py` with a URL-friendly slug
+- [ ] Loader function added in `frontend/src/utils/api.ts`
+- [ ] Metadata entry added in `templateMetadata.ts` (`TEMPLATES` array + `TEMPLATE_LOADERS` map)
+- [ ] Category, tags, and keywords are accurate
+- [ ] TypeScript compiles: `cd frontend && npx tsc --noEmit`
 - [ ] Template count updated in `Readme.md`, `CHANGELOG.md`, and `documentation.html`
 
 ---
