@@ -6,7 +6,7 @@
 - ✅ All entity prefabs (basic, basic_with_plan, basic_scripted, minimal, etc.)
 - ✅ All game master prefabs (generic, dialogic, game_theoretic, etc.)
 - ✅ Custom LLM wrappers (OpenAI, DeepSeek, Gemini, Anthropic, GLM, Ollama)
-- ✅ Template system with 14+ templates
+- ✅ Template system with 20 templates across 5 categories
 - ✅ Scripted entity prefab (`basic_scripted__Entity`)
 - ✅ SSE streaming for simulation execution
 - ✅ Analytics and recent simulations endpoints
@@ -17,21 +17,37 @@
 - ✅ Cooperation rate chart and grounded variables chart
 - ✅ Responsive UI design for all screen sizes
 
-### Template List (Validated)
-1. Peace Negotiation - Russia-Ukraine talks
-2. Coffee Shop Demo - Quick 5-step test
-3. Planning Agent - Strategic product launch
-4. **Scripted Entity** - Focus group moderator (NEW)
-5. Dialogic Conversation - Therapy session
-6. Strategic Game - Prisoner's Dilemma
-7. Interviewer - Employee survey
-8. Formative Memories - High school reunion
-9. Marketplace - Farmers market trading
-10. State Formation - SDG 16 simulation
-11. Labor Action - SDG 8 simulation
-12. Fishery Management - SDG 14 (Life Below Water) simulation
-13. Disaster Response - SDG 11/13 simulation
-14. Inequality Mobility - SDG 10 simulation
+### Template List (20 templates across 5 categories)
+
+*Basic Templates:*
+1. Coffee Shop Demo - Quick 5-step test
+2. Peace Negotiation - Russia-Ukraine talks with UN mediator (20 steps)
+
+*Prefab Type Examples:*
+3. Planning Agent - Strategic product launch (`basic_with_plan__Entity`)
+4. Scripted Entity - Focus group moderator (`basic_scripted__Entity`)
+5. Context-Aware Moderator - Support group facilitator (`context_aware_scripted__Entity`)
+6. Dialogic Conversation - Therapy session (`dialogic__GameMaster`)
+7. Strategic Game - Prisoner's Dilemma (`game_theoretic__GameMaster`)
+8. Marketplace - Farmers market trading
+9. Interviewer - Employee survey (`interviewer__GameMaster`)
+10. Formative Memories - High school reunion with LLM-generated backstories
+
+*Research Studies:*
+11. Vaccine Hesitancy Study - 5 agents with full psychological profiles
+12. Phishing Attack Simulation - Nested simulations modeling attack chains
+13. Urban Gentrification - 6 stakeholders with 11 grounded variables
+
+*Advanced Features:*
+14. Nested Simulation Demo - PhoneGameMaster pattern
+15. Grounded Variables Demo - Numerical and categorical metric tracking
+
+*SDG Scenarios:*
+16. State Formation - SDG 16 (Peace & Justice)
+17. Labor Strike - SDG 8 (Decent Work)
+18. Fishery Management - SDG 14 (Life Below Water)
+19. Flood Evacuation - SDG 11/13 (Cities & Climate)
+20. Educational Opportunity - SDG 10 (Reduced Inequalities)
 
 ### Breaking Changes from Future Versions
 (To be filled when upgrading)
