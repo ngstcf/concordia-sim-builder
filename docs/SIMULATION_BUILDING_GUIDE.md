@@ -774,7 +774,7 @@ The Simulation Builder wraps the [Concordia](https://github.com/google-deepmind/
 
 ### What the Builder Automates
 
-Building a simulation in raw Python requires writing code for every step: LLM initialization, prefab loading, agent configuration, memory injection, Game Master wiring, engine selection, execution, and result parsing. A medium-complexity scenario typically requires 300-500 lines of Python; complex scenarios with custom game logic can reach 1,000-7,000+ lines across multiple files.
+Building a simulation in raw Concordia Python requires writing code for every step: LLM initialization, prefab loading, agent configuration, memory injection, Game Master wiring, engine selection, execution, and result parsing. The standalone Fishery Commons example below demonstrates this: a medium-complexity 4-agent scenario with shared memories, private context, and result export requires ~350 lines of Python. Scenarios with custom game logic (custom game masters, payoff functions, scene definitions) reach 1,500-1,800 lines; research scenarios with large persona or configuration datasets reach 7,000+ lines across multiple files. LLM initialization adds further friction: Concordia's provider wrappers silently discard parameters like timeout and temperature (Ollama ignores both; the OpenAI wrapper hardcodes temperature for newer models), and some providers are not wired into the factory loader despite having implementation files.
 
 The Builder replaces all of this with web forms: fill in the premise, add agents with goals and memories, pick an engine, and click Run. It also provides features that have no equivalent in standalone Concordia:
 
