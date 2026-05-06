@@ -765,10 +765,100 @@ You can save simulation configurations for reuse and share them with others:
 
 ---
 
+## Concordia Without the Builder
+
+The Simulation Builder wraps the [Concordia](https://github.com/google-deepmind/concordia) library so you can configure and run simulations through a web interface. But Concordia is also a standalone Python library that you can use directly from the command line or Jupyter notebooks when you need full programmatic control.
+
+### What the Builder Automates
+
+Building a simulation in raw Python requires writing code for every step: LLM initialization, prefab loading, agent configuration, memory injection, Game Master wiring, engine selection, execution, and result parsing. A medium-complexity scenario typically requires 300-500 lines of Python; complex scenarios with custom game logic can reach 1,000-7,000+ lines across multiple files.
+
+The Builder replaces all of this with web forms: fill in the premise, add agents with goals and memories, pick an engine, and click Run. It also provides features that have no equivalent in standalone Concordia:
+
+- Real-time log streaming with color-coded messages
+- 9-tab analytics dashboard with charts and statistics
+- Grounded variable tracking and visualization
+- Structured data export (CSV/JSON) for analysis in pandas, R, or Excel
+- Census-based agent generation from demographic distributions
+- Batch runs with parameter sweeps
+- Checkpoint recovery and save/load configurations
+- AI-powered analysis and summary of results
+
+### Standalone Example
+
+The `examples/` directory includes a standalone Python script that implements the same Fishery Commons scenario available as a Builder template:
+
+```
+examples/fishery_commons_standalone.py    (362 lines)
+```
+
+Run it directly:
+```bash
+# With OpenAI
+python examples/fishery_commons_standalone.py \
+    --api_type openai --model_name gpt-4o --api_key YOUR_KEY
+
+# With Google AI Studio
+python examples/fishery_commons_standalone.py \
+    --api_type google_aistudio --model_name gemini-2.0-flash --api_key YOUR_KEY
+
+# Dry run (no LLM, for testing)
+python examples/fishery_commons_standalone.py --disable_language_model
+```
+
+This script is useful for understanding what happens under the hood when you click "Run" in the Builder.
+
+### Upstream Concordia Examples
+
+The Concordia library ships with example scenarios in `concordia-upstream/examples/`. We are integrating these into the Builder as templates so you can run them through the web interface without writing code. The table below shows what each scenario requires as standalone Python, and what the Builder eliminates.
+
+| Example | Description | Standalone Code |
+|---------|-------------|-----------------|
+| **General Store** | Crime and Punishment - theft investigation with 7 agents, social manipulation, surveillance mechanics | 1,268 lines / 3 files |
+| **AI Companion** | Philosophy tutoring and trigonometry helper with upselling motive | 1,141 lines / 4 files |
+| **Haggling** | Sequential bargaining over fruit prices with 6 scenario variants | 2,033 lines / 7 files |
+| **Haggling Multi-Item** | Multi-item negotiation with per-item valuations | 1,293 lines / 4 files |
+| **Pub Coordination** | Group coordination across London, Cape Town, Edinburgh with closures and friendship dynamics | 1,946 lines / 9 files |
+| **Signaling** | Economic signaling game with custom consumer agents and goods | 7,363 lines / 6 files |
+| **Social Media** | "Robo Alchemy" - social media interaction dynamics including image-based scenarios | 1,235 lines / 4 files |
+
+Concordia also includes Jupyter notebooks for learning the framework interactively:
+
+| Notebook | Description |
+|----------|-------------|
+| **tutorial.ipynb** | Getting started with Concordia |
+| **alice.ipynb** | Single-agent example |
+| **dialog.ipynb** | Two-agent conversation |
+| **actor_development.ipynb** | Building custom agent components |
+| **marketplace.ipynb** | Multi-agent marketplace trading |
+| **selling_cookies.ipynb** | Economic exchange scenario |
+| **questionnaire_example.ipynb** | Survey and questionnaire engine |
+
+If you want to run the upstream examples before they are available as Builder templates, or if you need to study their source code:
+
+```bash
+cd concordia-upstream
+python -m examples.general_store.run \
+    --api_type openai --model_name gpt-4o --api_key YOUR_KEY --scenario 0
+```
+
+### When to Use Standalone Concordia
+
+Use the Builder for most work. Consider standalone Python when you need:
+
+- **Custom game masters** with scoring logic, payoff matrices, or domain-specific rules (e.g., the Haggling example's sequential bargaining GM)
+- **Custom agent types** beyond the built-in prefabs (e.g., the Signaling example's consumer agents)
+- **Programmatic pipelines** that run hundreds of simulations as part of a larger research workflow
+- **Integration** with other Python libraries or data sources that cannot be accessed through the web interface
+
+For everything else, the Builder gives you the same Concordia engine with less effort and better tooling.
+
+---
+
 ## Further Reading
 
-- **[Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md)** — Detailed documentation of all 32 built-in templates, agent prefab types, psychological components, Game Master configuration, and engine types. Use it as a reference when customizing templates or building advanced simulations.
+- **[Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md)** — Detailed documentation of all built-in templates, agent prefab types, psychological components, Game Master configuration, and engine types. Use it as a reference when customizing templates or building advanced simulations.
 - **[Quantitative Research Features](QUANTITATIVE_RESEARCH_FEATURES.md)** — Structured data export (CSV/JSON), census-based agent generation, action constraints, and batch runs with parameter sweeps for quantitative social science research.
 - **Built-in templates** — Load from the Template Picker in the builder. Covers game theory, policy, social dynamics, SDG scenarios, and more.
-- **Concordia library** — The underlying simulation framework by Google DeepMind.
-- **Agent-based modeling** — A methodology for studying complex systems through individual agent interactions.
+- **[Concordia library](https://github.com/google-deepmind/concordia)** — The underlying simulation framework by Google DeepMind. See `concordia-upstream/examples/` for standalone examples.
+- **Standalone example** — `examples/fishery_commons_standalone.py` demonstrates how to build a medium-complexity simulation in pure Python for comparison.
