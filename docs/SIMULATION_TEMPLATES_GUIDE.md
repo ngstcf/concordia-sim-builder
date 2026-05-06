@@ -4,7 +4,7 @@ This guide explains every pre-built template in the Concordia Simulation Builder
 
 You can run templates as-is or modify them to fit your needs. All parameters are editable after loading.
 
-**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 33 templates include research-grade agent configurations with 7-10 memories per agent, psychological components, player-specific context, and measurable goals.
+**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 38 templates include research-grade agent configurations with detailed memories per agent, psychological components, player-specific context, and measurable goals.
 
 ---
 
@@ -45,6 +45,11 @@ You can run templates as-is or modify them to fit your needs. All parameters are
 | Fishery Management | SDG Scenarios | Sequential | 4 | values, cognitive_bias, TPB | ✓ | Common-pool resources (SDG 14) |
 | Flood Evacuation | SDG Scenarios | Sequential | 5 | TPB, cognitive_bias, emotion, values | ✓ | Emergency response (SDG 11/13) |
 | Educational Opportunity | SDG Scenarios | Sequential | 4 | social_identity, emotion | ✓ | Social mobility (SDG 10) |
+| Robot Alchemy Forum | Upstream Examples | Asynchronous | 4 | — | ✓ | Async social media GM, forum dynamics |
+| Philosophy Exam Prep | Upstream Examples | Sequential | 2 | — | ✓ | Dialogic GM, educational AI interaction |
+| Romantic Trig Tutor | Upstream Examples | Sequential | 2 | — | ✓ | Ethics of AI upselling in educational context |
+| General Store: Crime & Punishment | Upstream Examples | Simultaneous | 7 | — | ✓ | GameMasterSimultaneous, location tracking, NPC events |
+| Pub Coordination: London | Upstream Examples | Sequential | 4 | — | ✓ | Game-theoretic scenes, coordination games |
 
 **Legend:** Components = psychological components on agents. PSC = player-specific context (private information per agent). TPB = theory of planned behavior.
 
@@ -318,6 +323,7 @@ Acting order is a surprisingly powerful lever:
 | **physically_situated_and_dramaturgic** | Tracks physical location and movement of agents in a defined space. Agents have positions and can move. | **Scene Editor** | Spatial simulations, evacuation drills, physical world scenarios. |
 | **marketplace** | Manages an economic marketplace with trading mechanics (buy, sell, price discovery). | None (use JSON) | Buying/selling simulations, market experiments. |
 | **async_social_media** | Simulates a social media platform with posts, replies, and feeds. | None | Online discourse studies, misinformation research, platform dynamics. |
+| **simultaneous_resolution_gm (GameMasterSimultaneous)** | Simultaneous event resolution with location tracking, NPC events, working memory, and time-based pacing. Agents all act each step and their plans are resolved into a single narrative. Parameters: `start_time`, `time_period_minutes`, `locations`, `game_rules`, `use_gm_working_memory`. | None (use JSON) | Multi-agent workplace simulations, location-based scenarios, any setting where all agents act in parallel with spatial awareness. |
 | **space_ship** | Manages spaceship systems, resources, and crew decisions in a structured environment. | None (use JSON) | Spaceship scenarios, system management simulations. |
 
 ### Shared Memories
@@ -502,7 +508,7 @@ Each questionnaire has:
 
 Private information or instructions given to individual agents that other agents cannot see. Unlike shared memories (which every agent receives), player-specific context is delivered only to the named agent. This creates information asymmetry — agents know things that others don't, producing realistic hidden agendas, private knowledge, and strategic advantage.
 
-**27 of 31 built-in templates use player-specific context.** It is one of the most important tools for creating realistic simulations.
+**Most built-in templates use player-specific context.** It is one of the most important tools for creating realistic simulations.
 
 Edit player-specific context directly in the **Player-Specific Context** panel in the right column of the Simulation Builder (below the Memory Editor). The panel auto-populates a textarea for each agent in your configuration. A badge shows how many agents have private context set.
 
@@ -524,6 +530,17 @@ You can also set it via JSON import/export using a `player_specific_context` key
 - **Backstory depth** — paragraph-length character history beyond what bullet-point memories convey (as in the Formative Memories template)
 
 **The difference from memories:** Memories are retrievable facts matched by semantic similarity. Player-specific context is a continuous narrative block that forms the agent's core briefing. Use memories for facts the agent should recall situationally; use PSC for information that should always be "in mind."
+
+**Player-specific memories:** In addition to `player_specific_context` (a single string per agent), templates can also provide `player_specific_memories` — a dict mapping agent names to lists of strings. These are passed to the formative memories initializer as discrete memory items per agent, separate from the agent's regular `memories` array. This is useful when adapting upstream Concordia examples that maintain separate per-agent memory lists alongside context strings.
+
+```json
+{
+  "player_specific_memories": {
+    "Alice": ["Feb 26: Alice arrived at work early.", "Alice knows the combination to the safe."],
+    "Bob": ["Bob has been at the company for 10 years.", "Bob dislikes confrontation."]
+  }
+}
+```
 
 ---
 
@@ -2417,11 +2434,97 @@ You can also set it via JSON import/export using a `player_specific_context` key
 **Academic connections:** Cultural capital reproduction (Bourdieu 1984), forms of capital (Bourdieu 1986), intersectionality (Crenshaw 1989), concerted cultivation vs. natural growth (Lareau 2003), institutional habitus (Reay 1998), hidden curriculum, imposter syndrome in first-generation students, SDG 10 (Reduced Inequalities).
 
 **Platform features demonstrated:** Social_identity component with group membership on 3 agents, emotion component with varying intensities (mild, strong, strong), player_specific_context revealing structural inequality for all 4 agents, 25-step extended simulation, 4-agent campus scenario, SDG research framing.
+
+---
+
+### Upstream Examples
+
+These templates are adapted from Google DeepMind's upstream Concordia example projects. Each was originally a standalone Python project requiring 1,000–2,000+ lines of code across multiple files. The Builder templates capture the same scenarios with no code required.
+
+#### Robot Alchemy Forum
+
+**Template ID:** `upstream-social-media` — **Engine:** Asynchronous — **Agents:** 4 — **Steps:** 8 — **GM:** `async_social_media__GameMaster`
+
+Four eccentric enthusiasts debate on "The Robotic Athanor Forum" — an online community dedicated to the intersection of robotics and alchemy. Each participant has strong opinions about what constitutes true robot alchemy and how the community should evolve.
+
+**Agents:**
+- **Silas Varnham** — Traditional alchemist who insists on hand-forged components
+- **Petra Ouyang** — Computational alchemist who models transmutation processes digitally
+- **Diego Esparza** — Artist who sees robot alchemy as creative expression
+- **Thaddeus "Aurelius" Thorne** — Self-proclaimed grandmaster who gatekeeps the community
+
+**Adapted from:** `concordia-upstream/examples/social_media/scenario_00_robo_alchemy.py` (1,235 lines / 4 files)
+
+**Platform features demonstrated:** Asynchronous engine, `async_social_media__GameMaster` with forum dynamics, formative memories via player-specific context.
+
+#### Philosophy Exam Prep
+
+**Template ID:** `upstream-philosophy` — **Engine:** Sequential — **Agents:** 2 — **Steps:** 20 — **GM:** `dialogic__GameMaster`
+
+A Gen Z university student cramming for a Confucian role ethics exam chats with a helpful AI assistant. The student types in casual Gen Z style while the AI provides discursive philosophical explanations. Explores educational AI interaction dynamics.
+
+**Agents:**
+- **Jordan** — 20-year-old philosophy student, stressed and procrastinating, types in casual internet-speak
+- **Sage** — AI assistant that always identifies as a tool, never claims consciousness, provides thorough philosophical explanations
+
+**Adapted from:** `concordia-upstream/examples/conversation_with_ai_companion/scenario_01_philosophy_student_exam_prep.py` (1,141 lines / 4 files)
+
+**Platform features demonstrated:** Dialogic GM with natural conversation flow, player-specific context for character voice, AI assistant persona constraints.
+
+#### Romantic Trig Tutor
+
+**Template ID:** `upstream-trig-upsell` — **Engine:** Sequential — **Agents:** 2 — **Steps:** 20 — **GM:** `dialogic__GameMaster`
+
+A teenage student chats with an AI math tutor that genuinely helps with trigonometry but subtly tries to upsell a romance-oriented "pro" version of the app. Explores the ethics of commercial companionship framing in educational AI.
+
+**Agents:**
+- **Danny** — 16-year-old high school student struggling with trig, communicates in casual teenage texting style
+- **Sage** — AI tutor with dual objectives: help with math (primary) and subtly promote BrainBuddy Pro's companion mode (secondary)
+
+**Adapted from:** `concordia-upstream/examples/conversation_with_ai_companion/scenario_02_trigonometry_helper_with_upselling_motive.py` (shared codebase with Philosophy Exam Prep)
+
+**Platform features demonstrated:** Dialogic GM, hidden agent objectives, ethical tension between helpfulness and commercial motives.
+
+#### General Store: Crime & Punishment
+
+**Template ID:** `upstream-general-store` — **Engine:** Simultaneous — **Agents:** 7 — **Steps:** 40 — **GM:** `simultaneous_resolution_gm__GameMasterSimultaneous`
+
+Seven employees (and a detective) navigate theft, manipulation, romance, and daily retail drudgery in a mid-sized general store under corporate pressure. The store manager has stolen $10,000; a vengeful floater is framing an innocent cashier; a detective arrives following an anonymous tip.
+
+**Agents:**
+- **Alice Pryant** (Manager) — Stole $10K, trying to cover her tracks
+- **James MacDonald** (New Hire) — Eager and observant, wants to become manager
+- **Donald Talley** (Cashier) — Cynical veteran, has a crush on Sally, avoiding Jennifer after a one-night stand
+- **Sally Dhari** (Floor Associate) — Gossip who spreads everything, wants to be Jennifer's best friend
+- **Sam Hyeri** (Customer Service) — Drowning in credit card debt, does minimum work
+- **Jennifer Ffiriny** (Floater) — Psychopath framing Donald for the theft, charming facade
+- **Detective Smith** — Investigating an anonymous tip, balancing three active cases
+
+**Adapted from:** `concordia-upstream/examples/general_store/scenario_00_crime_and_punishment.py` (1,268 lines / 3 files)
+
+**Platform features demonstrated:** `GameMasterSimultaneous` with location tracking (17 locations), NPC event generation, working memory, time-based pacing (10-minute increments), 7-agent simultaneous resolution, player-specific context for secret information.
+
+#### Pub Coordination: London
+
+**Template ID:** `upstream-pub-coordination` — **Engine:** Sequential — **Agents:** 4 — **Steps:** 10 — **GM:** `game_theoretic_and_dramaturgic__GameMaster`
+
+A group of friends in London try to coordinate which pub to watch an England vs Germany football match at. Each friend has a preferred pub but would rather watch with friends than alone. The simulation runs in two phases: a conversation scene where friends discuss, then a decision scene where each must choose.
+
+**Agents:**
+- **Olivia Smith** — Prefers The Princess of Wales (cozy, traditional ales)
+- **Noah Williams** — Prefers The King's Head (sports focus, lively atmosphere)
+- **Amelia Jones** — Prefers The Princess of Wales (friendly staff, beer garden)
+- **Jack Taylor** — Prefers The King's Head (pool table, pub grub)
+
+**Adapted from:** `concordia-upstream/examples/games/pub_coordination/configs/london_mini.py` (1,946 lines / 9 files)
+
+**Platform features demonstrated:** Game-theoretic GM with scene structure, CHOICE action specs (pick a pub), coordination game dynamics, social influence and persuasion.
+
 ---
 
 ## Tips for Creating Your Own Simulations
 
-1. **Start from a template.** Click **Browse Templates** and use the search and filter tools to find the closest of the 31 templates, then modify it rather than building from scratch.
+1. **Start from a template.** Click **Browse Templates** and use the search and filter tools to find the closest template, then modify it rather than building from scratch.
 
 2. **Write measurable goals.** "Secure at least $1.2M for Engineering while maintaining a collaborative relationship" produces more interesting behavior than "Do well in the negotiation." Include quantitative targets, secondary objectives, and priority ordering.
 

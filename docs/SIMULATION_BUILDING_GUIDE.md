@@ -35,7 +35,7 @@ The fastest way to start is to load a pre-built template.
 
 1. Open the Simulation Builder
 2. Click **Load Template** in the top toolbar
-3. Browse templates by category — there are 30+ covering game theory, policy, social dynamics, and more
+3. Browse templates by category — there are 38 covering game theory, policy, social dynamics, upstream DeepMind examples, and more
 4. Click a template to load it
 5. Review the configuration, adjust if needed
 6. Go to the **Run** panel, configure your LLM provider, and click **Run Simulation**
@@ -149,7 +149,10 @@ The Game Master controls how the simulation runs.
 
 **Game Master Prefab** — Choose from:
 - `generic__GameMaster` — General-purpose, works for most scenarios
-- Other prefabs available for specialized use cases (marketplace, forum, etc.)
+- `dialogic__GameMaster` — Conversation-focused with auto-termination
+- `game_theoretic_and_dramaturgic__GameMaster` — Scene-based with action choices and scoring
+- `async_social_media__GameMaster` — Social media forum with posts and feeds
+- `simultaneous_resolution_gm__GameMasterSimultaneous` — Simultaneous event resolution with location tracking, NPC events, and working memory
 - See the [Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md) for the full list of agent and GM prefabs
 
 **Acting Order** — How the GM picks the next agent:
@@ -810,17 +813,18 @@ This script is useful for understanding what happens under the hood when you cli
 
 ### Upstream Concordia Examples
 
-The Concordia library ships with example scenarios in `concordia-upstream/examples/`. We are integrating these into the Builder as templates so you can run them through the web interface without writing code. The table below shows what each scenario requires as standalone Python, and what the Builder eliminates.
+The Concordia library ships with example scenarios in `concordia-upstream/examples/`. Five of these are available as Builder templates in the **Upstream Examples** category — select them from the template picker and run them without writing code.
 
-| Example | Description | Standalone Code |
-|---------|-------------|-----------------|
-| **General Store** | Crime and Punishment - theft investigation with 7 agents, social manipulation, surveillance mechanics | 1,268 lines / 3 files |
-| **AI Companion** | Philosophy tutoring and trigonometry helper with upselling motive | 1,141 lines / 4 files |
-| **Haggling** | Sequential bargaining over fruit prices with 6 scenario variants | 2,033 lines / 7 files |
-| **Haggling Multi-Item** | Multi-item negotiation with per-item valuations | 1,293 lines / 4 files |
-| **Pub Coordination** | Group coordination across London, Cape Town, Edinburgh with closures and friendship dynamics | 1,946 lines / 9 files |
-| **Signaling** | Economic signaling game with custom consumer agents and goods | 7,363 lines / 6 files |
-| **Social Media** | "Robo Alchemy" - social media interaction dynamics including image-based scenarios | 1,235 lines / 4 files |
+| Example | Builder Template | Standalone Code |
+|---------|-----------------|-----------------|
+| **Social Media** — "Robo Alchemy" forum debate | ✅ Robot Alchemy Forum | 1,235 lines / 4 files |
+| **AI Companion** — Philosophy exam prep | ✅ Philosophy Exam Prep | 1,141 lines / 4 files |
+| **AI Companion** — Trig tutor with upselling | ✅ Romantic Trig Tutor | (shared with above) |
+| **General Store** — Crime and Punishment | ✅ General Store: Crime & Punishment | 1,268 lines / 3 files |
+| **Pub Coordination** — London pub choice | ✅ Pub Coordination: London | 1,946 lines / 9 files |
+| **Haggling** — Sequential bargaining | Standalone only | 2,033 lines / 7 files |
+| **Haggling Multi-Item** — Multi-item negotiation | Standalone only | 1,293 lines / 4 files |
+| **Signaling** — Economic signaling game | Standalone only | 7,363 lines / 6 files |
 
 Concordia also includes Jupyter notebooks for learning the framework interactively:
 
@@ -834,7 +838,7 @@ Concordia also includes Jupyter notebooks for learning the framework interactive
 | **selling_cookies.ipynb** | Economic exchange scenario |
 | **questionnaire_example.ipynb** | Survey and questionnaire engine |
 
-If you want to run the upstream examples before they are available as Builder templates, or if you need to study their source code:
+To run the standalone-only examples, or to study source code for any upstream example:
 
 ```bash
 cd concordia-upstream
