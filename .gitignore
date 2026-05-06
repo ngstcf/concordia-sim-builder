@@ -78,6 +78,7 @@ backend/saved_configs/*.json
 blog_article.md
 simulation_for_sdgs.md
 GLM_SETUP.md
+DIAGNOSTIC_IMPROVEMENTS.md
 documentation.html
 
 # Custom documentation (only track selected files)
