@@ -16,7 +16,7 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 | Terminal-only output, no way to pause or inspect mid-run | Play/Pause/Step/Stop controls with live log streaming |
 | Kill the process to stop; restart from scratch to retry | Cancel with partial results saved; adjust and re-run |
 | Build your own output pipeline | Structured HTML report, 9-tab analytics dashboard, AI-powered analysis |
-| Every new scenario is a new coding effort | Over 30 ready-to-run templates covering research, policy, game theory, and more |
+| Every new scenario is a new coding effort | 38 ready-to-run templates covering research, policy, game theory, upstream DeepMind examples, and more |
 
 ![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
 ![Version](https://img.shields.io/badge/Version-2.4.0-green)
@@ -28,7 +28,7 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
-- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 33 templates with research setups and experiment suggestions
+- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 38 templates with research setups and experiment suggestions
 - [Template Creation Guide](docs/TEMPLATE_CREATION_GUIDE.md) — Developer guide for adding new simulation templates
 - [Timeout Configuration](docs/TIMEOUT_CONFIGURATION.md) — Tuning LLM, watchdog, and frontend timeouts
 
@@ -60,7 +60,7 @@ Each simulation produces three output files:
 ## Features
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
-- **33 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and more (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
+- **38 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and 5 adapted Google DeepMind upstream examples (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
 - **Multi-Agent System** — Define agents with unique goals, memories, psychological components, and behavioral prefabs
 - **Psychological Components** — Personality, cognitive bias, social identity, emotions, values, Theory of Planned Behavior
 - **Multiple Simulation Engines** — Sequential, asynchronous, simultaneous, and step controller (play/pause/step/stop)
@@ -190,7 +190,7 @@ npm run dev
 
 Frontend: `http://localhost:5173`
 
-## Templates (33)
+## Templates (38)
 
 | Category | Templates |
 |----------|-----------|
@@ -200,6 +200,7 @@ Frontend: `http://localhost:5173`
 | **General Scenarios** | Rational Negotiators, Philosophy Roundtable, Social Media Debate, Sealed-Bid Auction, Wizard-of-Oz CS Training, Spaceship Crisis |
 | **Advanced Scenarios** | Nested Simulation, Grounded Variables, Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative mem), Ethics Board (measurements), Diplomatic Crisis (nested sim) |
 | **SDG Scenarios** | State Formation (16), Labor Strike (8), Fishery Management (14), Flood Evacuation (11/13), Educational Opportunity (10) |
+| **Upstream Examples** | Robot Alchemy Forum (async), Philosophy Exam Prep, Romantic Trig Tutor, General Store: Crime & Punishment (simultaneous, 7 agents), Pub Coordination: London (game theory) |
 
 See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for detailed parameter documentation and research guides for all templates.
 
@@ -261,7 +262,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (33 templates) |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (38 templates) |
 
 ## Supported Prefabs
 
@@ -284,6 +285,9 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `game_theoretic_and_dramaturgic__GameMaster` | Matrix games with payoffs/scores | Strategic games |
 | `interviewer__GameMaster` | Administers questionnaires | Surveys, interviews |
 | `marketplace__GameMaster` | Economic trading systems | Market simulations |
+| `async_social_media__GameMaster` | Social media forum with posts and feeds | Online discourse studies |
+| `simultaneous_resolution_gm__GameMasterSimultaneous` | Simultaneous event resolution with locations, NPCs, working memory | Multi-agent workplace, spatial scenarios |
+| `space_ship__GameMaster` | Spaceship systems with health/failure tracking | Spaceship crisis scenarios |
 
 ## Project Structure
 
@@ -292,7 +296,7 @@ concordia-sim-builder/
 ├── backend/
 │   ├── api/
 │   │   ├── simulations.py           # API endpoints + analytics
-│   │   └── templates/               # 26 template modules
+│   │   └── templates/               # 38 template modules
 │   ├── models/
 │   │   ├── schemas.py               # Pydantic models
 │   │   └── llm_wrappers.py          # LLM provider wrappers
