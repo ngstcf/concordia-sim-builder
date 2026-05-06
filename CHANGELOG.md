@@ -17,6 +17,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 
 **Game Master Components**
 - Registry and factory for 5 contrib GM components: Death, GMWorkingMemory, NpcEventGenerator, LocationBasedFilter, SpaceshipSystem
+- `GameMasterSimultaneous` prefab registered from contrib — simultaneous event resolution with location tracking, NPC events, working memory, and time-based pacing
 - Picker UI in GM config panel
 - Separate GM LLM provider — independent model selection for GM via UI toggle or .env fallback (`GM_LLM_PROVIDER`, `GM_LLM_MODEL`)
 
@@ -26,6 +27,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Nested simulation auto-triggers in pre_act with safeguards
 - Agent drag-to-reorder, duplicate, prefab badges, component count display
 - Player-specific context editor, persona generator, custom reasoning steps, emotional stance component
+- `player_specific_memories` field — per-character memory lists passed to formative memories initializer alongside `player_specific_context`
 - Grouped component dropdown by category in AgentEditor
 
 **Builder UX**
@@ -80,7 +82,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Server shutdown endpoint and Kill Server button
 
 **Codebase**
-- Refactored `simulations.py` (6200 → 2100 lines): 26 templates extracted into `backend/api/templates/` package
+- Refactored `simulations.py` (6200 → 2100 lines): 38 templates extracted into `backend/api/templates/` package
 - Templates registered via dynamic `router.add_api_route()`
 
 **Quantitative Research Features**
@@ -101,7 +103,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Added mount-time recovery — on page refresh or Vite HMR reload, frontend checks `/status` for running simulations and auto-reconnects with polling
 - Fixed observation count showing 0 in Statistical Dashboard — v2.4 parser checked `entry_type` and `summary` fields but observations are stored under `__observation__` key in resolved `deduplicated_data.value` dicts
 
-### Templates (33 total)
+### Templates (38 total)
 
 **Original (v2.1.0):**
 1. Peace Negotiation - Russia-Ukraine talks
@@ -134,6 +136,13 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 26. AI Policy Red Team - Devil's advocate policy stress-test
 27. Music Career Crossroads - Career deliberation with financial planning
 28-33. Additional templates (see SIMULATION_TEMPLATES_GUIDE.md)
+
+**Upstream Examples (adapted from Google DeepMind's Concordia):**
+34. Robot Alchemy Forum - Async social media forum debate (4 agents)
+35. Philosophy Exam Prep - Gen Z student + AI tutor dialogic conversation
+36. Romantic Trig Tutor - AI math tutor with hidden upselling motive
+37. General Store: Crime & Punishment - 7-agent simultaneous workplace drama with GameMasterSimultaneous
+38. Pub Coordination: London - Game-theoretic pub choice with scenes
 
 ---
 
