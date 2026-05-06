@@ -156,7 +156,7 @@ Memories are facts loaded into the agent's long-term memory before the simulatio
 | **basic** | General-purpose agent with memory, observation, and action. Has identity, goals, observation, recent memories, and relevant memories components. | ~8 components | Default choice for most simulations. |
 | **basic_with_plan** | Like basic, plus a planning component that formulates multi-step plans and updates them each turn. | ~10 components | When agents need to think ahead: project planning, crisis management, strategy. |
 | **basic_scripted** | Follows a pre-written script of dialogue lines in exact order. Ignores simulation context entirely — always delivers the next line. | Script component | Focus group moderators, experiment confederates, tutorial NPCs. |
-| **context_aware_scripted** | Has scripted lines as a guide but adapts delivery based on what other agents said. The script is a "topic guide" not a rigid teleprompter. | Script + observation | Support group facilitators, adaptive moderators who need structure but flexibility. |
+| **context_aware_scripted** | Has scripted lines as a guide but adapts delivery based on what other agents said. The script is a "topic guide" not a rigid teleprompter. When all lines are exhausted, delivers a configurable closing statement and then goes silent. | Script + observation | Support group facilitators, adaptive moderators who need structure but flexibility. Pair with `dialogic__GameMaster` so the GM can terminate the simulation after the closing statement. |
 | **conversational** | Optimized for natural back-and-forth dialogue. Has stronger listening/responding components. Better at referencing what others actually said. | ~10 dialogue-tuned components | Debates, therapy sessions, interviews, any dialogue-heavy scenario. |
 | **rational** | Makes decisions by explicitly weighing expected utility. Has an internal reasoning step that evaluates costs and benefits before acting. | ~10 components + utility calc | Negotiations, economic simulations, game theory experiments. |
 | **puppet** | Does not generate its own actions. Waits for external input. Other agents interact with it normally. | Minimal (externally driven) | Wizard-of-Oz experiments, human-in-the-loop studies, controlled experiments. |
@@ -222,7 +222,7 @@ Select `basic_scripted__Entity`. A **Scripted Prompts** section appears where yo
 
 The scripted agent delivers these lines in exact order, one per turn, regardless of what other agents say. Use this for controlled information injection — you know exactly what news the analysts will react to and when.
 
-**Alternative — context_aware_scripted:** If you want the news anchor to adapt its tone based on the discussion (e.g., more urgent if the team lead sounds panicked), use `context_aware_scripted__Entity` instead. The lines become a topic guide rather than a rigid teleprompter.
+**Alternative — context_aware_scripted:** If you want the news anchor to adapt its tone based on the discussion (e.g., more urgent if the team lead sounds panicked), use `context_aware_scripted__Entity` instead. The lines become a topic guide rather than a rigid teleprompter. You can also set an optional **Closing Statement** in the Agent Editor — a final line delivered automatically when all scripted prompts are exhausted, after which the agent goes silent. Pair with `dialogic__GameMaster` if you want the simulation to terminate naturally after the closing rather than running to `max_steps`.
 
 #### When to Use Generate Backstory vs. Writing Memories by Hand
 
@@ -768,9 +768,9 @@ You can also set it via JSON import/export using a `player_specific_context` key
 | Parameter | Value | Why |
 |---|---|---|
 | Engine | Sequential | Facilitated group discussion flow |
-| Max Steps | 12 | Matches Sarah's 9 scripted prompts with buffer for participant responses |
+| Max Steps | 30 | Sarah has 9 scripted prompts; with 4 agents sharing turns, she needs ~25 steps to exhaust all lines and deliver the closing statement |
 | Agents | 4 | 1 context-aware scripted counselor + 3 free-response participants |
-| GM Prefab | `generic__GameMaster` | Manages turn-taking around the counselor |
+| GM Prefab | `dialogic__GameMaster` | Detects when conversation reaches a natural conclusion — terminates the simulation after Sarah's closing statement rather than continuing with her silent |
 | Acting Order | Game Master Choice | GM selects which participant responds to each prompt |
 | GM Name | Group Session Manager | Session logistics manager |
 
@@ -801,7 +801,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 2. Whether Marcus's "shame" emotion and high neuroticism make him reluctant to open up
 3. How Elena's ambivalence (relief + anxiety) manifests in her contributions
 4. Whether David's "cautious_optimism" comes across as genuine or performative (as his wife suspects)
-5. How the end_statement component provides structured closure regardless of conversation direction
+5. Whether the dialogic GM terminates the simulation naturally after Sarah's closing statement, rather than running to `max_steps`
 6. Whether private context (rejection email, toxic job offer) surfaces naturally in the discussion
 
 **Suggested experiments for students:**
@@ -812,7 +812,7 @@ You can also set it via JSON import/export using a `player_specific_context` key
 
 **Academic connections:** Group therapeutic factors (Yalom & Leszcz 2005), support group facilitation techniques, identity disruption from job loss (Ashforth 2001), context-aware dialogue systems, emotion regulation in group settings.
 
-**Platform features demonstrated:** `context_aware_scripted__Entity` prefab with end_statement, emotion component with current_emotion and intensity, personality_traits on free agents, player_specific_context for all participants.
+**Platform features demonstrated:** `context_aware_scripted__Entity` prefab with configurable closing statement, `dialogic__GameMaster` for natural termination, emotion component with current_emotion and intensity, personality_traits on free agents, player_specific_context for all participants.
 
 ---
 

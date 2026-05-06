@@ -3,7 +3,7 @@ TEMPLATE = {
         "description": "A support group meeting where the counselor (context-aware scripted) guides discussion while responding naturally to participants. Demonstrates the new context_aware_scripted prefab.",
         "config": {
             "premise": "A weekly support group meeting for people dealing with job loss and career transitions. The counselor Sarah facilitates the discussion, following a structured agenda but responding naturally to each participant's situation and emotions.",
-            "max_steps": 12,
+            "max_steps": 30,
             "agents": [
                 {
                     "id": "counselor",
@@ -129,7 +129,7 @@ TEMPLATE = {
                 }
             ],
             "game_master": {
-                "prefab": "generic__GameMaster",
+                "prefab": "dialogic__GameMaster",
                 "name": "Group Session Manager",
                 "acting_order": "game_master_choice",
                 "parameters": {}
