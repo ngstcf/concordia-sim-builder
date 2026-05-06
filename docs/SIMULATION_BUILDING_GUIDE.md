@@ -214,8 +214,18 @@ You can add specialized components to the Game Master:
 
 **Engine types:**
 - **Sequential** — Agents act one at a time. Best for most scenarios. (Default)
-- **Simultaneous** — All agents act at the same time each step. Good for auctions, voting, or scenarios where order shouldn't matter.
+- **Simultaneous** — All agents act at the same time each step, without seeing what others did in the same round (they can see previous rounds). More step-efficient than sequential because every agent contributes every step.
 - **Step Controller** — You manually control each step with play/pause/step buttons. Good for studying individual decisions.
+
+**When to use Simultaneous over Sequential:**
+
+Simultaneous mode is a better fit when:
+- **Equal participation matters.** In sequential mode, dominant agents can lock into bilateral exchanges and crowd out quieter ones. Simultaneous forces every agent to contribute every round.
+- **Turn order should not influence outcomes.** Voting, sealed bids, independent resource allocation decisions, and survey-style responses are all order-independent. Sequential mode introduces an artificial first-mover or last-mover advantage.
+- **You need more data per step.** A 10-step simultaneous sim with 5 agents produces 50 actions. The same 10 steps in sequential mode produces only 10 (one agent per step). This matters when LLM costs or time are constraints.
+- **Agents should reason independently.** Panel debates, parallel deliberation, and brainstorming benefit from agents forming positions without anchoring to whatever the previous speaker said.
+
+Stick with Sequential when the scenario depends on reactive dialogue (negotiations, interviews, therapy sessions) where agents need to respond to what was just said. See the [AI Ethics Roundtable walkthrough](#walkthrough-medium-complexity--ai-ethics-roundtable-simultaneous-engine) for a worked example comparing the two modes.
 - **Interview** — Question-and-answer format between an interviewer and subject.
 - **Survey** — Structured survey administered to agents.
 
@@ -229,6 +239,18 @@ You can add specialized components to the Game Master:
 | Complex policy sim | 5-8 | 30-50 |
 
 Each step involves one agent action (in sequential mode). So a 30-step simulation with 3 agents means roughly 10 actions per agent.
+
+**How to calibrate step count:**
+
+The table above is a starting point. If your results show agent goals only partially met or variables still changing at the final step, the simulation likely ended too early. Three techniques help you find the right number:
+
+1. **Watch grounded variables.** If they are still changing at the last step, you cut it short. If they plateau several steps before the end, you can safely reduce the count.
+
+2. **Use the Step Controller engine.** Run the scenario interactively and observe when conversation starts looping or agents reach their objectives. Note that step number and use it as your target for future runs.
+
+3. **Sweep max_steps in a batch run.** Use the Batch Runner to sweep over step counts (e.g., 10, 15, 20, 25, 30) with 3 runs each. Export the grounded variables CSV and check where outcomes stabilize. That is your minimum viable step count for the scenario.
+
+Note that "partially met" goals are sometimes the realistic outcome, not a sign of too few steps. Many policy and commons dilemma scenarios are designed to be hard. The key signal is whether the simulation still had momentum (new proposals, shifting alliances, changing variables) when it ended.
 
 ---
 
