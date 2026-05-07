@@ -39,7 +39,7 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 
 ## Sample Simulation Results
 
-Seven completed simulation runs are included in the [`logs/`](logs/) directory, spanning peace negotiation, game theory, disaster response, and SDG-aligned scenarios. Each run was configured and executed entirely through the web interface using different LLM provider combinations.
+Nine completed simulation runs are included in the [`logs/`](logs/) directory, spanning 8 distinct scenarios across 3 Game Master types. Each run was configured and executed entirely through the web interface using different LLM provider combinations.
 
 Each simulation produces three output files:
 
@@ -47,15 +47,17 @@ Each simulation produces three output files:
 - **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration)
 - **`_analysis.md`** — LLM-powered analysis report (executive summary, effectiveness assessment, insights, recommendations)
 
-| # | Scenario | Agents | Agent LLM | GM LLM | Duration |
-|---|----------|--------|-----------|--------|----------|
-| 1 | **Peace Negotiation** — Russia-Ukraine talks at Istanbul, Jan 2026 | 2 (Agent R, Agent U) | DeepSeek V4 Flash | Claude Sonnet 4.6 | 29 min |
-| 2 | **Strategic Game** — Prisoner's Dilemma behavioral economics experiment | 2 (Alex, Sam) | OpenAI O3-Mini | Claude Sonnet 4.6 | 3 min |
-| 3 | **Flood Evacuation** — Coastal town Category 3 hurricane response (SDG 11/13) | 5 (Sarah Williams, Robert Thompson, Javier Rodriguez, Eleanor O'Brien, Pastor Moses) | DeepSeek V4 Flash | GPT-5.5 | 57 min |
-| 4 | **Software Team** — Fintech startup payment processing sprint | 3 (Project Manager, Senior Developer, Junior Developer) | GPT-5.4 Mini | Claude Opus 4.7 | 49 min |
-| 5 | **Conversational Debate** — AI tutors vs human teachers roundtable | 3 (Dr. Chen, Mr. Patel, Ms. Jackson) | Claude Haiku 4.5 | GPT-5.5 | 7 min |
-| 6 | **Labor Strike** — Collective action and wage negotiation (SDG 8) | 4 (Elena Vasquez, David Kim, Amina Johnson, Richard Sterling) | DeepSeek V4 Flash | GPT-5.5 | 73 min |
-| 7 | **Fishery Management** — Tragedy of the commons in marine resources (SDG 14) | 4 (Hiroshi Tanaka, Maria Santos, Okonkwo Nnamdi, Dr. Lisa Chen) | OpenAI O3-Mini | GPT-5 | 133 min |
+| # | Scenario | GM Type | Agents | Agent LLM | GM LLM | Duration |
+|---|----------|---------|--------|-----------|--------|----------|
+| 1 | **Peace Negotiation** — Russia-Ukraine talks at Istanbul, Jan 2026 | Generic | 2 (Agent R, Agent U) | DeepSeek V4 Flash | Claude Sonnet 4.6 | 29 min |
+| 2 | **Strategic Game** — Prisoner's Dilemma behavioral economics experiment | Game-Theoretic | 2 (Alex, Sam) | OpenAI O3-Mini | Claude Sonnet 4.6 | 3 min |
+| 3 | **Flood Evacuation** — Coastal town Category 3 hurricane response (SDG 11/13) | Generic | 5 (Sarah, Robert, Javier, Eleanor, Pastor Moses) | DeepSeek V4 Flash | GPT-5.5 | 57 min |
+| 4 | **Software Team** — Fintech startup payment processing sprint | Generic | 3 (Project Manager, Senior Dev, Junior Dev) | GPT-5.4 Mini | Claude Opus 4.7 | 49 min |
+| 5 | **Conversational Debate** — AI tutors vs human teachers roundtable | Dialogic | 3 (Dr. Chen, Mr. Patel, Ms. Jackson) | Claude Haiku 4.5 | GPT-5.5 | 7 min |
+| 6 | **Labor Strike** — Collective action and wage negotiation (SDG 8) | Generic | 4 (Elena, David, Amina, Richard) | DeepSeek V4 Flash | GPT-5.5 | 73 min |
+| 7 | **Fishery Management** — Tragedy of the commons in marine resources (SDG 14) | Generic | 4 (Hiroshi, Maria, Okonkwo, Dr. Lisa) | OpenAI O3-Mini | GPT-5 | 133 min |
+| 8 | **Music Career** — Singer-songwriter deliberation with friends | Dialogic | 5 (Jordan, Sandra, Dev, Rae, Marcus) | Ollama Gemma4 | Azure GPT-5 | 207 min |
+| 9 | **Flood Evacuation** *(rerun)* — Same scenario, different LLM combination | Generic | 5 (Sarah, Robert, Javier, Eleanor, Pastor Moses) | OpenAI GPT-4o-Mini | Claude Sonnet 4.6 | 62 min |
 
 ## Features
 
