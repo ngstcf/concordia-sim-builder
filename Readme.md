@@ -10,12 +10,15 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 
 | Without the Builder | With the Builder |
 |---------------------|------------------|
-| Write hundreds of lines of Python per scenario | Configure through form fields and dropdowns |
+| 1,100–7,000+ lines of Python per scenario | Configure through form fields and dropdowns |
 | Discover valid prefabs by reading library source | Browse prefabs with descriptions and defaults |
 | Invalid configs fail at runtime, after spending API credits | Real-time validation catches errors before execution |
 | Terminal-only output, no way to pause or inspect mid-run | Play/Pause/Step/Stop controls with live log streaming |
 | Kill the process to stop; restart from scratch to retry | Cancel with partial results saved; adjust and re-run |
 | Build your own output pipeline | Structured HTML report, 9-tab analytics dashboard, AI-powered analysis |
+| Write custom scripts for data extraction and analysis | Structured CSV/JSON export, cooperation metrics, grounded variable tracking |
+| Manual agent creation, one at a time | Census-based generation from demographic distributions, persona generator |
+| Re-run manually with different parameters | Batch runs with parameter sweeps over temperature and step count |
 | Every new scenario is a new coding effort | 38 ready-to-run templates covering research, policy, game theory, upstream DeepMind examples, and more |
 
 ![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
