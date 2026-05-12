@@ -6,7 +6,7 @@ Configure agents, psychological components, and scenarios through forms. Run sim
 
 ## Why a Builder?
 
-Concordia is a powerful research framework, but coding a simulation from scratch requires significant Python expertise. A single scenario typically involves 500–800+ lines of hand-written code: prose-based location descriptions, game rule strings, per-agent memory lists, prefab wiring, engine setup, and a custom runner script — all before the first simulation step executes.
+Concordia is a powerful research framework, but coding a simulation from scratch requires significant Python expertise. Even standard upstream examples — 2-to-4-agent scenarios using built-in prefabs — require 1,100 to 1,300 lines of Python across multiple files; examples with custom game masters and payoff logic reach 1,600 lines; research scenarios with large persona datasets exceed 7,000 lines. Each involves LLM initialization, agent configuration, memory injection, Game Master wiring, engine selection, and result parsing — all before the first simulation step executes.
 
 | Without the Builder | With the Builder |
 |---------------------|------------------|
