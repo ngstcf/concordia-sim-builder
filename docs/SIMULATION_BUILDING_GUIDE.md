@@ -776,6 +776,20 @@ The Simulation Builder wraps the [Concordia](https://github.com/google-deepmind/
 
 Building a simulation in raw Concordia Python requires writing code for every step: LLM initialization, prefab loading, agent configuration, memory injection, Game Master wiring, engine selection, execution, and result parsing. The standalone Fishery Commons example below demonstrates this: a medium-complexity 4-agent scenario with shared memories, private context, and result export requires ~350 lines of Python. Scenarios with custom game logic (custom game masters, payoff functions, scene definitions) reach 1,500-1,800 lines; research scenarios with large persona or configuration datasets reach 7,000+ lines across multiple files. LLM initialization adds further friction: Concordia's provider wrappers silently discard parameters like timeout and temperature (Ollama ignores both; the OpenAI wrapper hardcodes temperature for newer models), and some providers are not wired into the factory loader despite having implementation files.
 
+The table below summarizes the upstream Concordia v2.4 examples and their code requirements:
+
+| Example | Agents | Lines | Custom Components | Description |
+|---------|--------|-------|-------------------|-------------|
+| Conversation with AI Companion | 2 | 1,141 | Dialogic GM | Dyadic dialogue (philosophy exam prep, trig tutor) across 2 scenarios + shared utilities |
+| Social Media | 4 | 1,235 | Async Social Media GM | Forum-style discussions across 2 scenarios + shared utilities |
+| General Store | 4+ | 1,268 | Situated GM | Staff dynamics, theft investigation, social manipulation |
+| Pub Coordination | 4-6 | 720 | Game-Theoretic GM | Social network-based venue selection with focal, background, and supporting players |
+| Haggling | 2 | 1,151 | Custom GM (262), Custom Payoff (336) | Sequential bargaining with intermediate observations and payoff matrices |
+| Haggling Multi-Item | 2 | 647 | Custom GM (shared) | Multi-item variant with cumulative scoring |
+| Signaling Marketplace | 10 | 7,363 | DIAL system (331), Custom agents (466) | Multi-day marketplace with persona database (4,834 lines) and goods config (835 lines) |
+
+Lines include all files required to run the example (entry point, scenario definitions, shared utilities, custom components, and configuration data). Test files are excluded.
+
 The Builder replaces all of this with web forms: fill in the premise, add agents with goals and memories, pick an engine, and click Run. It also provides features that have no equivalent in standalone Concordia:
 
 - Real-time log streaming with color-coded messages
