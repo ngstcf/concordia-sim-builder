@@ -113,9 +113,9 @@ For the complete building guide, see [SIMULATION_BUILDING_GUIDE.md](docs/SIMULAT
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.13 or higher
 - Node.js 18 or higher
-- API keys for at least one LLM provider (OpenAI, DeepSeek, Gemini, or Anthropic), OR Ollama for local models
+- API keys for at least one LLM provider (OpenAI, Azure OpenAI, DeepSeek, Gemini, Anthropic, or GLM), OR Ollama for local models
 
 ### Backend Setup
 
