@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeBatchStream, exportBatchCSV, cancelBatch } from '../../utils/api';
-import type { BatchRunResult } from '../../types/simulation';
+import { executeBatchStream, exportBatchCSV, cancelBatch, getBatchReliability } from '../../utils/api';
+import type { BatchRunResult, BatchReliabilityReport } from '../../types/simulation';
 
 interface SweepParam {
   field: string;
@@ -20,7 +20,44 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
   const [totalRuns, setTotalRuns] = useState(0);
   const [batchStatus, setBatchStatus] = useState<string>('');
   const [error, setError] = useState('');
+  const [reliability, setReliability] = useState<BatchReliabilityReport | null>(null);
+  const [reliabilityLoading, setReliabilityLoading] = useState(false);
+  const [reliabilityError, setReliabilityError] = useState('');
+  const [reliabilityBatchId, setReliabilityBatchId] = useState<string | null>(null);
   const cancelRef = useRef<{ cancel: () => void } | null>(null);
+
+  useEffect(() => {
+    const shouldFetch =
+      !!batchId &&
+      !running &&
+      (batchStatus === 'completed' || batchStatus === 'cancelled') &&
+      reliabilityBatchId !== batchId;
+
+    if (!shouldFetch || !batchId) return;
+
+    let cancelled = false;
+    setReliabilityLoading(true);
+    setReliabilityError('');
+
+    getBatchReliability(batchId)
+      .then((data) => {
+        if (cancelled) return;
+        setReliability(data.reliability ?? null);
+        setReliabilityBatchId(batchId);
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setReliabilityError(e?.message || 'Failed to load reliability report');
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setReliabilityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId, batchStatus, running, reliabilityBatchId]);
 
   const addSweepParam = () => {
     setSweepParams([...sweepParams, { field: 'temperature', values: '0.3, 0.5, 0.7' }]);
@@ -49,6 +86,10 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
     setResults([]);
     setCompletedRuns(0);
     setBatchStatus('running');
+    setReliability(null);
+    setReliabilityLoading(false);
+    setReliabilityError('');
+    setReliabilityBatchId(null);
 
     const request = {
       config,
@@ -110,6 +151,25 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
       URL.revokeObjectURL(url);
     } catch (e: any) {
       setError('CSV export failed: ' + (e?.message || ''));
+    }
+  };
+
+  const handleExportReliabilityJSON = async () => {
+    if (!batchId) return;
+    try {
+      const data =
+        reliabilityBatchId === batchId && reliability
+          ? { batch_id: batchId, reliability }
+          : await getBatchReliability(batchId);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `batch_${batchId}_reliability.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError('Reliability export failed: ' + (e?.message || ''));
     }
   };
 
@@ -294,6 +354,64 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
                 </div>
               )}
 
+              {batchId && (batchStatus === 'completed' || batchStatus === 'cancelled') && (
+                <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Reliability (ICC3,1)</p>
+
+                  {reliabilityLoading && (
+                    <p className="text-xs text-gray-500">Loading reliability report...</p>
+                  )}
+
+                  {!reliabilityLoading && reliabilityError && (
+                    <p className="text-xs text-red-600">{reliabilityError}</p>
+                  )}
+
+                  {!reliabilityLoading && !reliabilityError && reliability && reliability.available && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-600">
+                        Overall mean ICC3,1:{' '}
+                        <span className="font-semibold text-gray-800">
+                          {reliability.overall_mean_icc3_1 == null ? 'N/A' : reliability.overall_mean_icc3_1.toFixed(3)}
+                        </span>
+                      </p>
+                      {reliability.dimensions && Object.keys(reliability.dimensions).length > 0 && (
+                        <div className="overflow-x-auto border border-gray-200 rounded bg-white">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-2 py-1.5 text-left font-medium text-gray-600">Dimension</th>
+                                <th className="px-2 py-1.5 text-right font-medium text-gray-600">ICC3,1</th>
+                                <th className="px-2 py-1.5 text-right font-medium text-gray-600">Agents</th>
+                                <th className="px-2 py-1.5 text-right font-medium text-gray-600">Runs</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {Object.entries(reliability.dimensions).map(([dim, stats]) => (
+                                <tr key={dim}>
+                                  <td className="px-2 py-1.5 text-gray-700">{dim}</td>
+                                  <td className="px-2 py-1.5 text-right text-gray-700">
+                                    {stats.icc3_1 == null ? 'N/A' : stats.icc3_1.toFixed(3)}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-gray-500">{stats.n_agents}</td>
+                                  <td className="px-2 py-1.5 text-right text-gray-500">{stats.n_runs}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!reliabilityLoading && !reliabilityError && reliability && !reliability.available && (
+                    <p className="text-xs text-gray-500">
+                      ICC not applicable for this batch.
+                      {reliability.reason ? ` ${reliability.reason}` : ''}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3">
                   <p className="text-sm text-red-700">{error}</p>
@@ -321,8 +439,25 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
                   Export CSV
                 </button>
               )}
+              {batchId && (
+                <button
+                  onClick={handleExportReliabilityJSON}
+                  className="px-4 py-2 border border-indigo-300 rounded-md text-sm font-medium text-indigo-700 bg-white hover:bg-indigo-50"
+                >
+                  Export Reliability JSON
+                </button>
+              )}
               <button
-                onClick={() => { setResults([]); setBatchStatus(''); setBatchId(null); setCompletedRuns(0); }}
+                onClick={() => {
+                  setResults([]);
+                  setBatchStatus('');
+                  setBatchId(null);
+                  setCompletedRuns(0);
+                  setReliability(null);
+                  setReliabilityLoading(false);
+                  setReliabilityError('');
+                  setReliabilityBatchId(null);
+                }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
                 New Batch

@@ -27,7 +27,7 @@ const OUTPUT_TYPES = [
 ];
 
 export default function SceneEditor() {
-  const { config, setConfig, setGameMaster } = useSimulation();
+  const { config, setConfig } = useSimulation();
 
   const existingScenes: Scene[] = (config.game_master.parameters?.scenes || []).map(
     (s: any, i: number) => ({ ...s, id: s.id || `scene-${i}` })

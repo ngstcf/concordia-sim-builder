@@ -8,7 +8,8 @@ import type {
   ValidationResult,
   PrefabsResponseData,
   ProviderInfo,
-  SimulationTemplate
+  SimulationTemplate,
+  BatchReliabilityReport
 } from '../types/simulation';
 
 // API base URL - default to localhost in development
@@ -1135,6 +1136,14 @@ export async function exportBatchCSV(batchId: string): Promise<Blob> {
     `/api/simulations/batch/${batchId}/export-csv`,
     { responseType: 'blob' }
   );
+  return response.data;
+}
+
+export async function getBatchReliability(batchId: string): Promise<{
+  batch_id: string;
+  reliability: BatchReliabilityReport;
+}> {
+  const response = await api.get(`/api/simulations/batch/${batchId}/reliability`);
   return response.data;
 }
 
