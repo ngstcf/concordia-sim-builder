@@ -31,9 +31,11 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
-- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide for all 38 templates with research setups and experiment suggestions
+- [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide with research setups and experiment suggestions
 - [Template Creation Guide](docs/TEMPLATE_CREATION_GUIDE.md) — Developer guide for adding new simulation templates
 - [Timeout Configuration](docs/TIMEOUT_CONFIGURATION.md) — Tuning LLM, watchdog, and frontend timeouts
+
+Template inventory is updated over time; the latest template count is always reflected in [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md).
 
 **Research Use Cases:**
 - [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md)
@@ -66,6 +68,7 @@ Each simulation produces three output files:
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
 - **38 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and 5 adapted Google DeepMind upstream examples (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
+- **Template Growth** — More templates are added based on user feedback as the project grows
 - **Multi-Agent System** — Define agents with unique goals, memories, psychological components, and behavioral prefabs
 - **Psychological Components** — Personality, cognitive bias, social identity, emotions, values, Theory of Planned Behavior
 - **Multiple Simulation Engines** — Sequential, asynchronous, simultaneous, and step controller (play/pause/step/stop)
@@ -207,7 +210,7 @@ Frontend: `http://localhost:5173`
 | **SDG Scenarios** | State Formation (16), Labor Strike (8), Fishery Management (14), Flood Evacuation (11/13), Educational Opportunity (10) |
 | **Upstream Examples** | Robot Alchemy Forum (async), Philosophy Exam Prep, Romantic Trig Tutor, General Store: Crime & Punishment (simultaneous, 7 agents), Pub Coordination: London (game theory) |
 
-See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for detailed parameter documentation and research guides for all templates.
+See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for detailed parameter documentation and research guides for all templates. The guide always reflects the latest template count.
 
 ## API Endpoints
 
@@ -267,7 +270,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (38 templates) |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (38 templates; more are added based on user feedback as the project grows) |
 
 ## Supported Prefabs
 
@@ -301,7 +304,7 @@ concordia-sim-builder/
 ├── backend/
 │   ├── api/
 │   │   ├── simulations.py           # API endpoints + analytics
-│   │   └── templates/               # 38 template modules
+│   │   └── templates/               # 38 template modules (growing over time based on user feedback)
 │   ├── models/
 │   │   ├── schemas.py               # Pydantic models
 │   │   └── llm_wrappers.py          # LLM provider wrappers
