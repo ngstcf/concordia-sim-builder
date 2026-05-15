@@ -382,6 +382,10 @@ Contributions are welcome! Please:
 - All simulations auto-save to `logs/` with descriptive filenames
 - See [CHANGELOG.md](CHANGELOG.md) for version history and upgrade procedures
 
+## Disclaimer
+
+All agent names, personas, scenarios, and narrative content in the templates and examples are entirely fictional. They are designed for research and educational purposes and do not represent real individuals, organizations, events, or policies. Any resemblance to actual persons, living or dead, or actual events is purely coincidental.
+
 ## License
 
 This project uses the [Concordia library](https://github.com/google-deepmind/concordia) (Apache-2.0 license).
