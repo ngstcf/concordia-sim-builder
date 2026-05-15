@@ -37,6 +37,7 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Searchable template picker with filtering, sorting, and tags
 - Configurable checkpoint interval (1-100, default 5) with UI control
 - Early termination toggle (`can_terminate_simulation` flag)
+- Clock configuration in builder — supports `multi_interval`, `fixed_increment`, and `generative` clock modes from Concordia upstream
 - Collapsible left sidebar with viewport-filling simulation log
 - Request timeout configuration per simulation
 - Removed redundant Advanced JSON Configuration panel (visual builders cover all GM parameters)
@@ -87,12 +88,17 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Templates registered via dynamic `router.add_api_route()`
 
 **Quantitative Research Features**
-- Structured data export (CSV/JSON) — export agent actions and grounded variable histories as tabular data from any simulation log; REST endpoints `GET /logs/{filename}/export-csv` and `export-json`; Export CSV/JSON buttons in results header
+- Structured data export (CSV/JSON) — export agent actions and grounded variable histories as tabular data from any simulation log; REST endpoints `GET /api/simulations/logs/{filename}/export-csv` and `GET /api/simulations/logs/{filename}/export-json`; Export CSV/JSON buttons in results header
 - Census/distribution-based agent generation — generate agents from statistical distributions (independent marginals or joint profiles); CSV/JSON file upload; deterministic seeding; optional LLM enrichment; new "Census / Distribution" tab in persona generator modal; REST endpoints `POST /generate-personas-census`, `POST /parse-distribution`
 - Structured action constraints — define available actions globally (name, description, condition) injected into premise as AVAILABLE ACTIONS section; per-agent action overrides injected as memories; new Available Actions editor in simulation builder
-- Batch runs with parameter sweeps — run simulations N times with optional sweep over temperature/max_steps; SSE progress streaming; live progress bar and results table; batch metadata and per-run logs saved to `logs/`; aggregated CSV export; REST endpoints `POST /batch/execute`, `GET /batch/{id}/status`, `POST /batch/{id}/cancel`, `GET /batch/{id}/export-csv`
+- Batch runs with parameter sweeps — run simulations N times with optional sweep over temperature/max_steps; SSE progress streaming; live progress bar and results table; batch metadata and per-run logs saved to `logs/`; aggregated CSV export; REST endpoints `POST /api/simulations/batch/execute`, `GET /api/simulations/batch/{id}/status`, `POST /api/simulations/batch/{id}/cancel`, `GET /api/simulations/batch/{id}/export-csv`
+- Batch reliability (ICC3,1) — questionnaire/interviewer-style batches now compute reliability when applicable, show ICC in the frontend, and support reliability JSON export; non-applicable scenarios report explicit "ICC not applicable"
+- Live batch run telemetry — batch stream now forwards per-run lifecycle and step progress (`run_start`, `run_status`, `run_progress`, `run_error`) and frontend shows current run step/ETA/parameters in real time
 - New files: `backend/utils/data_exporter.py`, `backend/services/census_generator.py`, `backend/services/batch_runner.py`, `frontend/src/components/SimulationBuilder/AvailableActionsEditor.tsx`, `frontend/src/components/SimulationRunner/BatchRunner.tsx`
 - New documentation: [Quantitative Research Features Guide](docs/QUANTITATIVE_RESEARCH_FEATURES.md)
+
+**Template Expansion**
+- Added Mastodon influence experiment template for social-media persuasion studies, including role-specific activity rates and support for malicious vs. counter-messaging behavior
 
 ### Bug Fixes
 - Fixed grounded variables not updating during simulation — GM was not instructed to output variable changes, so the component's post_act extraction always returned empty. Injected tracking instructions into the premise (visible to the event resolution chain), added fast `[VARIABLES: k=v]` tag parsing before LLM fallback, and fixed history recording to capture post-update values
@@ -108,6 +114,8 @@ Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new si
 - Fixed Stop button not actually ending the simulation — now calls `cancelSimulation()` in addition to stopping the step controller
 - Fixed Kill Server button not killing all worker processes — replaced single-process `os.kill` with port-based `lsof`/`kill` to catch reloader + all workers
 - Fixed duplicate messages in Live Logs — React StrictMode double-mount opened two SSE connections to `/logs/stream`; now closes existing connection before opening a new one
+- Fixed batch streaming robustness on frontend — batch requests now use the configured API base URL, surface HTTP/body errors, and parse `data:` lines consistently
+- Fixed batch backend event parsing — now correctly parses nested SSE from simulation runs so completion/error/log filename state is captured reliably
 
 ### Templates (38 total)
 
