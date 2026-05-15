@@ -24,6 +24,13 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
   const [reliabilityLoading, setReliabilityLoading] = useState(false);
   const [reliabilityError, setReliabilityError] = useState('');
   const [reliabilityBatchId, setReliabilityBatchId] = useState<string | null>(null);
+  const [activeRunIndex, setActiveRunIndex] = useState(0);
+  const [activeRunParameters, setActiveRunParameters] = useState<Record<string, string>>({});
+  const [activeRunStep, setActiveRunStep] = useState(0);
+  const [activeRunMaxSteps, setActiveRunMaxSteps] = useState(0);
+  const [activeRunElapsed, setActiveRunElapsed] = useState(0);
+  const [activeRunEtaLabel, setActiveRunEtaLabel] = useState('');
+  const [activeRunStatus, setActiveRunStatus] = useState('');
   const cancelRef = useRef<{ cancel: () => void } | null>(null);
 
   useEffect(() => {
@@ -90,6 +97,13 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
     setReliabilityLoading(false);
     setReliabilityError('');
     setReliabilityBatchId(null);
+    setActiveRunIndex(0);
+    setActiveRunParameters({});
+    setActiveRunStep(0);
+    setActiveRunMaxSteps(0);
+    setActiveRunElapsed(0);
+    setActiveRunEtaLabel('');
+    setActiveRunStatus('');
 
     const request = {
       config,
@@ -109,9 +123,33 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
         if (event.type === 'batch_start') {
           setBatchId(event.batch_id);
           setTotalRuns(event.total_runs);
+        } else if (event.type === 'run_start') {
+          setActiveRunIndex(event.run_index || 0);
+          setActiveRunParameters(event.parameters || {});
+          setActiveRunStep(0);
+          setActiveRunMaxSteps(0);
+          setActiveRunElapsed(0);
+          setActiveRunEtaLabel('');
+          setActiveRunStatus('Starting run...');
+        } else if (event.type === 'run_status') {
+          setActiveRunStatus(event.message || '');
+        } else if (event.type === 'run_progress') {
+          setActiveRunIndex((prev) => event.run_index || prev);
+          setActiveRunStep(event.step || 0);
+          setActiveRunMaxSteps(event.max_steps || 0);
+          setActiveRunElapsed(typeof event.elapsed === 'number' ? event.elapsed : 0);
+          setActiveRunEtaLabel(event.est_time_str || '');
+          setActiveRunStatus('Executing...');
+        } else if (event.type === 'run_error') {
+          setActiveRunStatus(event.error ? `Error: ${event.error}` : 'Run failed');
         } else if (event.type === 'run_complete') {
           setResults(prev => [...prev, event.run_result]);
           setCompletedRuns(event.completed_runs);
+          setActiveRunStatus(
+            event.run_result?.status === 'failed'
+              ? `Run failed: ${event.run_result?.error || 'Unknown error'}`
+              : 'Run complete'
+          );
         } else if (event.type === 'batch_complete') {
           setBatchStatus('completed');
           setRunning(false);
@@ -317,6 +355,26 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
+              {running && activeRunIndex > 0 && (
+                <div className="border border-indigo-200 bg-indigo-50 rounded-md p-3 space-y-1.5">
+                  <p className="text-xs font-medium text-indigo-800">
+                    Current Run: {activeRunIndex}/{totalRuns || '?'}
+                  </p>
+                  <p className="text-xs text-indigo-700">
+                    Step: {activeRunStep}/{activeRunMaxSteps || '?'}
+                    {' · '}
+                    Elapsed: {Math.round(activeRunElapsed)}s
+                    {activeRunEtaLabel ? ` · ETA: ${activeRunEtaLabel}` : ''}
+                  </p>
+                  <p className="text-xs text-indigo-700">
+                    Params: {Object.entries(activeRunParameters).map(([k, v]) => `${k}=${v}`).join(', ') || 'default'}
+                  </p>
+                  {activeRunStatus && (
+                    <p className="text-xs text-indigo-600">{activeRunStatus}</p>
+                  )}
+                </div>
+              )}
+
               {results.length > 0 && (
                 <div className="border border-gray-200 rounded-md overflow-hidden">
                   <table className="w-full text-xs">
@@ -457,6 +515,13 @@ export default function BatchRunner({ onClose }: { onClose: () => void }) {
                   setReliabilityLoading(false);
                   setReliabilityError('');
                   setReliabilityBatchId(null);
+                  setActiveRunIndex(0);
+                  setActiveRunParameters({});
+                  setActiveRunStep(0);
+                  setActiveRunMaxSteps(0);
+                  setActiveRunElapsed(0);
+                  setActiveRunEtaLabel('');
+                  setActiveRunStatus('');
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
