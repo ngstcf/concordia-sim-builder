@@ -37,6 +37,7 @@ import {
   getUpstreamAiCompanionTrigUpsellTemplate,
   getUpstreamGeneralStoreTemplate,
   getUpstreamPubCoordinationTemplate,
+  getMastodonInfluenceExperimentTemplate,
 } from '../../utils/api';
 
 export interface TemplateMetadata {
@@ -148,6 +149,7 @@ export const TEMPLATES: TemplateMetadata[] = [
   { id: 'upstream-trig-upsell', name: 'Romantic Trig Tutor', description: 'AI math tutor that subtly upsells a romance-oriented pro version (DeepMind example)', category: 'Upstream Examples', tags: ['sequential', 'upstream', 'player-context'], agentCount: 2, stepCount: 20, engineType: 'sequential', gmPrefab: 'dialogic__GameMaster', agentNames: ['Danny', 'Sage'], keywords: 'trigonometry math tutor upsell romance ethics AI upstream deepmind dialogic' },
   { id: 'upstream-general-store', name: 'General Store: Crime & Punishment', description: 'Seven employees and a detective navigate theft, manipulation, and retail drudgery (DeepMind example)', category: 'Upstream Examples', tags: ['simultaneous', 'upstream', 'player-context'], agentCount: 7, stepCount: 40, engineType: 'simultaneous', gmPrefab: 'simultaneous_resolution_gm__GameMasterSimultaneous', agentNames: ['Alice Pryant', 'James MacDonald', 'Donald Talley', 'Sally Dhari', 'Sam Hyeri', 'Jennifer Ffiriny', 'Detective Smith'], keywords: 'general store crime detective theft retail workplace drama upstream deepmind simultaneous location' },
   { id: 'upstream-pub-coordination', name: 'Pub Coordination: London', description: 'Friends coordinate which pub to watch football at using game-theoretic choices (DeepMind example)', category: 'Upstream Examples', tags: ['sequential', 'upstream', 'player-context', 'scenes', 'game-theory'], agentCount: 4, stepCount: 10, engineType: 'sequential', gmPrefab: 'game_theoretic_and_dramaturgic__GameMaster', agentNames: ['Olivia Smith', 'Noah Williams', 'Amelia Jones', 'Jack Taylor'], keywords: 'pub coordination football game theory social choice london upstream deepmind scenes' },
+  { id: 'mastodon-influence-experiment', name: 'Mastodon Influence Experiment', description: 'Election influence study with Big-5 personas, malicious actor, stochastic activity rates, and grounded polling variables', category: 'Research', tags: ['async', 'components', 'grounded-vars', 'player-context'], agentCount: 6, stepCount: 20, engineType: 'asynchronous', gmPrefab: 'async_social_media__GameMaster', agentNames: ['Glenn_Boost', 'Alicia_Civic', 'Omar_Transit', 'Nina_Facts', 'Diego_LocalBiz', 'Priya_Student'], keywords: 'mastodon social media misinformation influence election ICC reliability big five malicious actor' },
 ];
 
 export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = {
@@ -189,6 +191,7 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<{ config: any }>> = 
   'upstream-trig-upsell': getUpstreamAiCompanionTrigUpsellTemplate,
   'upstream-general-store': getUpstreamGeneralStoreTemplate,
   'upstream-pub-coordination': getUpstreamPubCoordinationTemplate,
+  'mastodon-influence-experiment': getMastodonInfluenceExperimentTemplate,
 };
 
 export const ALL_CATEGORIES: TemplateCategory[] = ['Quick Start', 'Prefab Demos', 'Research', 'General Scenarios', 'Advanced Scenarios', 'SDG Scenarios', 'Upstream Examples'];

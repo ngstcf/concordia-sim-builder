@@ -54,6 +54,30 @@ def _generate_param_combinations(
     return combinations
 
 
+def _parse_sse_event(event_str: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Parse an SSE event block into event type + JSON data payload."""
+    event_type: Optional[str] = None
+    data_lines: List[str] = []
+
+    for raw_line in event_str.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(':'):
+            continue
+        if line.startswith('event:'):
+            event_type = line[6:].strip()
+        elif line.startswith('data:'):
+            data_lines.append(line[5:].strip())
+
+    if not data_lines:
+        return event_type, None
+
+    data_text = '\n'.join(data_lines)
+    try:
+        return event_type, json.loads(data_text)
+    except (json.JSONDecodeError, ValueError):
+        return event_type, None
+
+
 class BatchRunner:
     def __init__(self):
         self._batches: Dict[str, Dict[str, Any]] = {}
@@ -153,15 +177,42 @@ class BatchRunner:
                         if batch_state['status'] == 'cancelled':
                             break
 
-                        if event_str.startswith('data: '):
-                            try:
-                                event_data = json.loads(event_str[6:].strip())
-                                if event_data.get('type') == 'complete':
-                                    log_filename = event_data.get('log_filename', '')
-                                elif event_data.get('type') == 'error':
-                                    error_msg = event_data.get('error', 'Unknown error')
-                            except (json.JSONDecodeError, ValueError):
-                                pass
+                        inner_event_type, inner_event_data = _parse_sse_event(event_str)
+                        if not inner_event_type or inner_event_data is None:
+                            continue
+
+                        if inner_event_type == 'simulation_start':
+                            msg = inner_event_data.get('message')
+                            if msg:
+                                run_status_event = {
+                                    'type': 'run_status',
+                                    'batch_id': batch_id,
+                                    'run_index': run_index,
+                                    'total_runs': total_runs,
+                                    'message': msg,
+                                }
+                                yield f"data: {json.dumps(run_status_event)}\n\n"
+                        elif inner_event_type == 'step_progress':
+                            run_progress_event = {
+                                'type': 'run_progress',
+                                'batch_id': batch_id,
+                                'run_index': run_index,
+                                'total_runs': total_runs,
+                                **inner_event_data,
+                            }
+                            yield f"data: {json.dumps(run_progress_event)}\n\n"
+                        elif inner_event_type == 'simulation_complete':
+                            log_filename = inner_event_data.get('log_filename', '')
+                        elif inner_event_type == 'error':
+                            error_msg = inner_event_data.get('error', 'Unknown error')
+                            run_error_event = {
+                                'type': 'run_error',
+                                'batch_id': batch_id,
+                                'run_index': run_index,
+                                'total_runs': total_runs,
+                                'error': error_msg,
+                            }
+                            yield f"data: {json.dumps(run_error_event)}\n\n"
 
                 except Exception as e:
                     error_msg = str(e)

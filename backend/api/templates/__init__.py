@@ -42,6 +42,7 @@ from .upstream_ai_companion_philosophy import TEMPLATE as _upstream_ai_companion
 from .upstream_ai_companion_trig_upsell import TEMPLATE as _upstream_ai_companion_trig_upsell
 from .upstream_general_store import TEMPLATE as _upstream_general_store
 from .upstream_pub_coordination import TEMPLATE as _upstream_pub_coordination
+from .mastodon_influence_experiment import TEMPLATE as _mastodon_influence_experiment
 
 TEMPLATES: dict[str, dict] = {
     "peace-negotiation": _peace_negotiation,
@@ -82,4 +83,5 @@ TEMPLATES: dict[str, dict] = {
     "upstream-ai-companion-trig-upsell": _upstream_ai_companion_trig_upsell,
     "upstream-general-store": _upstream_general_store,
     "upstream-pub-coordination": _upstream_pub_coordination,
+    "mastodon-influence-experiment": _mastodon_influence_experiment,
 }

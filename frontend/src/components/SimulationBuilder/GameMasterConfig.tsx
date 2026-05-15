@@ -310,6 +310,73 @@ export default function GameMasterConfig() {
           <QuestionnaireBuilder />
         )}
 
+        {/* Async Social Media Controls */}
+        {config.game_master.prefab === 'async_social_media__GameMaster' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 space-y-3">
+            <h4 className="text-sm font-medium text-blue-800">Social Media Activity Model</h4>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Default Activity Rate
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                value={(config.game_master.parameters?.default_activity_rate ?? 1.0) as number}
+                onChange={(e) => {
+                  const params = config.game_master.parameters || {};
+                  setGameMaster({
+                    ...config.game_master,
+                    parameters: {
+                      ...params,
+                      default_activity_rate: parseFloat(e.target.value) || 0,
+                    },
+                  });
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {'<= 1.0'} is interpreted as probability. {'> 1.0'} is treated as a relative intensity weight.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Per-Agent Activity Rates
+              </label>
+              <textarea
+                rows={2}
+                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                placeholder="Alice:1, Bob:0.4, Glenn:10"
+                value={Object.entries((config.game_master.parameters?.per_agent_activity_rates || {}) as Record<string, number>)
+                  .map(([name, rate]) => `${name}:${rate}`)
+                  .join(', ')}
+                onChange={(e) => {
+                  const parsed: Record<string, number> = {};
+                  for (const segment of e.target.value.split(',')) {
+                    const [nameRaw, rateRaw] = segment.split(':').map(s => s.trim());
+                    if (!nameRaw) continue;
+                    const rate = Number(rateRaw);
+                    if (!Number.isNaN(rate)) parsed[nameRaw] = rate;
+                  }
+                  const params = config.game_master.parameters || {};
+                  setGameMaster({
+                    ...config.game_master,
+                    parameters: {
+                      ...params,
+                      per_agent_activity_rates: parsed,
+                    },
+                  });
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Format: `name:rate` comma-separated. Use higher rates for high-frequency actors.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Grounded Variables - optional advanced feature */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">

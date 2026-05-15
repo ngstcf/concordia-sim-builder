@@ -22,16 +22,16 @@ function formatTime(ts: number): string {
 
 const LEGEND_ITEMS: { color: string; bg: string; label: string }[] = [
   { color: 'bg-cyan-300',    bg: '', label: 'Entity observations' },
-  { color: 'bg-emerald-400', bg: '', label: 'Entity actions' },
-  { color: 'bg-rose-300',    bg: '', label: 'GM narration' },
-  { color: 'bg-yellow-400',  bg: '', label: 'Warnings' },
+  { color: 'bg-emerald-400', bg: '', label: 'Entity actions & turn selection' },
+  { color: 'bg-rose-300',    bg: '', label: 'GM narration, events, payoffs, inventory, NPC, working memory' },
+  { color: 'bg-yellow-400',  bg: '', label: 'Warnings & info notices' },
   { color: 'bg-orange-400',  bg: '', label: 'Watchdog alerts' },
   { color: 'bg-purple-400',  bg: '', label: 'Analyzer output' },
   { color: 'bg-indigo-400',  bg: '', label: 'LLM API calls' },
-  { color: 'bg-amber-300',   bg: '', label: 'Progress / startup' },
+  { color: 'bg-amber-300',   bg: '', label: 'Progress, startup & config' },
   { color: 'bg-green-400',   bg: '', label: 'Completion' },
-  { color: 'bg-sky-300',     bg: '', label: 'Checkpoint' },
-  { color: 'bg-red-400',     bg: '', label: 'Errors / cancel' },
+  { color: 'bg-sky-300',     bg: '', label: 'Checkpoints & heartbeat' },
+  { color: 'bg-red-400',     bg: '', label: 'Errors, cancel & critical' },
   { color: 'bg-gray-500',    bg: '', label: 'Debug messages' },
   { color: 'bg-gray-200',    bg: '', label: 'Other system messages' },
 ];
@@ -56,12 +56,29 @@ function lineColor(entry: LogEntry): string {
   if (m.startsWith('Would they do it?')) return 'text-rose-300';
   if (m.includes('Skipping the action phase')) return 'text-rose-300';
 
+  // GM narration — narrative_event_resolution contrib component
+  if (m.startsWith('STEP 1:') || m.startsWith('STEP 2:') || m.startsWith('STEP 3:')) return 'text-rose-300';
+  if (m.startsWith('Player plans:')) return 'text-rose-300';
+  if (m.includes('narrative generated') || m.includes('Generating master narrative')) return 'text-rose-300';
+  if (m.startsWith('Generating player observations') || m.startsWith('Recording narrative history')) return 'text-rose-300';
+  if (m.startsWith('Observations for ') || m.startsWith('Generating for ')) return 'text-rose-300';
+  if (m.includes('putative events')) return 'text-rose-300';
+  if (m.includes('parsed plan for') || (m.includes('Queued') && m.includes('entries for'))) return 'text-rose-300';
+
+  // GM narration — payoff_matrix, inventory, working memory, NPC events
+  if (m.startsWith('Joint action is complete:') || (m.startsWith('Stage ') && m.includes('is complete'))) return 'text-rose-300';
+  if (m.startsWith('GM Working Memory:')) return 'text-rose-300';
+  if (m.startsWith('NpcEventGenerator:')) return 'text-rose-300';
+  if (m.includes('target =') && m.includes('inventory =')) return 'text-rose-300';
+  if (m.includes('target found in inventory')) return 'text-rose-300';
+
   // Errors and cancellation
   if (m.includes('[ERROR]')) return 'text-red-400';
   if (m.includes('[CANCEL]')) return 'text-red-400';
+  if (m.startsWith('CRITICAL:')) return 'text-red-400';
 
   // Warnings
-  if (m.includes('[WARNING]') || m.includes('⚠️')) return 'text-yellow-400';
+  if (m.includes('[WARNING]') || m.includes('[INFO]') || m.includes('⚠️')) return 'text-yellow-400';
 
   // Analyzer
   if (m.includes('[Analyzer]')) return 'text-purple-400';
@@ -85,6 +102,8 @@ function lineColor(entry: LogEntry): string {
   if (m.startsWith('Provider:') || m.startsWith('Model:') || m.startsWith('GM Provider:') || m.startsWith('GM Model:'))
     return 'text-amber-300';
   if (m.startsWith('Max Steps:') || m.startsWith('Agents:') || m.startsWith('Premise:') || m.startsWith('Early Termination:'))
+    return 'text-amber-300';
+  if (m.startsWith('[GM LLM]') || m.startsWith('Size:'))
     return 'text-amber-300';
   if (m.includes('==='))
     return 'text-amber-300';

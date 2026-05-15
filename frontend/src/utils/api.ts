@@ -8,7 +8,8 @@ import type {
   ValidationResult,
   PrefabsResponseData,
   ProviderInfo,
-  SimulationTemplate
+  SimulationTemplate,
+  BatchReliabilityReport
 } from '../types/simulation';
 
 // API base URL - default to localhost in development
@@ -583,6 +584,11 @@ export async function getUpstreamPubCoordinationTemplate(): Promise<SimulationTe
   return response.data;
 }
 
+export async function getMastodonInfluenceExperimentTemplate(): Promise<SimulationTemplate> {
+  const response = await api.get('/api/simulations/templates/mastodon-influence-experiment');
+  return response.data;
+}
+
 /**
  * Get available models for a specific provider
  * @param provider - The LLM provider (e.g., 'gemini', 'anthropic', 'openai', 'ollama')
@@ -1061,15 +1067,33 @@ export function executeBatchStream(
 
   (async () => {
     try {
-      const response = await fetch('/api/simulations/batch/execute', {
+      const response = await fetch(`${API_BASE_URL}/api/simulations/batch/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
         signal: controller.signal,
       });
 
+      if (!response.ok) {
+        let details = '';
+        try {
+          details = await response.text();
+        } catch {
+          // ignore parsing errors for error payload
+        }
+        onError?.(
+          new Error(
+            `Batch request failed (${response.status} ${response.statusText})${details ? `: ${details}` : ''}`
+          )
+        );
+        return;
+      }
+
       const reader = response.body?.getReader();
-      if (!reader) return;
+      if (!reader) {
+        onError?.(new Error('Batch request succeeded but no stream was returned by the server.'));
+        return;
+      }
 
       const decoder = new TextDecoder();
       let buffer = '';
@@ -1083,9 +1107,9 @@ export function executeBatchStream(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(line.slice(5).trim());
               onEvent(data);
             } catch { /* skip parse errors */ }
           }
@@ -1130,6 +1154,14 @@ export async function exportBatchCSV(batchId: string): Promise<Blob> {
     `/api/simulations/batch/${batchId}/export-csv`,
     { responseType: 'blob' }
   );
+  return response.data;
+}
+
+export async function getBatchReliability(batchId: string): Promise<{
+  batch_id: string;
+  reliability: BatchReliabilityReport;
+}> {
+  const response = await api.get(`/api/simulations/batch/${batchId}/reliability`);
   return response.data;
 }
 

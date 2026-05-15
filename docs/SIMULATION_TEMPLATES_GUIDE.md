@@ -4,7 +4,7 @@ This guide explains every pre-built template in the Concordia Simulation Builder
 
 You can run templates as-is or modify them to fit your needs. All parameters are editable after loading.
 
-**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 38 templates include research-grade agent configurations with detailed memories per agent, psychological components, player-specific context, and measurable goals.
+**Template source code:** Each template lives in its own file under `backend/api/templates/` (e.g., `peace_negotiation.py`). The registry is in `backend/api/templates/__init__.py`. All 39 templates include research-grade agent configurations with detailed memories per agent, psychological components, player-specific context, and measurable goals.
 
 ---
 
@@ -30,6 +30,7 @@ You can run templates as-is or modify them to fit your needs. All parameters are
 | Rational Negotiators | General Scenarios | Sequential | 2 | personality_traits, values | ✓ | Utility-maximizing rational agents |
 | Philosophy Roundtable | General Scenarios | Sequential | 3 | personality_traits, values | ✓ | Dialogue-optimized conversational agents |
 | Social Media Debate | General Scenarios | Asynchronous | 4 | social_identity, cognitive_bias | ✓ | Async engine for social media dynamics |
+| Mastodon Influence Experiment | General Scenarios | Asynchronous | 6 | personality_traits | ✓ | Misinformation influence experiment with stochastic posting rates and clock config |
 | Sealed-Bid Auction | General Scenarios | Simultaneous | 4 | cognitive_bias, personality_traits | ✓ | Simultaneous engine (all act at once) |
 | Wizard-of-Oz CS Training | General Scenarios | Simultaneous | 3 | emotion, personality_traits | ✓ | Human-controlled puppet agents |
 | Spaceship Crisis | General Scenarios | Sequential | 3 | personality_traits, emotion, values | ✓ | Planning agents in crisis scenarios |
@@ -66,6 +67,7 @@ Before diving into templates, here is what each configuration field means and ho
 | **Premise** | The opening narrative that sets the scene. This is the first thing the Game Master and agents "read" before the simulation starts. Write it like the opening paragraph of a story. |
 | **Max Steps** | How many turns the simulation runs. Each step typically involves one agent acting and the Game Master narrating the result. More steps = longer simulation = more LLM API calls = higher cost. Start with 5-10 for testing. |
 | **Engine Type** | How agents take turns. See [Engine Types](#engine-types) below. |
+| **Clock** | Optional simulation time model independent of engine type. Use `fixed_increment`, `multi_interval`, or `generative` depending on temporal realism needs. |
 
 #### Writing an Effective Premise
 
@@ -96,6 +98,20 @@ Tips:
 | **Step Controller** | Like Sequential, but the simulation starts paused and you control execution manually. Use the toolbar to **Play** (run continuously), **Pause** (stop after current step), **Step** (advance exactly one action), or **Stop** (terminate early). Each step shows which entity acted and what action was taken. | Debugging, close analysis of individual agent decisions, teaching demonstrations, any scenario where you want to observe and discuss each step before proceeding. |
 
 **Choosing an engine:** Ask yourself: "Should agents see each other's actions before deciding?" If yes, use Sequential. If no, use Simultaneous. If the scenario is social-media-like, use Asynchronous. If you're running a questionnaire, choose Interview (if order matters) or Survey (if not). If you want manual control over each step, use Step Controller.
+
+### Clock Types
+
+| Clock Type | Core Fields | Behavior |
+|---|---|---|
+| **fixed_increment** | `start_time`, `increment_minutes` | Advances simulation time by a constant number of minutes each step. |
+| **multi_interval** | `start_time`, `increment_minutes`, optional `variable_increment_rules` | Uses variable minute increments by hour/time bands while remaining deterministic. |
+| **generative** | optional `clock_description` | Lets the LLM manage temporal progression from prompt instructions. |
+
+**Clock field definitions:**
+- `start_time`: Initial timestamp string for the scenario clock.
+- `increment_minutes`: Base step duration in minutes (`1..1440`).
+- `variable_increment_rules`: Mapping of hour -> increment minutes for multi-interval schedules.
+- `clock_description`: Instruction text that defines how a generative clock should advance time.
 
 ### Agent Parameters
 
@@ -316,15 +332,53 @@ Acting order is a surprisingly powerful lever:
 |---|---|---|---|
 | **generic** | Narrates events, tracks the world state, decides who acts next. Most flexible. | None (use JSON or the GM briefing fields) | Default choice. Works for most scenarios. |
 | **dialogic** | Focused on facilitating conversation. Can end the simulation early when dialogue reaches a natural conclusion. | None | Therapy sessions, debates, interviews where natural endpoints matter. |
+| **dialogic_and_dramaturgic** | Combines dialogue facilitation with dramatic scene structure. Supports natural conversation flow within defined scenes, with auto-termination when dialogue concludes. | **Scene Editor** | Structured conversations that need both natural dialogue endpoints and scene-based pacing — panel discussions, mediated negotiations, guided group therapy. |
 | **game_theoretic_and_dramaturgic** | Runs structured scenes with defined action choices (e.g., COOPERATE/DEFECT). Tracks scores and payoffs. | **Scene Editor** | Game theory, strategic decisions, any scenario with discrete action options. |
 | **interviewer** | Administers structured questionnaires with Likert scales or multiple-choice questions. The GM is the interviewer. | **Questionnaire Builder** | Surveys, employee feedback, psychological assessments. |
 | **open_ended_interviewer** | Like interviewer but with free-text responses instead of multiple choice. | **Questionnaire Builder** | Qualitative research, open-ended interviews. |
-| **scripted** | Follows a scripted narrative arc. The GM has a predefined story structure it follows. | **Scene Editor** | Tutorials, demonstrations, controlled experiments. |
-| **physically_situated_and_dramaturgic** | Tracks physical location and movement of agents in a defined space. Agents have positions and can move. | **Scene Editor** | Spatial simulations, evacuation drills, physical world scenarios. |
 | **marketplace** | Manages an economic marketplace with trading mechanics (buy, sell, price discovery). | None (use JSON) | Buying/selling simulations, market experiments. |
-| **async_social_media** | Simulates a social media platform with posts, replies, and feeds. | None | Online discourse studies, misinformation research, platform dynamics. |
+| **psychology_experiment** | Manages experimental protocols with structured conditions, stimulus presentation, and response collection. Designed for behavioral research paradigms. | None (use JSON) | Psychology experiments, behavioral studies, structured research protocols with controlled conditions. |
+| **scripted** | Follows a scripted narrative arc. The GM has a predefined story structure it follows. | **Scene Editor** | Tutorials, demonstrations, controlled experiments. |
+| **situated** | Location-aware GM that tracks where agents are in a defined space. Agents can move between locations and the GM narrates spatial context. | None (use JSON) | Spatially grounded scenarios where agent location matters — campus simulations, neighborhood interactions, building evacuations. |
+| **situated_in_time_and_place** | Extends spatial awareness with explicit time progression. Tracks both where and when agents are, with time-of-day affecting available actions and context. | None (use JSON) | Scenarios where both location and time matter — daily routines, shift-based workplaces, time-sensitive spatial coordination. |
+| **physically_situated_and_dramaturgic** | Tracks physical location and movement of agents in a defined space. Agents have positions and can move. Adds dramatic scene structure on top. | **Scene Editor** | Spatial simulations with structured scenes — evacuation drills, physical world scenarios, location-based strategic games. |
+| **async_social_media** | Simulates a social media platform with posts, replies, and feeds. Supports stochastic per-agent activity rates. | None | Online discourse studies, misinformation research, platform dynamics. |
 | **simultaneous_resolution_gm (GameMasterSimultaneous)** | Simultaneous event resolution with location tracking, NPC events, working memory, and time-based pacing. Agents all act each step and their plans are resolved into a single narrative. Parameters: `start_time`, `time_period_minutes`, `locations`, `game_rules`, `use_gm_working_memory`. | None (use JSON) | Multi-agent workplace simulations, location-based scenarios, any setting where all agents act in parallel with spatial awareness. |
 | **space_ship** | Manages spaceship systems, resources, and crew decisions in a structured environment. | None (use JSON) | Spaceship scenarios, system management simulations. |
+
+#### Choosing the Right GM Prefab
+
+**Start here:** If you're unsure, use **generic**. It handles narration, turn management, and world-state tracking without imposing structure. Most templates use it.
+
+**Need natural conversation?** Use **dialogic** when agents should talk freely and the simulation should end when the conversation naturally concludes (therapy sessions, debates, interviews). If you also need scene structure within that dialogue, use **dialogic_and_dramaturgic** (panel discussions, mediated negotiations with phases).
+
+**Need structured decisions?** Use **game_theoretic_and_dramaturgic** when agents must choose from discrete options each round (COOPERATE/DEFECT, BUY/SELL/HOLD). The Scene Editor lets you define rounds, options, and payoffs. Use **scripted** when the GM itself should follow a predetermined narrative arc rather than responding dynamically.
+
+**Need surveys or interviews?** Use **interviewer** for structured questionnaires with Likert scales or multiple choice (employee feedback, psychological assessments). Use **open_ended_interviewer** for free-text responses (qualitative research). Both activate the Questionnaire Builder. Use **psychology_experiment** when running a full experimental protocol with conditions and stimulus presentation.
+
+**Need spatial awareness?** Three prefabs track agent location, in increasing complexity:
+- **situated** — agents move between locations; the GM narrates spatial context
+- **situated_in_time_and_place** — adds time-of-day awareness so actions vary by when and where
+- **physically_situated_and_dramaturgic** — adds dramatic scene structure on top of spatial tracking (evacuation drills, location-based games)
+
+**Need economic mechanics?** Use **marketplace** for trading simulations with buy/sell/price discovery.
+
+**Need social media dynamics?** Use **async_social_media** for forum-style interaction with posts, replies, and feeds. Supports per-agent activity rates for modeling different usage patterns (e.g., a malicious high-frequency poster vs. casual users). See [Async Social Media Activity Parameters](#async-social-media-activity-parameters) below.
+
+**Need simultaneous action?** Use **simultaneous_resolution_gm** when all agents should act each step and their plans are resolved together into a single narrative. Includes location tracking, NPC events, and working memory.
+
+**Domain-specific:** **space_ship** is purpose-built for spaceship scenarios with system health, resource management, and crew decisions.
+
+### Async Social Media Activity Parameters
+
+When GM prefab is `async_social_media__GameMaster`, these `game_master.parameters` fields control posting frequency:
+
+| Parameter | Type | Definition |
+|---|---|---|
+| `default_activity_rate` | number | Baseline activity for agents without per-agent overrides. `<= 1.0` is interpreted as probability; `> 1.0` is treated as relative intensity. |
+| `per_agent_activity_rates` | object (`name -> rate`) | Agent-specific activity overrides for heterogeneous social-media usage patterns. |
+| `activity_seed` | integer | RNG seed for reproducible stochastic activity sampling across runs. |
+| `forum_name` | string | Label/context for the forum instance used by the GM. |
 
 ### Shared Memories
 
@@ -1956,6 +2010,74 @@ You can also set it via JSON import/export using a `player_specific_context` key
 **Academic connections:** Online deliberation and echo chambers (Sunstein 2017), political polarization on social media (Bail et al. 2018), status quo bias in policy preferences, anchoring in political judgment, in-group bias and intergroup conflict, fact-checking effectiveness research, platform governance and discourse quality.
 
 **Platform features demonstrated:** Asynchronous engine, random acting order, social_identity component with group membership, cognitive_bias (in_group_bias, status_quo_bias, anchoring_bias), player_specific_context for all 4 agents, social media-framed scenario.
+
+---
+
+#### Mastodon Influence Experiment
+
+**Template ID:** `mastodon-influence-experiment`
+
+**Learning objectives:** Reproduce the core mechanics of social-media influence experiments with Big-5 personas, a designated malicious high-frequency actor, stochastic posting rates, and election-poll outcome tracking over discrete time.
+
+**Setup overview:**
+| Parameter | Value | Why |
+|---|---|---|
+| Engine | Asynchronous | Models independent posting rhythms rather than strict turn-taking |
+| Max Steps | 20 | Provides enough longitudinal exposure for narrative drift in support variables |
+| Agents | 6 | One malicious amplifier + five regular participants |
+| GM Prefab | `async_social_media__GameMaster` | Implements forum-style posting/reply dynamics |
+| Acting Order | Random | Reflects non-deterministic feed interactions |
+| Clock | Fixed increment, 60 minutes | Maps each step to one simulation hour |
+
+**The agents:**
+
+| Name | Role | Prefab | Goal | Components |
+|---|---|---|---|---|
+| Glenn_Boost | Malicious influence operator | `basic__Entity` | Increase Hale support via repeated persuasive-but-misleading narratives | personality_traits (high extraversion, low agreeableness) |
+| Alicia_Civic | Civic-minded verifier | `basic__Entity` | Stay informed and vote from credible evidence | personality_traits |
+| Omar_Transit | Issue-focused commuter voter | `basic__Entity` | Evaluate transit/housing claims before committing vote | personality_traits |
+| Nina_Facts | Fact-checking journalist | `basic__Entity` | Counter repeated misinformation themes | personality_traits |
+| Diego_LocalBiz | Small-business owner | `basic__Entity` | Support candidate best for local economy/safety | personality_traits |
+| Priya_Student | First-time city voter | `basic__Entity` | Identify trustworthy claims on education/jobs | personality_traits |
+
+**GM activity model parameters (`game_master.parameters`):**
+
+| Parameter | Type | Default in Template | Meaning |
+|---|---|---|---|
+| `default_activity_rate` | number | `1.0` | Baseline activity for agents not explicitly overridden. `<= 1.0` behaves as probability per opportunity; `> 1.0` behaves as relative intensity weight. |
+| `per_agent_activity_rates` | map (`agent_name -> number`) | Glenn `10.0`, Alicia `1.2`, Omar `0.9`, Nina `1.6`, Diego `1.3`, Priya `0.8` | Per-agent override for heterogeneous social media usage. |
+| `activity_seed` | integer | `42` | Seed for reproducible stochastic activity sampling. |
+| `forum_name` | string | `MastoTown` | Label for the simulated social platform context. |
+
+**Clock parameters (`config.clock`):**
+
+| Parameter | Value in Template | Notes |
+|---|---|---|
+| `clock.clock_type` | `fixed_increment` | One of `fixed_increment`, `multi_interval`, or `generative`. |
+| `clock.start_time` | `Monday, November 2, 2026 at 8:00 AM` | Human-readable initial simulation time. |
+| `clock.increment_minutes` | `60` | Step size for fixed-increment clock mode. |
+
+**Grounded variables tracked:**
+- `rivera_support` (%)
+- `hale_support` (%)
+- `undecided_rate` (%)
+- `misinfo_exposure` (numerical count-like index)
+
+**Important scope note:** This template uses an in-simulation Mastodon-like environment (`async_social_media__GameMaster`). It does **not** call a live Mastodon server/API.
+
+**What to observe when running:**
+1. Whether boosted malicious activity (`Glenn_Boost: 10.0`) shifts support trajectories.
+2. Whether fact-check pressure (`Nina_Facts`) reduces growth in `misinfo_exposure`.
+3. Whether undecided participants move asymmetrically toward one candidate over time.
+4. How activity-rate heterogeneity changes who dominates thread momentum.
+
+**Recommended experiment protocol:**
+1. Run a baseline batch (same config, 5-10 repeats) and export batch CSV.
+2. Run a manipulated batch changing one factor only (for example, set Glenn from `10.0` to `4.0`).
+3. Compare end-state distributions for `hale_support`, `rivera_support`, and `misinfo_exposure`.
+4. If using interviewer phases in a related experiment, compute ICC(3,1) via `/api/simulations/batch/{batch_id}/reliability`.
+
+**Platform features demonstrated:** Asynchronous engine, `async_social_media__GameMaster`, explicit activity-rate stochasticity controls, fixed-increment simulation clock, Big-5 persona configuration, polling-style grounded variables.
 
 ---
 

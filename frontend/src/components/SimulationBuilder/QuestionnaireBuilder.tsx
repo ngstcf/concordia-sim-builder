@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
 
-interface QuestionChoice {
-  text: string;
-}
-
 interface Question {
   id: string;
   statement: string;

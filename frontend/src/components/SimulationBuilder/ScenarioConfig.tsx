@@ -6,6 +6,24 @@ import { useSimulation } from '../../contexts/SimulationContext';
 
 export default function ScenarioConfig() {
   const { config, setConfig } = useSimulation();
+  const clock = config.clock || { clock_type: 'fixed_increment' as const, increment_minutes: 15 };
+
+  const variableRulesText = (() => {
+    if (!clock.variable_increment_rules) return '';
+    return Object.entries(clock.variable_increment_rules)
+      .map(([h, m]) => `${h}:${m}`)
+      .join(', ');
+  })();
+
+  const updateClock = (updates: Record<string, any>) => {
+    setConfig({
+      ...config,
+      clock: {
+        ...clock,
+        ...updates,
+      },
+    });
+  };
 
   return (
     <div className="bg-white shadow rounded-lg p-6">
@@ -131,6 +149,130 @@ export default function ScenarioConfig() {
             }[config.engine_type] || 'Select an engine type'}
           </p>
         </div>
+
+        {/* Clock Type */}
+        <div>
+          <label htmlFor="clock_type" className="block text-sm font-medium text-gray-700">
+            Clock Type
+          </label>
+          <select
+            id="clock_type"
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            value={clock.clock_type}
+            onChange={(e) => {
+              const clockType = e.target.value as 'fixed_increment' | 'multi_interval' | 'generative';
+              const nextClock: any = {
+                ...clock,
+                clock_type: clockType,
+              };
+              if (clockType === 'generative') {
+                delete nextClock.variable_increment_rules;
+              }
+              setConfig({ ...config, clock: nextClock });
+            }}
+          >
+            <option value="fixed_increment">FixedIncrementClock (fixed time step)</option>
+            <option value="multi_interval">MultiIntervalClock (variable intervals)</option>
+            <option value="generative">GenerativeClock (LLM-managed clock)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            {{
+              fixed_increment: 'Every step advances simulation time by a fixed number of minutes.',
+              multi_interval: 'Time increment varies by hour-based rules (e.g., daytime vs nighttime cadence).',
+              generative: 'The Game Master LLM determines how time advances from narrative context.',
+            }[clock.clock_type] || 'Select a clock type'}
+          </p>
+        </div>
+
+        {/* Clock Start Time */}
+        <div>
+          <label htmlFor="clock_start_time" className="block text-sm font-medium text-gray-700">
+            Clock Start Time
+          </label>
+          <input
+            type="text"
+            id="clock_start_time"
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            value={clock.start_time || ''}
+            placeholder="Tuesday, March 3, 2026 at 8:30 AM"
+            onChange={(e) => updateClock({ start_time: e.target.value })}
+          />
+        </div>
+
+        {/* Fixed / Multi increment minutes */}
+        {(clock.clock_type === 'fixed_increment' || clock.clock_type === 'multi_interval') && (
+          <div>
+            <label htmlFor="clock_increment_minutes" className="block text-sm font-medium text-gray-700">
+              Base Increment (minutes)
+            </label>
+            <input
+              type="number"
+              id="clock_increment_minutes"
+              min={1}
+              max={1440}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={clock.increment_minutes ?? 15}
+              onChange={(e) => updateClock({ increment_minutes: parseInt(e.target.value, 10) || 15 })}
+            />
+          </div>
+        )}
+
+        {/* Multi interval rules */}
+        {clock.clock_type === 'multi_interval' && (
+          <div>
+            <label htmlFor="clock_variable_rules" className="block text-sm font-medium text-gray-700">
+              Variable Increment Rules
+            </label>
+            <input
+              type="text"
+              id="clock_variable_rules"
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={variableRulesText}
+              placeholder="0:180, 8:15, 20:30, 23:45"
+              onChange={(e) => {
+                const parsed: Record<number, number> = {};
+                const input = e.target.value.trim();
+                if (input.length > 0) {
+                  for (const segment of input.split(',')) {
+                    const [hourRaw, minutesRaw] = segment.split(':').map((s) => s.trim());
+                    const hour = Number(hourRaw);
+                    const minutes = Number(minutesRaw);
+                    if (
+                      Number.isInteger(hour) &&
+                      Number.isInteger(minutes) &&
+                      hour >= 0 &&
+                      hour <= 23 &&
+                      minutes > 0
+                    ) {
+                      parsed[hour] = minutes;
+                    }
+                  }
+                }
+                updateClock({ variable_increment_rules: Object.keys(parsed).length > 0 ? parsed : undefined });
+              }}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Format: `hour:minutes` pairs separated by commas. Example: `0:180, 8:15, 20:30, 23:45`.
+            </p>
+          </div>
+        )}
+
+        {/* Generative clock description */}
+        {clock.clock_type === 'generative' && (
+          <div>
+            <label htmlFor="clock_description" className="block text-sm font-medium text-gray-700">
+              Clock Description
+            </label>
+            <textarea
+              id="clock_description"
+              rows={3}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={clock.clock_description || ''}
+              placeholder="Describe how time should progress in this world."
+              onChange={(e) => updateClock({ clock_description: e.target.value })}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
