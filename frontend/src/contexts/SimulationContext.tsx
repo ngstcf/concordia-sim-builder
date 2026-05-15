@@ -57,6 +57,10 @@ const defaultConfig: SimulationConfig = {
   premise: '',
   max_steps: 10,
   engine_type: 'sequential',
+  clock: {
+    clock_type: 'fixed_increment',
+    increment_minutes: 15,
+  },
   agents: [],
   game_master: {
     prefab: 'generic__GameMaster',

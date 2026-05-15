@@ -16,6 +16,13 @@ class EngineType(str, Enum):
     SURVEY = "survey"
 
 
+class ClockType(str, Enum):
+    """Available clock behavior types."""
+    MULTI_INTERVAL = "multi_interval"
+    FIXED_INCREMENT = "fixed_increment"
+    GENERATIVE = "generative"
+
+
 class ActingOrder(str, Enum):
     """Game master acting order options."""
     FIXED = "fixed"
@@ -154,6 +161,32 @@ class GameMasterConfig(BaseModel):
         }
 
 
+class ClockConfig(BaseModel):
+    """Configuration for simulation clock behavior."""
+    clock_type: ClockType = Field(
+        default=ClockType.FIXED_INCREMENT,
+        description="Clock behavior strategy"
+    )
+    start_time: Optional[str] = Field(
+        None,
+        description="Clock initial time string"
+    )
+    increment_minutes: int = Field(
+        15,
+        ge=1,
+        le=1440,
+        description="Base step size in minutes"
+    )
+    variable_increment_rules: Optional[Dict[int, int]] = Field(
+        None,
+        description="Hour -> minutes increment map for multi-interval clocks"
+    )
+    clock_description: Optional[str] = Field(
+        None,
+        description="Instructions/prompt used by generative clocks"
+    )
+
+
 class SimulationConfig(BaseModel):
     """Main simulation configuration."""
     premise: str = Field(..., description="Initial scenario description")
@@ -189,6 +222,10 @@ class SimulationConfig(BaseModel):
     available_actions: Optional[List[AvailableAction]] = Field(
         None,
         description="Global set of available actions. When set, agents choose from these."
+    )
+    clock: Optional[ClockConfig] = Field(
+        None,
+        description="Optional clock configuration independent from game_master.parameters"
     )
 
     class Config:

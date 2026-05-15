@@ -5,6 +5,7 @@
 
 // Type aliases for string literals (better API compatibility than enums)
 export type EngineType = 'sequential' | 'simultaneous' | 'asynchronous' | 'step_controller' | 'interview' | 'survey';
+export type ClockType = 'multi_interval' | 'fixed_increment' | 'generative';
 export type ActingOrder = 'fixed' | 'random' | 'game_master_choice';
 export type LLMProvider = 'openai' | 'azure' | 'deepseek' | 'gemini' | 'anthropic' | 'glm' | 'ollama' | 'ollama_remote';
 export type EventType = 'simulation_start' | 'step_start' | 'agent_act' | 'observation' | 'step_end' | 'simulation_complete' | 'error';
@@ -17,6 +18,12 @@ export const EngineType = {
   STEP_CONTROLLER: 'step_controller' as EngineType,
   INTERVIEW: 'interview' as EngineType,
   SURVEY: 'survey' as EngineType
+};
+
+export const ClockType = {
+  MULTI_INTERVAL: 'multi_interval' as ClockType,
+  FIXED_INCREMENT: 'fixed_increment' as ClockType,
+  GENERATIVE: 'generative' as ClockType
 };
 
 export const ActingOrder = {
@@ -112,6 +119,14 @@ export interface GameMasterConfig {
   allow_early_termination?: boolean;
 }
 
+export interface ClockConfig {
+  clock_type: ClockType;
+  start_time?: string;
+  increment_minutes?: number;
+  variable_increment_rules?: Record<number, number>;
+  clock_description?: string;
+}
+
 // Critical Decision Point
 export interface CriticalDecisionPoint {
   step: number;
@@ -132,6 +147,7 @@ export interface SimulationConfig {
   player_specific_context?: Record<string, string>;
   checkpoint_interval?: number;
   available_actions?: AvailableAction[];
+  clock?: ClockConfig;
 }
 
 // LLM Settings

@@ -27,7 +27,8 @@ from backend.models.schemas import (
     AgentConfig,
     GameMasterConfig,
     EngineType,
-    ActingOrder
+    ActingOrder,
+    ClockType,
 )
 
 # Import custom context-aware scripted prefab
@@ -246,21 +247,45 @@ def build_simulation(
         'can_terminate_simulation': config.game_master.allow_early_termination,
     }
 
-    # Note: Don't use gm_params.update() here because we need to convert
-    # special parameter types (scenes, questionnaires) first
+    # Pass through all plain GM parameters first; structured parameters
+    # (scenes/questionnaires) are converted below.
+    gm_raw_params = dict(config.game_master.parameters or {})
+    for key, value in gm_raw_params.items():
+        if key in ('scenes', 'questionnaires'):
+            continue
+        gm_params[key] = value
+        debug_print(f"[DEBUG] GM param {key}: {value}")
 
-    # Add player_names if provided (for interviewer GM) - simple list, no conversion needed
-    if 'player_names' in config.game_master.parameters:
-        gm_params['player_names'] = config.game_master.parameters['player_names']
-        debug_print(f"[DEBUG] player_names: {config.game_master.parameters['player_names']}")
+    # Apply normalized top-level clock config, if provided.
+    if hasattr(config, 'clock') and config.clock:
+        clock_cfg = config.clock
+        clock_type = (
+            clock_cfg.clock_type.value
+            if hasattr(clock_cfg.clock_type, 'value')
+            else str(clock_cfg.clock_type)
+        )
+        gm_params['clock_type'] = clock_type
 
-    # Add GameMasterSimultaneous params if provided
-    for sim_gm_key in ('start_time', 'time_period_minutes', 'locations',
-                        'game_rules', 'use_gm_working_memory',
-                        'extra_event_resolution_steps'):
-        if sim_gm_key in config.game_master.parameters:
-            gm_params[sim_gm_key] = config.game_master.parameters[sim_gm_key]
-            debug_print(f"[DEBUG] GM param {sim_gm_key}: {config.game_master.parameters[sim_gm_key]}")
+        if clock_cfg.start_time:
+            gm_params['start_time'] = clock_cfg.start_time
+
+        if clock_cfg.clock_type == ClockType.FIXED_INCREMENT:
+            gm_params['time_period_minutes'] = clock_cfg.increment_minutes
+            gm_params['use_variable_increments'] = False
+            gm_params.pop('variable_increment_rules', None)
+        elif clock_cfg.clock_type == ClockType.MULTI_INTERVAL:
+            gm_params['time_period_minutes'] = clock_cfg.increment_minutes
+            gm_params['use_variable_increments'] = True
+            if clock_cfg.variable_increment_rules:
+                gm_params['variable_increment_rules'] = {
+                    int(hour): int(minutes)
+                    for hour, minutes in clock_cfg.variable_increment_rules.items()
+                }
+        elif clock_cfg.clock_type == ClockType.GENERATIVE:
+            if clock_cfg.clock_description:
+                gm_params['clock_description'] = clock_cfg.clock_description
+
+        debug_print(f"[DEBUG] Applied clock config: {clock_type}")
 
     # Add scenes if provided (for game-theoretic GM)
     # Convert dict scenes to SceneSpec objects for Concordia

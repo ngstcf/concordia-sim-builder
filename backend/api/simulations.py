@@ -32,6 +32,7 @@ from backend.models.schemas import (
     CensusGenerationRequest,
     CensusGenerationResponse,
     BatchRunRequest,
+    ClockType,
 )
 from backend.services.simulation_builder import (
     get_available_prefabs_info,
@@ -465,6 +466,29 @@ async def validate_config(config: SimulationConfig):
                     f"Using default scene configuration ({default_rounds} rounds) but max_steps is set to {config.max_steps}. "
                     f"This will cause 'Counter state {config.max_steps} is greater than max number of rounds {default_rounds}' error. "
                     f"Either set max_steps to {default_rounds} or provide custom scenes in game_master.parameters."
+                )
+
+    # Clock compatibility hints
+    if hasattr(config, 'clock') and config.clock:
+        gm_prefab = config.game_master.prefab
+        if config.clock.clock_type in (ClockType.FIXED_INCREMENT, ClockType.MULTI_INTERVAL):
+            if gm_prefab != 'simultaneous_resolution_gm__GameMasterSimultaneous':
+                warnings.append(
+                    "Fixed/multi-interval clocks are best supported by "
+                    "'simultaneous_resolution_gm__GameMasterSimultaneous'. "
+                    f"Current GM prefab is '{gm_prefab}'."
+                )
+        elif config.clock.clock_type == ClockType.GENERATIVE:
+            generative_prefabs = {
+                'situated_in_time_and_place__GameMaster',
+                'physically_situated_and_dramaturgic__GameMaster',
+            }
+            if gm_prefab not in generative_prefabs:
+                warnings.append(
+                    "Generative clocks are best supported by "
+                    "'situated_in_time_and_place__GameMaster' or "
+                    "'physically_situated_and_dramaturgic__GameMaster'. "
+                    f"Current GM prefab is '{gm_prefab}'."
                 )
 
     return ValidationResult(
