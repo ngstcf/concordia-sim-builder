@@ -168,12 +168,23 @@ These are configured in the Agent Editor under the **Components** section. See t
 The Game Master controls how the simulation runs.
 
 **Game Master Prefab** — Choose from:
-- `generic__GameMaster` — General-purpose, works for most scenarios
-- `dialogic__GameMaster` — Conversation-focused with auto-termination
-- `game_theoretic_and_dramaturgic__GameMaster` — Scene-based with action choices and scoring
-- `async_social_media__GameMaster` — Social media forum with posts and feeds
+- `generic__GameMaster` — General-purpose narrative GM for most simulation types
+- `dialogic__GameMaster` — Conversation-focused with auto-termination for natural dialogue endpoints
+- `dialogic_and_dramaturgic__GameMaster` — Enhanced dialogue GM with dramatic scene structure
+- `game_theoretic_and_dramaturgic__GameMaster` — Scene-based with discrete action choices and scoring
+- `interviewer__GameMaster` — Structured questionnaire administration (Likert scales, multiple choice)
+- `open_ended_interviewer__GameMaster` — Unstructured interview format with free-form questioning
+- `marketplace__GameMaster` — Economic trading simulation with buy/sell/hold dynamics
+- `psychology_experiment__GameMaster` — Experimental protocol management for research scenarios
+- `scripted__GameMaster` — Follows predetermined narrative sequences
+- `situated__GameMaster` — Location-aware GM for spatially grounded scenarios
+- `situated_in_time_and_place__GameMaster` — Temporal and spatial context with time progression
+- `physically_situated_and_dramaturgic__GameMaster` — Physical environment with dramatic scene structure
+- `async_social_media__GameMaster` — Social media forum with posts, replies, and feeds
 - `simultaneous_resolution_gm__GameMasterSimultaneous` — Simultaneous event resolution with location tracking, NPC events, and working memory
-- See the [Simulation Templates Guide](SIMULATION_TEMPLATES_GUIDE.md) for the full list of agent and GM prefabs
+- `space_ship__GameMaster` *(contrib)* — Spaceship simulation with location tracking and system health/failure states
+
+**Quick recommendation:** Use `generic` if unsure. Use `dialogic` for natural conversations that should end organically. Use `game_theoretic_and_dramaturgic` for structured decisions with discrete choices. Use `interviewer` for surveys. Use `async_social_media` for social media dynamics. See the [Simulation Templates Guide — Choosing the Right GM Prefab](SIMULATION_TEMPLATES_GUIDE.md#choosing-the-right-gm-prefab) for detailed guidance on all 15 prefabs.
 
 **Acting Order** — How the GM picks the next agent:
 - **Game Master Choice** — The AI decides who acts next based on narrative context (recommended)

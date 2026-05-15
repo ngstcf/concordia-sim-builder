@@ -332,15 +332,42 @@ Acting order is a surprisingly powerful lever:
 |---|---|---|---|
 | **generic** | Narrates events, tracks the world state, decides who acts next. Most flexible. | None (use JSON or the GM briefing fields) | Default choice. Works for most scenarios. |
 | **dialogic** | Focused on facilitating conversation. Can end the simulation early when dialogue reaches a natural conclusion. | None | Therapy sessions, debates, interviews where natural endpoints matter. |
+| **dialogic_and_dramaturgic** | Combines dialogue facilitation with dramatic scene structure. Supports natural conversation flow within defined scenes, with auto-termination when dialogue concludes. | **Scene Editor** | Structured conversations that need both natural dialogue endpoints and scene-based pacing — panel discussions, mediated negotiations, guided group therapy. |
 | **game_theoretic_and_dramaturgic** | Runs structured scenes with defined action choices (e.g., COOPERATE/DEFECT). Tracks scores and payoffs. | **Scene Editor** | Game theory, strategic decisions, any scenario with discrete action options. |
 | **interviewer** | Administers structured questionnaires with Likert scales or multiple-choice questions. The GM is the interviewer. | **Questionnaire Builder** | Surveys, employee feedback, psychological assessments. |
 | **open_ended_interviewer** | Like interviewer but with free-text responses instead of multiple choice. | **Questionnaire Builder** | Qualitative research, open-ended interviews. |
-| **scripted** | Follows a scripted narrative arc. The GM has a predefined story structure it follows. | **Scene Editor** | Tutorials, demonstrations, controlled experiments. |
-| **physically_situated_and_dramaturgic** | Tracks physical location and movement of agents in a defined space. Agents have positions and can move. | **Scene Editor** | Spatial simulations, evacuation drills, physical world scenarios. |
 | **marketplace** | Manages an economic marketplace with trading mechanics (buy, sell, price discovery). | None (use JSON) | Buying/selling simulations, market experiments. |
-| **async_social_media** | Simulates a social media platform with posts, replies, and feeds. | None | Online discourse studies, misinformation research, platform dynamics. |
+| **psychology_experiment** | Manages experimental protocols with structured conditions, stimulus presentation, and response collection. Designed for behavioral research paradigms. | None (use JSON) | Psychology experiments, behavioral studies, structured research protocols with controlled conditions. |
+| **scripted** | Follows a scripted narrative arc. The GM has a predefined story structure it follows. | **Scene Editor** | Tutorials, demonstrations, controlled experiments. |
+| **situated** | Location-aware GM that tracks where agents are in a defined space. Agents can move between locations and the GM narrates spatial context. | None (use JSON) | Spatially grounded scenarios where agent location matters — campus simulations, neighborhood interactions, building evacuations. |
+| **situated_in_time_and_place** | Extends spatial awareness with explicit time progression. Tracks both where and when agents are, with time-of-day affecting available actions and context. | None (use JSON) | Scenarios where both location and time matter — daily routines, shift-based workplaces, time-sensitive spatial coordination. |
+| **physically_situated_and_dramaturgic** | Tracks physical location and movement of agents in a defined space. Agents have positions and can move. Adds dramatic scene structure on top. | **Scene Editor** | Spatial simulations with structured scenes — evacuation drills, physical world scenarios, location-based strategic games. |
+| **async_social_media** | Simulates a social media platform with posts, replies, and feeds. Supports stochastic per-agent activity rates. | None | Online discourse studies, misinformation research, platform dynamics. |
 | **simultaneous_resolution_gm (GameMasterSimultaneous)** | Simultaneous event resolution with location tracking, NPC events, working memory, and time-based pacing. Agents all act each step and their plans are resolved into a single narrative. Parameters: `start_time`, `time_period_minutes`, `locations`, `game_rules`, `use_gm_working_memory`. | None (use JSON) | Multi-agent workplace simulations, location-based scenarios, any setting where all agents act in parallel with spatial awareness. |
 | **space_ship** | Manages spaceship systems, resources, and crew decisions in a structured environment. | None (use JSON) | Spaceship scenarios, system management simulations. |
+
+#### Choosing the Right GM Prefab
+
+**Start here:** If you're unsure, use **generic**. It handles narration, turn management, and world-state tracking without imposing structure. Most templates use it.
+
+**Need natural conversation?** Use **dialogic** when agents should talk freely and the simulation should end when the conversation naturally concludes (therapy sessions, debates, interviews). If you also need scene structure within that dialogue, use **dialogic_and_dramaturgic** (panel discussions, mediated negotiations with phases).
+
+**Need structured decisions?** Use **game_theoretic_and_dramaturgic** when agents must choose from discrete options each round (COOPERATE/DEFECT, BUY/SELL/HOLD). The Scene Editor lets you define rounds, options, and payoffs. Use **scripted** when the GM itself should follow a predetermined narrative arc rather than responding dynamically.
+
+**Need surveys or interviews?** Use **interviewer** for structured questionnaires with Likert scales or multiple choice (employee feedback, psychological assessments). Use **open_ended_interviewer** for free-text responses (qualitative research). Both activate the Questionnaire Builder. Use **psychology_experiment** when running a full experimental protocol with conditions and stimulus presentation.
+
+**Need spatial awareness?** Three prefabs track agent location, in increasing complexity:
+- **situated** — agents move between locations; the GM narrates spatial context
+- **situated_in_time_and_place** — adds time-of-day awareness so actions vary by when and where
+- **physically_situated_and_dramaturgic** — adds dramatic scene structure on top of spatial tracking (evacuation drills, location-based games)
+
+**Need economic mechanics?** Use **marketplace** for trading simulations with buy/sell/price discovery.
+
+**Need social media dynamics?** Use **async_social_media** for forum-style interaction with posts, replies, and feeds. Supports per-agent activity rates for modeling different usage patterns (e.g., a malicious high-frequency poster vs. casual users). See [Async Social Media Activity Parameters](#async-social-media-activity-parameters) below.
+
+**Need simultaneous action?** Use **simultaneous_resolution_gm** when all agents should act each step and their plans are resolved together into a single narrative. Includes location tracking, NPC events, and working memory.
+
+**Domain-specific:** **space_ship** is purpose-built for spaceship scenarios with system health, resource management, and crew decisions.
 
 ### Async Social Media Activity Parameters
 
