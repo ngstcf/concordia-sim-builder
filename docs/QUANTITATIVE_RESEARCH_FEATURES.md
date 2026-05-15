@@ -75,10 +75,10 @@ The export buttons appear only when results are available and a log file has bee
 For programmatic access:
 
 ```
-GET /api/logs/{filename}/export-csv?data_type=actions
-GET /api/logs/{filename}/export-csv?data_type=variables
-GET /api/logs/{filename}/export-csv?data_type=both
-GET /api/logs/{filename}/export-json
+GET /api/simulations/logs/{filename}/export-csv?data_type=actions
+GET /api/simulations/logs/{filename}/export-csv?data_type=variables
+GET /api/simulations/logs/{filename}/export-csv?data_type=both
+GET /api/simulations/logs/{filename}/export-json
 ```
 
 The `data_type` parameter defaults to `both` if omitted.
@@ -347,22 +347,27 @@ This produces 4 temperature values x 3 runs = **12 total runs**. The estimated t
 3. Click **Start Batch (N runs)**
 4. The modal switches to a progress view:
    - A progress bar showing completed/total runs
+   - A current-run panel showing run index, step/max steps, elapsed time, ETA, active parameters, and status text
    - A results table updating in real time with columns: run number, parameters, status, elapsed time
 5. Each run executes sequentially — one at a time — using the same execution engine as single runs
 
 ### During Execution
 
 - The **progress bar** fills as runs complete (green when done, yellow if cancelled)
+- The **current-run panel** updates live from streamed events (run lifecycle status + per-step progress)
 - Each completed run appears in the **results table** with its status (completed/failed) and elapsed time
 - Click **Cancel Batch** to stop after the current run finishes
 
 ### After Completion
 
-When the batch finishes (or is cancelled), three buttons appear:
+When the batch finishes (or is cancelled), these export and reset controls appear:
 
 - **Export CSV** — Downloads an aggregated CSV with results from all runs, using the structured data exporter (Feature 1). Each row includes the run index and parameter values.
+- **Export Reliability JSON** — Downloads ICC3,1 reliability results when questionnaire/interview data supports reliability analysis.
 - **New Batch** — Reset the modal to configure and start another batch
 - **Done** — Close the modal and return to the main interface
+
+When reliability is not applicable for a given scenario, the UI explicitly reports that ICC is not applicable.
 
 ### Batch Results CSV
 
@@ -385,15 +390,20 @@ Individual run logs are saved with the prefix `batch_{batch_id}_run{index}_` in 
 For programmatic or automated batch execution:
 
 ```
-POST /api/batch/execute         — SSE stream of batch progress events
-GET  /api/batch/list            — list all batches
-GET  /api/batch/{id}/status     — current batch state
-POST /api/batch/{id}/cancel     — cancel remaining runs
-GET  /api/batch/{id}/export-csv — aggregated CSV from all completed runs
+POST /api/simulations/batch/execute            — SSE stream of batch progress events
+GET  /api/simulations/batch/list               — list all batches
+GET  /api/simulations/batch/{id}/status        — current batch state
+POST /api/simulations/batch/{id}/cancel        — cancel remaining runs
+GET  /api/simulations/batch/{id}/export-csv    — aggregated CSV from all completed runs
+GET  /api/simulations/batch/{id}/reliability   — ICC3,1 reliability report (when available)
 ```
 
 The SSE stream emits these event types:
 - `batch_start` — includes `batch_id` and `total_runs`
+- `run_start` — run started, includes run index and parameter set
+- `run_status` — run lifecycle status text (for example "Building simulation...")
+- `run_progress` — per-step progress including `step`, `max_steps`, `elapsed`, and ETA text
+- `run_error` — per-run error details when a run fails
 - `run_complete` — includes `run_result` and `completed_runs` count
 - `batch_complete` — all runs finished
 - `batch_cancelled` — batch was cancelled
