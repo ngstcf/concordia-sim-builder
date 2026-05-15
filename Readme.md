@@ -29,6 +29,8 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 
 **Documentation:** [c3.unu.edu/projects/ai/simulator/v2.4.html](https://c3.unu.edu/projects/ai/simulator/v2.4.html)
 
+**Blog article:** [AI-Powered Agent-Based Simulation Platform with Applications to the UN Sustainable Development Goals](https://c3.unu.edu/blog/concordia-simulation-builder-research-education)
+
 **Guides:**
 - [Simulation Building Guide](docs/SIMULATION_BUILDING_GUIDE.md) — Practitioner guide for creating simulations, configuring agents, components, and engines
 - [Simulation Templates Guide](docs/SIMULATION_TEMPLATES_GUIDE.md) — Practitioner guide with research setups and experiment suggestions

@@ -117,3 +117,6 @@ research-use-cases/
 
 # Upstream Concordia clone (installed as editable dependency)
 concordia-upstream/
+
+# Local project notes (do not track)
+CONCORDIA_ISSUES.md
