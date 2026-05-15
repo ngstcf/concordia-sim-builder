@@ -35,7 +35,7 @@ The fastest way to start is to load a pre-built template.
 
 1. Open the Simulation Builder
 2. Click **Load Template** in the top toolbar
-3. Browse templates by category — there are 38 covering game theory, policy, social dynamics, upstream DeepMind examples, and more
+3. Browse templates by category — there are 39 covering game theory, policy, social dynamics, upstream DeepMind examples, and more
 4. Click a template to load it
 5. Review the configuration, adjust if needed
 6. Go to the **Run** panel, configure your LLM provider, and click **Run Simulation**
@@ -45,6 +45,26 @@ The fastest way to start is to load a pre-built template.
 - **Prisoner's Dilemma** — Classic game theory scenario (2 agents, 2 steps)
 - **Peace Negotiation** — Diplomatic scenario with competing interests (3+ agents)
 - **Grounded Variables Demo** — Shows how to track quantitative metrics
+
+### Quick Start Walkthrough: Mastodon Influence Experiment
+
+Use the `mastodon-influence-experiment` template when you want a social-media influence setup with stochastic activity rates and explicit clock control.
+
+1. Open **Load Template** and select **Mastodon Influence Experiment**
+2. Confirm these baseline settings:
+   - Engine: `asynchronous`
+   - GM prefab: `async_social_media__GameMaster`
+   - Max steps: `20`
+   - Clock: `fixed_increment`, `start_time` set, `increment_minutes=60`
+3. In **Game Master -> Social Media Activity Model**, verify:
+   - `default_activity_rate=1.0`
+   - `per_agent_activity_rates` has a boosted malicious actor (default `Glenn_Boost: 10.0`)
+   - `activity_seed=42` (in config JSON)
+4. Run a baseline simulation and inspect grounded variables:
+   - `rivera_support`, `hale_support`, `undecided_rate`, `misinfo_exposure`
+5. Duplicate and vary one parameter only (for example, lower `Glenn_Boost` from `10.0` to `4.0`) for causal comparison.
+
+**Important:** This template is a simulated Mastodon-like environment. It does not connect to a live Mastodon server/API.
 
 ---
 
@@ -162,6 +182,19 @@ The Game Master controls how the simulation runs.
 
 **Allow Early Termination** — If enabled, the GM can end the simulation early if it determines the scenario has concluded naturally. Disable this if you always want the simulation to run the full number of steps.
 
+#### Async Social Media Activity Parameters
+
+When the GM prefab is `async_social_media__GameMaster`, use these parameters under `game_master.parameters`:
+
+| Parameter | Type | Typical Value | Definition |
+|---|---|---|---|
+| `default_activity_rate` | number | `1.0` | Baseline activity for agents without explicit overrides. `<= 1.0` is interpreted as a probability; `> 1.0` is treated as a relative activity intensity weight. |
+| `per_agent_activity_rates` | object map | `{ "Alice": 1.2, "Glenn": 10.0 }` | Per-agent override (`agent_name -> rate`) for heterogeneous posting frequency. |
+| `activity_seed` | integer | `42` | Seed for reproducible stochastic activity sampling. Use fixed seed for comparable repeated runs. |
+| `forum_name` | string | `"MastoTown"` | Label/context string for the social forum environment. |
+
+For influence experiments, set one malicious/high-frequency actor above the default (for example, `10.0`) and keep most agents around `0.8-1.6`.
+
 #### Grounded Variables
 
 Grounded variables let you track quantitative metrics throughout the simulation. The Game Master updates these values based on what happens in the narrative.
@@ -218,6 +251,7 @@ You can add specialized components to the Game Master:
 **Engine types:**
 - **Sequential** — Agents act one at a time. Best for most scenarios. (Default)
 - **Simultaneous** — All agents act at the same time each step, without seeing what others did in the same round (they can see previous rounds). More step-efficient than sequential because every agent contributes every step.
+- **Asynchronous** — Agents act on independent timelines; some can act multiple times before others. Best for feed/forum/social-media behavior.
 - **Step Controller** — You manually control each step with play/pause/step buttons. Good for studying individual decisions.
 
 **When to use Simultaneous over Sequential:**
@@ -231,6 +265,22 @@ Simultaneous mode is a better fit when:
 Stick with Sequential when the scenario depends on reactive dialogue (negotiations, interviews, therapy sessions) where agents need to respond to what was just said. See the [AI Ethics Roundtable walkthrough](#walkthrough-medium-complexity--ai-ethics-roundtable-simultaneous-engine) for a worked example comparing the two modes.
 - **Interview** — Question-and-answer format between an interviewer and subject.
 - **Survey** — Structured survey administered to agents.
+
+#### Clock Types
+
+Simulation time is configured in `config.clock` and is independent from engine type.
+
+| Clock Type | Required Fields | Definition | Good Use Cases |
+|---|---|---|---|
+| `fixed_increment` | `start_time`, `increment_minutes` | Advances by the same step size each simulation step. | Most experiments with regular cadence (hourly, daily). |
+| `multi_interval` | `start_time`, `increment_minutes`, optional `variable_increment_rules` | Uses different step sizes by hour/time bands while preserving deterministic progression. | Diurnal activity studies (day/night behavior differences). |
+| `generative` | optional `clock_description` | LLM-managed temporal progression guided by prompt instructions. | Open-ended narrative time where strict increments are unrealistic. |
+
+**Clock field definitions:**
+- `clock.start_time`: Human-readable initial timestamp (for example, `"Monday, November 2, 2026 at 8:00 AM"`).
+- `clock.increment_minutes`: Base step size in minutes (schema range: `1..1440`).
+- `clock.variable_increment_rules`: Hour-to-minutes mapping for multi-interval mode (for example, `{ "8": 15, "22": 60 }`).
+- `clock.clock_description`: Prompt text that guides generative clock behavior.
 
 **Simulation length guidelines:**
 
@@ -332,6 +382,17 @@ Deeper AI-generated analysis of agent behavior, strategies, and outcomes.
 
 ### Measurements
 Component-level logging data from the simulation engine (advanced).
+
+### Batch Reliability (ICC3,1)
+
+For stochastic experiments, run repeated trials with the Batch Runner, then compute inter-run reliability from questionnaire outcomes.
+
+1. Execute a batch with repeated runs for the same configuration.
+2. If your GM uses `interviewer__GameMaster` questionnaires, results are stored in run metadata.
+3. Fetch reliability from `GET /api/simulations/batch/{batch_id}/reliability`.
+4. Use the ICC(3,1) report per questionnaire dimension to check whether behavior is stable across runs.
+
+The batch CSV export endpoint (`/api/simulations/batch/{batch_id}/export-csv`) also appends an ICC section when questionnaire metadata is available.
 
 ### Exporting Results
 
