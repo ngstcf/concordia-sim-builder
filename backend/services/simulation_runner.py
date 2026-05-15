@@ -550,8 +550,10 @@ async def run_simulation_stream(
         # Convert to HTML string
         print("[DEBUG] Starting to convert results to HTML...")
 
-        # Declare variable at function scope for game-theoretic data
+        # Declare variable at function scope for game-theoretic/questionnaire data
         game_theoretic_data = None
+        questionnaire_answers = None
+        questionnaire_aggregates = None
 
         # Extract grounded variables history if present (for all game master types)
         grounded_variables_history = None
@@ -684,6 +686,12 @@ async def run_simulation_stream(
 
                     results_df = questionnaire_component.get_questionnaires_results()
                     answers = questionnaire_component.get_answers()
+                    questionnaire_answers = answers
+                    if results_df is not None and not results_df.empty:
+                        try:
+                            questionnaire_aggregates = results_df.to_dict()
+                        except Exception:
+                            questionnaire_aggregates = None
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")
@@ -1078,6 +1086,16 @@ async def run_simulation_stream(
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
 
+        # Add questionnaire outcomes if available
+        if questionnaire_answers is not None:
+            agent_metadata["questionnaire"] = {
+                "answers": questionnaire_answers,
+                "aggregated_scores": questionnaire_aggregates,
+            }
+            debug_print(
+                f"[DEBUG] Added questionnaire data to metadata for {len(questionnaire_answers)} players"
+            )
+
         # Extract measurements channel data if available
         if hasattr(sim, '_measurements') and sim._measurements:
             try:
@@ -1336,8 +1354,10 @@ async def run_simulation_simple(
         # Convert to HTML string
         results_html = _simulation_log_to_html(results)
 
-        # Declare variable at function scope for game-theoretic data
+        # Declare variable at function scope for game-theoretic/questionnaire data
         game_theoretic_data = None
+        questionnaire_answers = None
+        questionnaire_aggregates = None
 
         # Special handling for interviewer prefab to extract questionnaire results
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
@@ -1358,6 +1378,12 @@ async def run_simulation_simple(
 
                     results_df = questionnaire_component.get_questionnaires_results()
                     answers = questionnaire_component.get_answers()
+                    questionnaire_answers = answers
+                    if results_df is not None and not results_df.empty:
+                        try:
+                            questionnaire_aggregates = results_df.to_dict()
+                        except Exception:
+                            questionnaire_aggregates = None
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")
@@ -1730,6 +1756,16 @@ async def run_simulation_simple(
                 "actions_by_player": game_theoretic_data.get('actions_by_player', {})
             }
             debug_print(f"[DEBUG] Added game-theoretic data to metadata for {len(game_theoretic_data.get('actions_by_player', {}))} players")
+
+        # Add questionnaire outcomes if available
+        if questionnaire_answers is not None:
+            agent_metadata["questionnaire"] = {
+                "answers": questionnaire_answers,
+                "aggregated_scores": questionnaire_aggregates,
+            }
+            debug_print(
+                f"[DEBUG] Added questionnaire data to metadata for {len(questionnaire_answers)} players"
+            )
 
         # Extract measurements channel data if available
         if hasattr(sim, '_measurements') and sim._measurements:

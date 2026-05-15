@@ -291,6 +291,21 @@ export interface BatchRunResult {
   error?: string;
 }
 
+export interface BatchReliabilityDimension {
+  icc3_1: number | null;
+  n_agents: number;
+  n_runs: number;
+  reason?: string;
+}
+
+export interface BatchReliabilityReport {
+  available: boolean;
+  reason?: string;
+  n_runs_used?: number;
+  dimensions?: Record<string, BatchReliabilityDimension>;
+  overall_mean_icc3_1?: number | null;
+}
+
 // API Response wrappers
 export interface PrefabsResponseData extends PrefabsResponse {}
 

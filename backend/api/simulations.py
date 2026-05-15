@@ -1962,6 +1962,129 @@ async def export_simulation_json(filename: str):
 
 # ── Batch Runs ────────────────────────────────────────────────────────
 
+def _compute_icc3_1(matrix: list[list[float]]) -> float | None:
+    """Compute ICC(3,1) for a complete subjects x runs matrix."""
+    if not matrix or len(matrix) < 2 or len(matrix[0]) < 2:
+        return None
+    n = len(matrix)       # subjects
+    k = len(matrix[0])    # runs/raters
+    if any(len(row) != k for row in matrix):
+        return None
+
+    row_means = [sum(row) / k for row in matrix]
+    col_means = [sum(matrix[i][j] for i in range(n)) / n for j in range(k)]
+    grand = sum(row_means) / n
+
+    # Mean squares for the two-way mixed ANOVA form used by ICC(3,1).
+    ssr = k * sum((rm - grand) ** 2 for rm in row_means)
+    sse = 0.0
+    for i in range(n):
+        for j in range(k):
+            resid = matrix[i][j] - row_means[i] - col_means[j] + grand
+            sse += resid ** 2
+
+    if n <= 1 or k <= 1:
+        return None
+    msr = ssr / (n - 1)
+    mse = sse / ((n - 1) * (k - 1))
+    denom = msr + (k - 1) * mse
+    if denom == 0:
+        return None
+    return (msr - mse) / denom
+
+
+def _extract_questionnaire_icc_from_batch(batch_data: dict) -> dict:
+    """Compute per-dimension ICC(3,1) from questionnaire metadata across runs."""
+    import statistics
+
+    # run -> agent -> dimension -> value
+    runs: list[dict[str, dict[str, float]]] = []
+
+    for result in batch_data.get('run_results', []):
+        if result.get('status') != 'completed':
+            continue
+        log_filename = result.get('log_filename')
+        if not log_filename:
+            continue
+        metadata_path = Path("logs") / (Path(log_filename).stem + ".metadata.json")
+        if not metadata_path.exists():
+            continue
+        try:
+            with open(metadata_path, encoding='utf-8') as f:
+                md = json.load(f)
+        except Exception:
+            continue
+
+        q = md.get("questionnaire", {})
+        answers = q.get("answers", {})
+        run_map: dict[str, dict[str, float]] = {}
+        for player_name, player_answers in answers.items():
+            dim_values: dict[str, list[float]] = {}
+            if not isinstance(player_answers, dict):
+                continue
+            for _, qn_answers in player_answers.items():
+                if not isinstance(qn_answers, dict):
+                    continue
+                for _, answer_data in qn_answers.items():
+                    if not isinstance(answer_data, dict):
+                        continue
+                    dim = str(answer_data.get("dimension", "")).strip()
+                    val = answer_data.get("value")
+                    if not dim:
+                        continue
+                    try:
+                        fval = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    dim_values.setdefault(dim, []).append(fval)
+            if dim_values:
+                run_map[player_name] = {
+                    dim: statistics.mean(vals) for dim, vals in dim_values.items()
+                }
+        if run_map:
+            runs.append(run_map)
+
+    if len(runs) < 2:
+        return {"available": False, "reason": "Need at least 2 completed runs with questionnaire metadata."}
+
+    dimensions = sorted({dim for run in runs for _, dims in run.items() for dim in dims.keys()})
+    by_dimension = {}
+
+    for dim in dimensions:
+        # Keep only subjects (agents) present in all runs for this dimension.
+        agents_in_all = None
+        for run in runs:
+            agents_here = {agent for agent, dims in run.items() if dim in dims}
+            agents_in_all = agents_here if agents_in_all is None else (agents_in_all & agents_here)
+        agents = sorted(list(agents_in_all or []))
+
+        if len(agents) < 2:
+            by_dimension[dim] = {
+                "icc3_1": None,
+                "n_agents": len(agents),
+                "n_runs": len(runs),
+                "reason": "Need at least 2 agents with complete data across runs.",
+            }
+            continue
+
+        matrix = [[runs[r][agent][dim] for r in range(len(runs))] for agent in agents]
+        icc = _compute_icc3_1(matrix)
+        by_dimension[dim] = {
+            "icc3_1": icc,
+            "n_agents": len(agents),
+            "n_runs": len(runs),
+        }
+
+    overall_values = [v["icc3_1"] for v in by_dimension.values() if v.get("icc3_1") is not None]
+    overall_mean = (sum(overall_values) / len(overall_values)) if overall_values else None
+
+    return {
+        "available": True,
+        "n_runs_used": len(runs),
+        "dimensions": by_dimension,
+        "overall_mean_icc3_1": overall_mean,
+    }
+
 @router.post("/batch/execute")
 async def execute_batch(request: BatchRunRequest):
     """Execute a batch of simulation runs with optional parameter sweeps."""
@@ -2041,6 +2164,21 @@ async def export_batch_csv(batch_id: str):
             f"{result.get('elapsed_seconds', '')}"
         )
 
+    # Append ICC reliability section when questionnaire data exists.
+    icc_report = _extract_questionnaire_icc_from_batch(batch_data)
+    if icc_report.get("available"):
+        rows.append("")
+        rows.append("icc_dimension,n_agents,n_runs,icc3_1")
+        for dim, stats in icc_report.get("dimensions", {}).items():
+            icc_value = stats.get("icc3_1")
+            icc_str = "" if icc_value is None else f"{icc_value:.6f}"
+            rows.append(
+                f"{dim},{stats.get('n_agents', '')},{stats.get('n_runs', '')},{icc_str}"
+            )
+        overall_icc = icc_report.get("overall_mean_icc3_1")
+        overall_icc_str = "" if overall_icc is None else f"{overall_icc:.6f}"
+        rows.append(f"overall_mean,,,{overall_icc_str}")
+
     csv_content = '\n'.join(rows) + '\n'
     dl_name = f"batch_{batch_id}_summary.csv"
 
@@ -2049,6 +2187,22 @@ async def export_batch_csv(batch_id: str):
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{dl_name}"'},
     )
+
+
+@router.get("/batch/{batch_id}/reliability")
+async def get_batch_reliability(batch_id: str):
+    """Return ICC(3,1) reliability report for questionnaire outcomes in a batch."""
+    batch_file = Path("logs") / f"batch_{batch_id}.json"
+    if not batch_file.exists():
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    with open(batch_file, encoding='utf-8') as f:
+        batch_data = json.load(f)
+
+    return {
+        "batch_id": batch_id,
+        "reliability": _extract_questionnaire_icc_from_batch(batch_data),
+    }
 
 
 @router.post("/cancel/{task_id}")
