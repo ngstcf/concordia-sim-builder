@@ -1,0 +1,122 @@
+diff --git a/concordia/contrib/prefabs/game_master/simultaneous_resolution_gm.py b/concordia/contrib/prefabs/game_master/simultaneous_resolution_gm.py
+index c8fe6f0..8b620f2 100644
+--- a/concordia/contrib/prefabs/game_master/simultaneous_resolution_gm.py
++++ b/concordia/contrib/prefabs/game_master/simultaneous_resolution_gm.py
+@@ -301,6 +301,8 @@ class GameMasterSimultaneous(prefab_lib.Prefab):
+     start_time = self.params.get('start_time', None)
+     game_rules = self.params.get('game_rules', '')
+     time_period_minutes = self.params.get('time_period_minutes', 15)
++    use_variable_increments = self.params.get('use_variable_increments', True)
++    variable_increment_rules = self.params.get('variable_increment_rules', None)
+     name = self.params.get('name', 'default rules')
+     extra_components = self.params.get('extra_components', {})
+     extra_components_index = self.params.get('extra_components_index', {})
+@@ -417,6 +419,8 @@ class GameMasterSimultaneous(prefab_lib.Prefab):
+         model=model,
+         start_time=start_time,
+         increment_minutes=time_period_minutes,
++        use_variable_increments=use_variable_increments,
++        variable_increment_rules=variable_increment_rules,
+         pre_act_label='\nCurrent time',
+     )
+ 
+diff --git a/concordia/prefabs/game_master/async_social_media.py b/concordia/prefabs/game_master/async_social_media.py
+index 07498dc..ac17165 100644
+--- a/concordia/prefabs/game_master/async_social_media.py
++++ b/concordia/prefabs/game_master/async_social_media.py
+@@ -23,6 +23,7 @@ rather than a turn-ordering mechanism.
+ 
+ from collections.abc import Mapping, Sequence
+ import dataclasses
++import random
+ import threading
+ from typing import Any
+ 
+@@ -64,15 +65,36 @@ class _NextActingEligiblePlayers(
+   def __init__(
+       self,
+       player_names: Sequence[str] = (),
++      default_activity_rate: float = 1.0,
++      per_agent_activity_rates: Mapping[str, float] | None = None,
++      activity_seed: int | None = None,
+       pre_act_label: str = (
+           gm_components.next_acting.DEFAULT_NEXT_ACTING_PRE_ACT_LABEL
+       ),
+   ):
+     super().__init__()
+     self._player_names = list(player_names)
++    self._default_activity_rate = default_activity_rate
++    self._per_agent_activity_rates = dict(per_agent_activity_rates or {})
++    self._rng = random.Random(activity_seed)
+     self._pre_act_label = pre_act_label
+     self._lock = threading.Lock()
+ 
++  def _effective_probability(self, player_name: str) -> float:
++    """Convert per-agent/default activity configuration into a probability."""
++    rate = self._per_agent_activity_rates.get(
++        player_name, self._default_activity_rate
++    )
++    if rate <= 0:
++      return 0.0
++    # Support either direct probabilities (<=1.0) or relative intensities (>1.0).
++    if rate <= 1.0:
++      return float(rate)
++    max_rate = max(
++        [self._default_activity_rate, *self._per_agent_activity_rates.values(), 1.0]
++    )
++    return min(1.0, float(rate) / float(max_rate))
++
+   def remove_player(self, player_name: str) -> None:
+     """Remove a player from the active set (e.g. ban from platform)."""
+     with self._lock:
+@@ -91,7 +113,15 @@ class _NextActingEligiblePlayers(
+   ) -> str:
+     if action_spec.output_type == entity_lib.OutputType.NEXT_ACTING:
+       with self._lock:
+-        return ', '.join(self._player_names)
++        sampled = []
++        for player_name in self._player_names:
++          p = self._effective_probability(player_name)
++          if p > 0 and self._rng.random() < p:
++            sampled.append(player_name)
++        # Ensure the engine still progresses even at low rates.
++        if not sampled and self._player_names:
++          sampled = [self._rng.choice(self._player_names)]
++        return ', '.join(sampled)
+     return ''
+ 
+   def get_state(self) -> entity_component.ComponentState:
+@@ -124,6 +154,9 @@ class GameMaster(prefab_lib.Prefab):
+           'name': 'forum_rules',
+           'forum_name': 'Community Forum',
+           'call_to_action': DEFAULT_CALL_TO_ACTION,
++          'default_activity_rate': 1.0,
++          'per_agent_activity_rates': {},
++          'activity_seed': None,
+           'extra_components': {},
+           'extra_components_index': {},
+       }
+@@ -147,6 +180,9 @@ class GameMaster(prefab_lib.Prefab):
+     name = self.params.get('name', 'forum_rules')
+     forum_name = self.params.get('forum_name', 'Community Forum')
+     call_to_action = self.params.get('call_to_action', DEFAULT_CALL_TO_ACTION)
++    default_activity_rate = self.params.get('default_activity_rate', 1.0)
++    per_agent_activity_rates = self.params.get('per_agent_activity_rates', {})
++    activity_seed = self.params.get('activity_seed', None)
+     extra_components = self.params.get('extra_components', {})
+     extra_components_index = self.params.get('extra_components_index', {})
+ 
+@@ -193,7 +229,12 @@ class GameMaster(prefab_lib.Prefab):
+     make_observation = forum_module.ForumObservation()
+ 
+     next_actor_key = gm_components.next_acting.DEFAULT_NEXT_ACTING_COMPONENT_KEY
+-    next_actor = _NextActingEligiblePlayers(player_names=player_names)
++    next_actor = _NextActingEligiblePlayers(
++        player_names=player_names,
++        default_activity_rate=default_activity_rate,
++        per_agent_activity_rates=per_agent_activity_rates,
++        activity_seed=activity_seed,
++    )
+ 
+     next_action_spec_key = (
+         gm_components.next_acting.DEFAULT_NEXT_ACTION_SPEC_COMPONENT_KEY

@@ -133,9 +133,11 @@ cd concordia-sim-builder
 python -m venv env
 source env/bin/activate  # On Windows: env\Scripts\activate
 
-# Install dependencies (includes pinned gdm-concordia 2.4.0)
+# Install dependencies (pins a patched Concordia 2.4.0 fork — see note below)
 pip install -r requirements.txt
 ```
+
+> **Note:** `requirements.txt` pins a small **patched fork** of Concordia 2.4.0 ([`ngstcf/concordia`](https://github.com/ngstcf/concordia/tree/v2.4.0-simbuilder)), not the stock PyPI wheel. Two Game Master features — per-agent social-media activity rates and variable-increment clocks — depend on it; with the stock wheel, activity rates are silently ignored and the Mastodon influence experiment will not reproduce. `pip install -r requirements.txt` pulls the patched fork automatically. See [Local Modifications to Concordia](#local-modifications-to-concordia-v240) for what changed and why.
 
 ### Frontend Setup
 
@@ -295,9 +297,66 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `game_theoretic_and_dramaturgic__GameMaster` | Matrix games with payoffs/scores | Strategic games |
 | `interviewer__GameMaster` | Administers questionnaires | Surveys, interviews |
 | `marketplace__GameMaster` | Economic trading systems | Market simulations |
-| `async_social_media__GameMaster` | Social media forum with posts and feeds | Online discourse studies |
-| `simultaneous_resolution_gm__GameMasterSimultaneous` | Simultaneous event resolution with locations, NPCs, working memory | Multi-agent workplace, spatial scenarios |
+| `async_social_media__GameMaster` † | Social media forum with posts and feeds, **per-agent activity rates** | Online discourse studies |
+| `simultaneous_resolution_gm__GameMasterSimultaneous` † | Simultaneous event resolution with locations, NPCs, working memory | Multi-agent workplace, spatial scenarios |
 | `space_ship__GameMaster` | Spaceship systems with health/failure tracking | Spaceship crisis scenarios |
+
+† Carries a [local modification](#local-modifications-to-concordia-v240) beyond stock Concordia 2.4.0.
+
+## Local Modifications to Concordia (v2.4.0)
+
+The Builder runs against Concordia **v2.4.0** with two small local patches to Game Master prefabs — the tree that produced the published Mastodon influence experiment results. The patches are published as a public fork, [**`ngstcf/concordia@5ed8813`**](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), which `requirements.txt` pins directly. They are also captured as a standalone tracked patch for review and offline use: [`patches/concordia-2.4.0-local.patch`](patches/concordia-2.4.0-local.patch).
+
+> **⚠️ Reproducibility:** the stock PyPI `gdm-concordia==2.4.0` does **not** contain these changes — with the unpatched library, per-agent activity rates are silently ignored (every agent posts on every step) and the Mastodon experiment will not reproduce. `requirements.txt` therefore pins the patched fork above, so `pip install -r requirements.txt` is sufficient.
+
+### What changed and why
+
+**1. `async_social_media__GameMaster` — per-agent stochastic activation** *(material)*
+
+Stock v2.4.0 activates **every** eligible player on **every** step — its next-acting component simply returns all player names, with no notion of posting frequency. The Mastodon influence experiment depends on *differential* posting volume: a malicious actor posting at ~10× the baseline to dominate the feed, with the effect diluting as the honest population grows. That mechanism did not survive Concordia's upstream port of the prefab, so we re-introduced it at the GM level:
+
+- Added `default_activity_rate`, `per_agent_activity_rates`, and `activity_seed` parameters.
+- Added probabilistic per-agent sampling in the next-acting component (rate ≤ 1.0 → probability; rate > 1.0 → relative intensity, normalized to the most active agent).
+- Seeded the RNG for reproducibility, and guaranteed the engine still advances when no agent is sampled in a step.
+
+This is the GM-level mechanism behind the Builder's **Social Media Activity Model** sliders. Without it, the experiment's central manipulation — influence by posting volume — cannot be expressed.
+
+**2. `simultaneous_resolution_gm__GameMasterSimultaneous` — variable-clock wiring** *(minor)*
+
+The contrib clock already supported variable time increments, but the prefab never forwarded the configuration. The patch threads `use_variable_increments` and `variable_increment_rules` from GM params into the clock, enabling multi-interval / variable-step schedules from the Builder.
+
+### Reproducing the patched environment
+
+The published results used Concordia at commit `5482bca` (`git describe` → `v2.4.0-28-g5482bca`) plus the two patches above, published as the public fork [**`ngstcf/concordia@5ed8813`**](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`).
+
+**Default — pinned fork (one command).** `requirements.txt` already pins that commit, so a fresh clone reproduces it directly:
+
+```bash
+pip install -r requirements.txt   # installs gdm-concordia from ngstcf/concordia@5ed8813
+```
+
+**Alternative — local editable install** (e.g. to keep developing against Concordia):
+
+```bash
+# Clone, pin the exact commit, apply the patch, install editable:
+git clone https://github.com/google-deepmind/concordia concordia-upstream
+cd concordia-upstream
+git checkout 5482bca            # v2.4.0 + 28 commits — the exact tree this work used
+git apply ../patches/concordia-2.4.0-local.patch
+pip install -e .               # shadows the pinned PyPI gdm-concordia==2.4.0
+```
+
+<details>
+<summary>How the fork was produced (provenance)</summary>
+
+```bash
+gh repo fork google-deepmind/concordia --fork-name concordia --clone=false
+git checkout 5482bca -b v2.4.0-simbuilder
+git apply patches/concordia-2.4.0-local.patch
+git commit -am "Per-agent activity rates + variable-clock wiring for Concordia Sim Builder"
+git push -u fork v2.4.0-simbuilder
+```
+</details>
 
 ## Project Structure
 
@@ -394,7 +453,7 @@ Licensed under the Apache 2.0 License — see the LICENSE file for details.
 
 ## Citation
 
-If you use this software in your research, please cite:
+If you use this software in your research, please cite the SIMULTECH 2026 paper (accepted manuscript archived on Zenodo: [10.5281/zenodo.20132089](https://doi.org/10.5281/zenodo.20132089)):
 
 ```bibtex
 @inproceedings{concordia_sim_builder,
@@ -407,6 +466,12 @@ If you use this software in your research, please cite:
   institution={United Nations University}
 }
 ```
+
+### Artifact Availability
+
+- **Paper (accepted manuscript):** Zenodo [10.5281/zenodo.20132089](https://doi.org/10.5281/zenodo.20132089) — the concept DOI [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) always resolves to the latest version.
+- **Builder source:** <https://github.com/ngstcf/concordia-sim-builder>
+- **Patched Concordia 2.4.0:** [`ngstcf/concordia@5ed8813`](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), pinned in `requirements.txt` — see [Local Modifications to Concordia](#local-modifications-to-concordia-v240).
 
 ## Acknowledgments
 

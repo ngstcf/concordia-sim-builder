@@ -4,8 +4,14 @@
 #
 # For development with unpinned dependencies, see requirements-dev.bak
 #
-# Concordia framework (pinned — test all templates before upgrading)
-gdm-concordia==2.4.0
+# Concordia framework (patched fork pinned for reproducibility)
+#
+# Published results require local patches to Concordia 2.4.0 (per-agent
+# social-media activity rates + variable clocks). The active line below installs
+# the patched fork directly; see README -> "Local Modifications to Concordia".
+# Stock PyPI wheel (UNPATCHED — activity rates silently ignored), for reference:
+#   gdm-concordia==2.4.0
+gdm-concordia @ git+https://github.com/ngstcf/concordia@5ed88134f7a08f2a13209b2e01bbb70a76d6771f
 
 # NLP / Embeddings
 sentence-transformers==5.2.0
