@@ -453,7 +453,7 @@ Licensed under the Apache 2.0 License — see the LICENSE file for details.
 
 ## Citation
 
-If you use this software in your research, please cite the SIMULTECH 2026 paper (accepted manuscript archived on Zenodo: [10.5281/zenodo.20132089](https://doi.org/10.5281/zenodo.20132089)):
+If you use this software in your research, please cite the SIMULTECH 2026 paper (accepted manuscript archived on Zenodo: [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283)):
 
 ```bibtex
 @inproceedings{concordia_sim_builder,
@@ -469,7 +469,7 @@ If you use this software in your research, please cite the SIMULTECH 2026 paper 
 
 ### Artifact Availability
 
-- **Paper (accepted manuscript):** Zenodo [10.5281/zenodo.20132089](https://doi.org/10.5281/zenodo.20132089) — the concept DOI [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) always resolves to the latest version.
+- **Paper (accepted manuscript):** Zenodo [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) (concept DOI — always resolves to the latest version).
 - **Builder source:** <https://github.com/ngstcf/concordia-sim-builder>
 - **Patched Concordia 2.4.0:** [`ngstcf/concordia@5ed8813`](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), pinned in `requirements.txt` — see [Local Modifications to Concordia](#local-modifications-to-concordia-v240).
 
