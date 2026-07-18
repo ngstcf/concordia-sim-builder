@@ -297,13 +297,9 @@ class GeminiModel:
     """
     Gemini model wrapper using Google's genai library.
     """
-    def __init__(self, api_key: str, model_name: str, timeout: float = 120.0):
+    def __init__(self, api_key: str, model_name: str, timeout: float = 300.0):
         import google.genai as genai
-        from google.genai.types import HttpOptions
-        self._client = genai.Client(
-            api_key=api_key,
-            http_options=HttpOptions(timeout=timeout),
-        )
+        self._client = genai.Client(api_key=api_key)
         self._model_name = model_name
         self._default_timeout = timeout
 
@@ -314,16 +310,16 @@ class GeminiModel:
         max_tokens: int = 2000,  # Match Concordia's DEFAULT_MAX_TOKENS
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         terminators: list[str] | None = None,
-        timeout: float = 120.0,
+        timeout: float = 300.0,
         seed: int | None = None,
         top_p: float = 0.95,
         top_k: int = 64,
         **kwargs,
     ) -> str:
         """Sample text from Gemini using the new google.genai package."""
+        import concurrent.futures as _cf
         try:
             actual_max_tokens = max(max_tokens, 2000)
-
             config = {
                 'max_output_tokens': actual_max_tokens,
                 'temperature': temperature,
@@ -331,16 +327,26 @@ class GeminiModel:
             llm_print(f"[LLM] Calling {self._model_name} with max_tokens={actual_max_tokens}, temp={temperature}, timeout={timeout}s")
             call_start = time.time()
 
-            response = self._client.models.generate_content(
-                model=self._model_name,
-                contents=prompt,
-                config=config,
-            )
+            # Enforce timeout at the Python level — google.genai's HttpOptions
+            # deadline is version-sensitive and can misfire; a thread+Future is reliable.
+            def _call():
+                return self._client.models.generate_content(
+                    model=self._model_name,
+                    contents=prompt,
+                    config=config,
+                )
+
+            with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
+                _fut = _ex.submit(_call)
+                try:
+                    response = _fut.result(timeout=timeout)
+                except _cf.TimeoutError:
+                    raise TimeoutError(f"Gemini call timed out after {timeout:.0f}s")
 
             elapsed = time.time() - call_start
 
             if response is None:
-                llm_print(f"[LLM] Warning: {self._model_name} returned None response after {elapsed:.1f}s")
+                llm_print(f"[LLM] Warning: {self._model_name} returned None after {elapsed:.1f}s")
                 return ""
 
             text = response.text
