@@ -414,6 +414,7 @@ def build_simulation(
         debug_print(f"[DEBUG] Final questionnaires list: {len(questionnaire_objects)} objects")
 
     # Add grounded_variables component if provided
+    grounded_vars_component = None
     if config.game_master.grounded_variables:
         from backend.prefabs.grounded_variables import create_grounded_variables_component
 
@@ -582,6 +583,17 @@ def build_simulation(
     )
 
     sim._measurements = measurements
+
+    # GM prefabs that ignore extra_components (e.g. dialogic) won't have the
+    # grounded_variables_component in their _context_components.  Inject it
+    # directly so pre_act/post_act are called during the run.
+    if grounded_vars_component is not None and sim.game_masters:
+        gm = sim.game_masters[0]
+        if (hasattr(gm, '_context_components') and
+                'grounded_variables_component' not in gm._context_components):
+            gm._context_components['grounded_variables_component'] = grounded_vars_component
+            debug_print(f"[DEBUG] Injected grounded_variables_component directly into '{gm.name}' "
+                        f"(prefab '{config.game_master.prefab}' does not process extra_components)")
 
     return sim
 
