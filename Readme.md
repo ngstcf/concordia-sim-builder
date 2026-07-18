@@ -83,7 +83,7 @@ Each simulation produces three output files:
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
 - **8 LLM Providers** — OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
 - **Separate GM LLM** — Independent model selection for Game Master
-- **Checkpoint System** — Automatic checkpoints with metadata, watchdog emergency saves, scenario-named files
+- **Checkpoint & Resume** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped (uses Concordia's native `load_from_checkpoint` API). **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim.
 - **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
 - **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
@@ -254,8 +254,9 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/logs/{filename}` | GET | Get simulation log HTML |
 | `/api/simulations/logs/{filename}` | DELETE | Delete simulation log + metadata |
 | `/api/simulations/logs/{filename}/analytics` | GET | Analytics data for all 9 result tabs |
-| `/api/simulations/logs/checkpoints` | GET | List checkpoint files |
-| `/api/simulations/logs/checkpoints` | DELETE | Delete checkpoint files |
+| `/api/simulations/logs/checkpoints` | GET | List checkpoint files (includes `resumable` flag + `state_filename`) |
+| `/api/simulations/logs/checkpoints` | DELETE | Delete checkpoint files + `.state.json` sidecars |
+| `/api/simulations/resume` | POST | Resume simulation from a `.state.json` checkpoint (SSE stream) |
 | `/api/simulations/logs/config` | GET | Log streaming config (debug/LLM flags) |
 | `/api/simulations/logs/stream` | GET | SSE endpoint for live log streaming |
 
