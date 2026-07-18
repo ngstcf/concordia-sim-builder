@@ -697,7 +697,7 @@ export default function SimulationRunner() {
                   value={llmSettings.provider}
                   onChange={(e) => {
                     const provider = e.target.value as any;
-                    const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                    const timeout = (provider === 'openai' || provider === 'anthropic') ? 120 : 300;
                     setLLMSettings({ ...llmSettings, provider, request_timeout: timeout });
                   }}
                 >
@@ -873,7 +873,7 @@ export default function SimulationRunner() {
                       value={gmLlmSettings.provider}
                       onChange={(e) => {
                         const provider = e.target.value as any;
-                        const timeout = (provider === 'ollama' || provider === 'ollama_remote') ? 300 : 120;
+                        const timeout = (provider === 'openai' || provider === 'anthropic') ? 120 : 300;
                         setGmLlmSettings({ ...gmLlmSettings, provider, request_timeout: timeout });
                       }}
                     >

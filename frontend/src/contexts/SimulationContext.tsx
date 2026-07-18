@@ -77,7 +77,7 @@ const defaultLLMSettings: LLMSettings = {
   embedder_model: 'all-MiniLM-L6-v2',
   temperature: 0.5,
   max_tokens: 16384,
-  request_timeout: 120
+  request_timeout: 300
 };
 
 interface SimulationProviderProps {

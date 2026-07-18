@@ -188,7 +188,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set in settings or environment")
-        model = GeminiModel(api_key=api_key, model_name=model_name)
+        _gemini_timeout = float(getattr(settings, 'request_timeout', 300))
+        model = GeminiModel(api_key=api_key, model_name=model_name, timeout=_gemini_timeout)
 
     elif provider == LLMProvider.ANTHROPIC.value:
         if not api_key:
