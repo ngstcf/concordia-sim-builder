@@ -1,18 +1,14 @@
 """
 Utility functions to fix LLM response parsing issues in Concordia thought chains.
 
-The issue: When asked yes/no questions, some LLMs respond with verbose explanations
-instead of just "Yes" or "No", causing validation errors.
-
-This module provides patching utilities to handle verbose responses.
-
-ROBUSTNESS: This patches at the ActionSpec.validate() level, which is the deepest
-point we can intercept before the error is raised. This ensures that ALL binary
-choice validations are normalized, regardless of where they originate.
+Handles two classes of verbose LLM responses:
+1. Binary (Yes/No) choices answered with an explanation — patched at ActionSpec.validate().
+2. Action-spec generation where the LLM prefixes the required JSON with prose —
+   patched at concordia.environment.engine.action_spec_parser().
 """
 
+import json
 import re
-from typing import Callable
 from concordia.typing import entity as entity_lib
 
 
@@ -121,20 +117,50 @@ def patch_all_agents_in_simulation(simulation) -> None:
         patch_agent_for_binary_thought_chains(gm)
 
 
+def patch_action_spec_parser():
+    """
+    Patch concordia.environment.engine.action_spec_parser to tolerate verbose
+    LLM responses that embed the required JSON after explanatory prose.
+
+    When the LLM outputs something like:
+        "So we output the JSON. I'll choose the first example.
+         {"call_to_action": "...", "output_type": "free", ...}"
+    the stock parser's json.loads() fails and the legacy fallback raises
+    RuntimeError. This patch extracts the first {...} block from the string and
+    retries before giving up.
+    """
+    from concordia.environment import engine as engine_mod
+
+    original_parser = engine_mod.action_spec_parser
+
+    def patched_parser(next_action_spec_string: str):
+        try:
+            return original_parser(next_action_spec_string)
+        except (RuntimeError, json.JSONDecodeError):
+            pass
+
+        # Try to extract an embedded JSON object from the verbose string.
+        match = re.search(r'\{.*\}', next_action_spec_string, re.DOTALL)
+        if match:
+            try:
+                spec_dict = json.loads(match.group())
+                return entity_lib.action_spec_from_dict(spec_dict)
+            except (json.JSONDecodeError, KeyError, ValueError):
+                pass
+
+        # No embedded JSON found — re-raise via original to get a clear error.
+        return original_parser(next_action_spec_string)
+
+    engine_mod.action_spec_parser = patched_parser
+
+
 def apply_all_patches():
     """
     Apply all patches needed to handle verbose LLM responses.
 
-    This should be called once at application startup to ensure all simulations
-    benefit from the fix. The primary patch is at ActionSpec.validate() which
-    catches all binary choice validations globally.
-
-    ROBUSTNESS: This uses a defense-in-depth approach:
-    1. Primary: Patch ActionSpec.validate() - catches ALL validations globally
-    2. Secondary: Patch entity act() methods - provides additional safety
-
-    The primary patch alone should be sufficient for most cases. The secondary
-    patches provide defense in depth.
+    Called once at application startup.
     """
     patch_action_spec_validate()
+    patch_action_spec_parser()
     print("✓ Applied ActionSpec.validate() patch for verbose binary response normalization")
+    print("✓ Applied action_spec_parser patch for verbose JSON action spec responses")
