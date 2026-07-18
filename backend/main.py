@@ -61,18 +61,12 @@ app.include_router(simulations.router)
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
+    if _DIST.is_dir():
+        return FileResponse(str(_DIST / "index.html"))
     return {
         "message": "Concordia Simulation Builder API",
         "version": "2.4.0",
         "docs": "/docs",
-        "endpoints": {
-            "prefabs": "/api/simulations/prefabs",
-            "providers": "/api/simulations/providers",
-            "validate": "/api/simulations/validate",
-            "execute": "/api/simulations/execute",
-            "templates": "/api/simulations/templates/peace-negotiation"
-        }
     }
 
 
@@ -92,15 +86,20 @@ async def shutdown_server():
     return {"status": "shutting_down"}
 
 
-# Serve frontend static files in production
-# This will be enabled when frontend is built
-# app.mount("/static", StaticFiles(directory="frontend/dist"), name="static")
+# Serve frontend static files — assets sub-directory mounted explicitly so the
+# SPA catch-all below doesn't shadow the /api routes.
+from pathlib import Path as _Path
+_DIST = _Path(__file__).parent.parent / "frontend" / "dist"
+if _DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
 
-
-# @app.get("/{catchall:path}")
-# async def serve_frontend(catchall: str):
-#     """Serve the frontend application."""
-#     return FileResponse("frontend/dist/index.html")
+    @app.get("/{catchall:path}")
+    async def serve_frontend(catchall: str):
+        """Serve the SPA for any non-API path."""
+        candidate = _DIST / catchall
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(_DIST / "index.html"))
 
 
 if __name__ == "__main__":
