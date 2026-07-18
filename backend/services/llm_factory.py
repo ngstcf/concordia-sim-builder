@@ -144,6 +144,9 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
     api_key = settings.api_key
     base_url = settings.base_url
 
+    # Resolve timeout once — used for all providers below
+    request_timeout = float(getattr(settings, 'request_timeout', 300))
+
     # Try to get API key from settings or environment
     if provider == LLMProvider.OPENAI.value:
         if not api_key:
@@ -183,10 +186,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             base_url='https://api.deepseek.com'
         )
 
-    # Resolve timeout once — used for all providers below
-    request_timeout = float(getattr(settings, 'request_timeout', 300))
-
-    if provider == LLMProvider.GEMINI.value:
+    elif provider == LLMProvider.GEMINI.value:
         if not api_key:
             api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
