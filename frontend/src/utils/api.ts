@@ -277,6 +277,126 @@ export async function executeSimulationStream(
 }
 
 /**
+ * Resume a simulation from a saved .state.json checkpoint file.
+ * Streams SSE events identical to executeSimulationStream.
+ */
+export async function resumeSimulationStream(
+  stateFilename: string,
+  onProgress?: (progress: { step: number; max_steps: number; elapsed: number; est_remaining: number; est_time_str: string }) => void,
+  onComplete?: (result: any) => void,
+  onError?: (error: string) => void,
+  onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
+  onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
+  onDisconnect?: () => void,
+): Promise<void> {
+  console.log('[resumeSimulationStream] Starting resume from:', stateFilename);
+
+  let streamCompleted = false;
+  let simulationStarted = false;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/simulations/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_filename: stateFilename }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) throw new Error('Response body is null');
+
+    let buffer = '';
+    let eventCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        console.log('[resumeSimulationStream] Stream done. Total events:', eventCount);
+        if (!streamCompleted) {
+          console.warn('[resumeSimulationStream] Stream ended without completion event — connection lost');
+          onDisconnect?.();
+        }
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.startsWith('event:')) {
+          const eventType = line.substring(6).trim();
+          if (i + 1 < lines.length) {
+            const dataLine = lines[i + 1];
+            if (dataLine.startsWith('data:')) {
+              try {
+                const data = JSON.parse(dataLine.substring(5).trim());
+                switch (eventType) {
+                  case 'simulation_start':
+                    simulationStarted = true;
+                    if (data.task_id) {
+                      onProgress?.({ step: 0, max_steps: 0, elapsed: 0, est_remaining: 0, est_time_str: '', task_id: data.task_id } as any);
+                    }
+                    eventCount++;
+                    break;
+                  case 'step_progress':
+                    onProgress?.(data);
+                    eventCount++;
+                    break;
+                  case 'simulation_complete':
+                    streamCompleted = true;
+                    if (data.log_filename) {
+                      fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
+                        .then(r => r.json())
+                        .then(logData => onComplete?.({ ...data, results: logData.html_content, timestamp: logData.modified }))
+                        .catch(() => onComplete?.(data));
+                    } else {
+                      onComplete?.(data);
+                    }
+                    eventCount++;
+                    break;
+                  case 'step_data':
+                    onStepData?.(data);
+                    eventCount++;
+                    break;
+                  case 'controller_state':
+                    onControllerState?.(data);
+                    eventCount++;
+                    break;
+                  case 'error':
+                    streamCompleted = true;
+                    onError?.(data.error || 'Unknown error');
+                    eventCount++;
+                    break;
+                }
+              } catch (e) {
+                console.error('[resumeSimulationStream] Failed to parse SSE data:', e);
+              }
+              i++;
+            }
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error('[resumeSimulationStream] Error:', error);
+    if (simulationStarted && !streamCompleted) {
+      onDisconnect?.();
+    } else {
+      onError?.(error.message || 'Failed to resume simulation');
+    }
+  }
+}
+
+/**
  * Execute a simulation (simple non-streaming version for testing)
  */
 export async function executeSimulationSimple(
@@ -873,6 +993,8 @@ export async function getCheckpointFiles(): Promise<{
     size: number;
     modified: number;
     path: string;
+    resumable: boolean;
+    state_filename: string | null;
   }>;
   total_count: number;
   total_size: number;

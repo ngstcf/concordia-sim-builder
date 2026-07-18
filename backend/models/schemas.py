@@ -300,6 +300,14 @@ class ExecutionRequest(BaseModel):
         description="Optional separate LLM settings for the Game Master. If not set, uses llm_settings."
     )
 
+
+class ResumeRequest(BaseModel):
+    """Request to resume a simulation from a saved checkpoint state file."""
+    state_filename: str = Field(
+        ...,
+        description="Basename of the .state.json file under the logs/ directory (e.g. '20260718_120000_Alice_Bob_My_premise_checkpoint_step5.state.json')"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {

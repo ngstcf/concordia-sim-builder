@@ -13,11 +13,21 @@ interface SimulationLog {
   created: number;
 }
 
-interface RecentSimulationsProps {
-  onLoadSimulation: (htmlContent: string, filename: string, modified: number) => void;
+interface CheckpointFile {
+  filename: string;
+  path: string;
+  size: number;
+  modified: number;
+  resumable: boolean;
+  state_filename: string | null;
 }
 
-export default function RecentSimulations({ onLoadSimulation }: RecentSimulationsProps) {
+interface RecentSimulationsProps {
+  onLoadSimulation: (htmlContent: string, filename: string, modified: number) => void;
+  onResumeSimulation?: (stateFilename: string) => void;
+}
+
+export default function RecentSimulations({ onLoadSimulation, onResumeSimulation }: RecentSimulationsProps) {
   const [logs, setLogs] = useState<SimulationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +35,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const [showCleanup, setShowCleanup] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
-  const [checkpoints, setCheckpoints] = useState<SimulationLog[]>([]);
+  const [checkpoints, setCheckpoints] = useState<CheckpointFile[]>([]);
 
   useEffect(() => {
     loadRecentSimulations();
@@ -39,14 +49,14 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
         count: data.total_count || 0,
         size: data.total_size || 0
       });
-      // Convert checkpoint data to SimulationLog format
       if (data.checkpoints && data.checkpoints.length > 0) {
         setCheckpoints(data.checkpoints.map(cp => ({
           filename: cp.filename,
           path: cp.path,
           size: cp.size,
           modified: cp.modified,
-          created: cp.modified
+          resumable: cp.resumable ?? false,
+          state_filename: cp.state_filename ?? null,
         })));
       }
     } catch (err) {
@@ -347,7 +357,23 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                       <span>{formatFileSize(checkpoint.size)}</span>
                     </div>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {checkpoint.resumable && checkpoint.state_filename && onResumeSimulation && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onResumeSimulation(checkpoint.state_filename!);
+                        }}
+                        className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors whitespace-nowrap"
+                        title="Resume simulation from this checkpoint"
+                      >
+                        <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Resume
+                      </button>
+                    )}
                     <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>

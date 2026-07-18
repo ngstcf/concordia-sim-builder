@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
+import { executeSimulationStream, resumeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -623,6 +623,74 @@ export default function SimulationRunner() {
     console.log('[handleRun] executeSimulationStream completed');
   };
 
+  const handleResume = async (stateFilename: string) => {
+    console.log('[handleResume] Resuming from:', stateFilename);
+    setRunning(true);
+    setError(null);
+    setResults(null);
+    setProgress(null);
+    setTaskId(null);
+    setDisconnected(false);
+    setStepDataLog([]);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+
+    await resumeSimulationStream(
+      stateFilename,
+      // onProgress
+      (progressData: any) => {
+        if (progressData.task_id) setTaskId(progressData.task_id);
+        setProgress(progressData);
+      },
+      // onComplete
+      (result) => {
+        setResults(result);
+        setSimulationMeta({
+          llm_provider: result.llm_provider,
+          llm_model: result.llm_model,
+          gm_llm_provider: result.gm_llm_provider,
+          gm_llm_model: result.gm_llm_model,
+          elapsed_seconds: result.elapsed_seconds,
+          steps_completed: result.steps_completed,
+        });
+        setProgress(null);
+        setRunning(false);
+        setControllerState(null);
+      },
+      // onError
+      (errMsg) => {
+        setError(errMsg);
+        setProgress(null);
+        setRunning(false);
+        setControllerState(null);
+      },
+      // onStepData
+      (data) => {
+        setStepDataLog(prev => [...prev, { step: data.step, acting_entity: data.acting_entity, action: data.action }]);
+        setControllerState('paused');
+      },
+      // onControllerState
+      (data) => {
+        setControllerState(data.state as 'playing' | 'paused' | 'stepping' | 'stopped');
+        if (data.task_id) setTaskId(data.task_id);
+      },
+      // onDisconnect
+      () => {
+        setDisconnected(true);
+        setTaskId(prev => {
+          if (prev) {
+            startPollingRecovery(prev);
+          } else {
+            setError('Connection lost during resume. The simulation may still be running.');
+            setRunning(false);
+            setDisconnected(false);
+          }
+          return prev;
+        });
+      },
+    );
+    console.log('[handleResume] resumeSimulationStream completed');
+  };
+
   const handleCancel = async () => {
     if (!taskId) {
       setError('No simulation to cancel.');
@@ -1117,7 +1185,7 @@ export default function SimulationRunner() {
           </div>
 
           {/* Recent Simulations */}
-          <RecentSimulations onLoadSimulation={handleLoadSimulation} />
+          <RecentSimulations onLoadSimulation={handleLoadSimulation} onResumeSimulation={handleResume} />
           </div>
           )}
         </div>

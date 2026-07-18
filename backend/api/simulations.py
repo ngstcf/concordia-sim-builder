@@ -23,6 +23,7 @@ from backend.models.schemas import (
     ValidationResult,
     PrefabInfo,
     ExecutionRequest,
+    ResumeRequest,
     ComponentValidationRequest,
     GroundedVariablesExtractionRequest,
     PersonaGenerationRequest,
@@ -561,6 +562,73 @@ async def execute_simulation_simple(request: ExecutionRequest):
     return results
 
 
+@router.post("/resume")
+async def resume_simulation(request: ResumeRequest):
+    """
+    Resume a simulation from a saved resumable state file (.state.json).
+
+    The state file must have been created automatically alongside an HTML
+    checkpoint (every checkpoint_interval steps or on emergency save).
+    Returns a streaming SSE response identical to /execute — the frontend
+    can handle it with the same event loop.
+
+    Note: sims built with player_specific_context (formative memories
+    initializer) may re-run initializer steps on resume.  Check the
+    resumable flag from GET /logs/checkpoints to confirm the file exists.
+    """
+    import json
+    from pathlib import Path as _P
+    from fastapi.responses import StreamingResponse
+    from backend.services.simulation_runner import LOGS_DIR
+
+    # Sanitise: only allow a plain filename (no path traversal)
+    state_filename = _P(request.state_filename).name
+    if not state_filename.endswith('.state.json'):
+        raise HTTPException(status_code=400, detail="state_filename must end with .state.json")
+
+    state_path = LOGS_DIR / state_filename
+    if not state_path.is_file():
+        raise HTTPException(status_code=404, detail=f"State file not found: {state_filename}")
+
+    try:
+        with open(state_path, 'r', encoding='utf-8') as f:
+            resume_state = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse state file: {e}")
+
+    # Reconstruct config and LLM settings from the saved payload
+    try:
+        from backend.models.schemas import SimulationConfig, LLMSettings
+        config = SimulationConfig(**resume_state['config'])
+        llm_settings = LLMSettings(**resume_state['llm_settings'])
+        gm_llm_settings = (
+            LLMSettings(**resume_state['gm_llm_settings'])
+            if resume_state.get('gm_llm_settings')
+            else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not reconstruct simulation config: {e}")
+
+    steps_completed = int(resume_state.get('steps_completed', 0))
+    remaining = config.max_steps - steps_completed
+    if remaining <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Simulation already complete ({steps_completed}/{config.max_steps} steps done)."
+        )
+
+    print(f"[RESUME] Starting resume from {state_filename} (step {steps_completed}/{config.max_steps})")
+
+    return StreamingResponse(
+        run_simulation_stream(config, llm_settings, gm_llm_settings, resume_state=resume_state),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/export-template")
 async def export_template():
     """Export a blank simulation configuration template."""
@@ -732,11 +800,15 @@ async def get_checkpoint_files():
 
         for file_path in all_checkpoint_files:
             stat = file_path.stat()
+            state_file = file_path.with_suffix('.state.json')
+            resumable = state_file.is_file()
             checkpoints.append({
                 "filename": file_path.name,
                 "size": stat.st_size,
                 "modified": stat.st_mtime,
-                "path": str(file_path)
+                "path": str(file_path),
+                "resumable": resumable,
+                "state_filename": state_file.name if resumable else None,
             })
             total_size += stat.st_size
 
@@ -784,18 +856,21 @@ async def delete_checkpoint_files():
                 "deleted_count": 0
             }
 
-        # Find all checkpoint files and their metadata (regular, emergency, and watchdog)
+        # Find all checkpoint files, their metadata, and resumable state sidecars
         checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
         checkpoint_meta = list(logs_dir.glob("*_checkpoint_step*.metadata.json"))
+        checkpoint_state = list(logs_dir.glob("*_checkpoint_step*.state.json"))
         emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
         emergency_meta = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.metadata.json"))
+        emergency_state = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.state.json"))
         watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
         watchdog_meta = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.metadata.json"))
+        watchdog_state = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.state.json"))
 
         # Combine all checkpoint types
-        all_checkpoint_files = (checkpoint_files + checkpoint_meta +
-                                emergency_files + emergency_meta +
-                                watchdog_files + watchdog_meta)
+        all_checkpoint_files = (checkpoint_files + checkpoint_meta + checkpoint_state +
+                                emergency_files + emergency_meta + emergency_state +
+                                watchdog_files + watchdog_meta + watchdog_state)
 
         deleted_count = 0
         deleted_files = []

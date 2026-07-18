@@ -117,10 +117,55 @@ def _save_checkpoint_metadata(
         json.dump(metadata, f, indent=2)
 
 
+def _save_resumable_state(
+    base_path: Path,
+    checkpoint_data: dict,
+    config: SimulationConfig,
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None,
+    steps_completed: int,
+    max_steps: int,
+) -> bool:
+    """Persist Concordia's full checkpoint_data alongside an HTML checkpoint.
+
+    Writes a ``.state.json`` sidecar next to *base_path* containing everything
+    needed to reconstruct and resume the simulation from *steps_completed*.
+
+    Returns True on success, False on error (errors are logged but never raised
+    so they cannot crash an ongoing simulation run).
+    """
+    import json
+
+    state_path = base_path.with_suffix('.state.json')
+    try:
+        payload = {
+            "format_version": 1,
+            "steps_completed": steps_completed,
+            "max_steps": max_steps,
+            "engine_type": config.engine_type.value if hasattr(config.engine_type, 'value') else str(config.engine_type),
+            "config": config.model_dump(mode='json'),
+            "llm_settings": llm_settings.model_dump(mode='json'),
+            "gm_llm_settings": gm_llm_settings.model_dump(mode='json') if gm_llm_settings else None,
+            "checkpoint_data": checkpoint_data,
+        }
+        with open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+        print(f"[CHECKPOINT] ✓ Resumable state saved: {state_path.name} ({state_path.stat().st_size:,} bytes)")
+        return True
+    except (TypeError, ValueError) as e:
+        # raw_log may contain non-JSON-serializable objects — log and continue
+        print(f"[WARNING] Could not save resumable state (serialisation error): {e}")
+        return False
+    except Exception as e:
+        print(f"[WARNING] Could not save resumable state: {e}")
+        return False
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
     llm_settings: LLMSettings,
     gm_llm_settings: LLMSettings | None = None,
+    resume_state: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Run a simulation and yield SSE events.
@@ -129,6 +174,9 @@ async def run_simulation_stream(
         config: Simulation configuration
         llm_settings: LLM provider settings
         gm_llm_settings: Optional separate LLM settings for the Game Master
+        resume_state: When set, load Concordia checkpoint from this dict and run
+            only the remaining steps instead of starting from scratch.  The dict
+            must have the structure written by _save_resumable_state.
 
     Yields:
         SSE-formatted event strings
@@ -200,8 +248,21 @@ async def run_simulation_stream(
         sim = build_simulation(config, model, embedder, gm_model=gm_model)
         print("✓ Simulation built successfully\n")
 
+        # ── Resume path: restore Concordia state from a saved checkpoint ──
+        _already_completed = 0
+        if resume_state:
+            try:
+                concordia_checkpoint = resume_state['checkpoint_data']
+                _already_completed = int(resume_state.get('steps_completed', 0))
+                sim.load_from_checkpoint(concordia_checkpoint)
+                print(f"[RESUME] ✓ Loaded checkpoint: {_already_completed} steps already completed")
+                print(f"[RESUME]   Remaining: {config.max_steps - _already_completed} steps to run")
+            except Exception as _resume_err:
+                raise RuntimeError(f"Failed to restore simulation state: {_resume_err}") from _resume_err
+
         yield _format_sse(EventType.SIMULATION_START, {
-            'message': 'Simulation built successfully. Starting execution...'
+            'message': 'Resuming from checkpoint...' if resume_state else 'Simulation built successfully. Starting execution...',
+            'resumed_from_step': _already_completed if resume_state else None,
         })
 
         # Run simulation with streaming and progress tracking
@@ -209,12 +270,14 @@ async def run_simulation_stream(
         import asyncio
         progress_queue: asyncio.Queue = asyncio.Queue()
 
-        step_count_tracker = [0]  # Use list for mutable access in callback
+        # When resuming, seed counters so progress display and checkpoint gating
+        # continue correctly from where we left off.
+        step_count_tracker = [_already_completed]
         max_steps = config.max_steps
         start_time_progress = [time.time()]
 
         # Variables for partial checkpointing
-        last_checkpoint_step = [0]  # Use list for mutable access
+        last_checkpoint_step = [_already_completed]  # avoids re-triggering checkpoint at resume step
         checkpoint_interval = getattr(config, 'checkpoint_interval', 5) or 5
 
         print("🎮 Running simulation...")
@@ -317,6 +380,12 @@ async def run_simulation_stream(
                                 start_time, step, max_steps
                             )
 
+                            # Save full Concordia state so this checkpoint is resumable
+                            _save_resumable_state(
+                                checkpoint_path, checkpoint_data, config,
+                                llm_settings, gm_llm_settings, step, max_steps
+                            )
+
                             print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename} ({len(styled_partial):,} chars)")
                         except Exception as checkpoint_error:
                             print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
@@ -364,10 +433,16 @@ async def run_simulation_stream(
             from backend.services.llm_factory import set_active_task_id
             set_active_task_id(task_id)
             try:
+                steps_to_run = (max_steps - _already_completed) if resume_state else max_steps
+                # When resuming, pass premise="" to suppress re-observation of the opening
+                # premise (sequential engine's run_loop only calls observe() when `if premise:`).
+                resume_premise = "" if resume_state else None
                 kwargs = dict(
-                    max_steps=max_steps,
+                    max_steps=steps_to_run,
                     get_state_callback=sync_progress_callback,
                 )
+                if resume_premise is not None:
+                    kwargs['premise'] = resume_premise
                 if step_ctrl is not None:
                     kwargs['step_controller'] = step_ctrl
                     kwargs['step_callback'] = step_data_callback
@@ -543,6 +618,14 @@ async def run_simulation_stream(
             _save_checkpoint_metadata(
                 emergency_path, config, llm_settings, gm_llm_settings,
                 start_time, step_count_tracker[0], max_steps
+            )
+
+            # Save the latest Concordia state — this is the primary resume point when
+            # a run dies mid-way (crashed / timed out / killed).
+            emergency_concordia_state = sim.make_checkpoint_data()
+            _save_resumable_state(
+                emergency_path, emergency_concordia_state, config,
+                llm_settings, gm_llm_settings, step_count_tracker[0], max_steps
             )
 
             print(f"[CHECKPOINT] ✓ Emergency checkpoint saved: {emergency_filename} ({len(emergency_styled):,} chars)")
