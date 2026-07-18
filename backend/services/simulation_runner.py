@@ -383,7 +383,8 @@ async def run_simulation_stream(
         watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600')) if watchdog_enabled else None  # Default: 10 minutes
         last_progress_time = [time.time()]  # Use list for mutable access
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
             future = executor.submit(run_simulation_blocking)
 
             # Stream progress updates while simulation runs
@@ -510,6 +511,10 @@ async def run_simulation_stream(
                     yield _format_sse(EventType.STEP_PROGRESS, progress_data)
                 except asyncio.QueueEmpty:
                     break
+
+        finally:
+            # Do NOT block waiting for the LLM thread — that's what freezes Ctrl-C.
+            executor.shutdown(wait=False, cancel_futures=True)
 
         elapsed = time.time() - start_time
         print(f"\n✓ Simulation execution completed in {elapsed:.1f} seconds")

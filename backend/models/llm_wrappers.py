@@ -297,11 +297,15 @@ class GeminiModel:
     """
     Gemini model wrapper using Google's genai library.
     """
-    def __init__(self, api_key: str, model_name: str):
+    def __init__(self, api_key: str, model_name: str, timeout: float = 120.0):
         import google.genai as genai
-        # The new API doesn't use configure(), pass api_key directly to Client
-        self._client = genai.Client(api_key=api_key)
+        from google.genai.types import HttpOptions
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=HttpOptions(timeout=timeout),
+        )
         self._model_name = model_name
+        self._default_timeout = timeout
 
     def sample_text(
         self,
@@ -310,7 +314,7 @@ class GeminiModel:
         max_tokens: int = 2000,  # Match Concordia's DEFAULT_MAX_TOKENS
         temperature: float = 0.5,  # Match Concordia's DEFAULT_TEMPERATURE
         terminators: list[str] | None = None,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
         seed: int | None = None,
         top_p: float = 0.95,
         top_k: int = 64,
@@ -318,18 +322,13 @@ class GeminiModel:
     ) -> str:
         """Sample text from Gemini using the new google.genai package."""
         try:
-            # Gemini models have large context windows (1M tokens for Gemini 2.0)
-            # Be generous with max_tokens to ensure complete responses
-            # Minimum 2000 tokens for all Gemini models (higher than old 500 minimum)
             actual_max_tokens = max(max_tokens, 2000)
 
-            # Use the new google.genai API
-            # Generation parameters must be passed as a config dict
             config = {
                 'max_output_tokens': actual_max_tokens,
                 'temperature': temperature,
             }
-            llm_print(f"[LLM] Calling {self._model_name} with max_tokens={actual_max_tokens}, temp={temperature}")
+            llm_print(f"[LLM] Calling {self._model_name} with max_tokens={actual_max_tokens}, temp={temperature}, timeout={timeout}s")
             call_start = time.time()
 
             response = self._client.models.generate_content(

@@ -121,6 +121,10 @@ export async function executeSimulationStream(
 
   console.log('[executeSimulationStream] Starting...', { API_BASE_URL, config: configToUse, llmSettings });
 
+  // Hoisted so the catch block can read them for disconnect-vs-error disambiguation.
+  let streamCompleted = false;
+  let simulationStarted = false;
+
   try {
     const body: any = {
       config: configToUse,
@@ -153,7 +157,6 @@ export async function executeSimulationStream(
 
     let buffer = '';
     let eventCount = 0;
-    let streamCompleted = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -192,6 +195,7 @@ export async function executeSimulationStream(
                 switch (eventType) {
                   case 'simulation_start':
                     console.log('[executeSimulationStream] Simulation started:', data.message, 'task_id:', data.task_id);
+                    simulationStarted = true;
                     if (data.task_id) {
                       onProgress?.({ step: 0, max_steps: 0, elapsed: 0, est_remaining: 0, est_time_str: '', task_id: data.task_id } as any);
                     }
@@ -260,7 +264,15 @@ export async function executeSimulationStream(
     console.log('[executeSimulationStream] Exiting normally (stream ended)');
   } catch (error: any) {
     console.error('[executeSimulationStream] Error:', error);
-    onError?.(error.message || 'Failed to execute simulation');
+    // If the simulation had already started on the server, treat a mid-stream
+    // network drop as a disconnect so polling recovery kicks in rather than
+    // showing a dead error state.
+    if (simulationStarted && !streamCompleted) {
+      console.warn('[executeSimulationStream] Network error after simulation started — treating as disconnect for recovery');
+      onDisconnect?.();
+    } else {
+      onError?.(error.message || 'Failed to execute simulation');
+    }
   }
 }
 
