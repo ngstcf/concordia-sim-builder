@@ -183,20 +183,22 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             base_url='https://api.deepseek.com'
         )
 
-    elif provider == LLMProvider.GEMINI.value:
+    # Resolve timeout once — used for all providers below
+    request_timeout = float(getattr(settings, 'request_timeout', 300))
+
+    if provider == LLMProvider.GEMINI.value:
         if not api_key:
             api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set in settings or environment")
-        _gemini_timeout = float(getattr(settings, 'request_timeout', 300))
-        model = GeminiModel(api_key=api_key, model_name=model_name, timeout=_gemini_timeout)
+        model = GeminiModel(api_key=api_key, model_name=model_name, timeout=request_timeout)
 
     elif provider == LLMProvider.ANTHROPIC.value:
         if not api_key:
             api_key = os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in settings or environment")
-        model = AnthropicModel(api_key=api_key, model_name=model_name)
+        model = AnthropicModel(api_key=api_key, model_name=model_name, timeout=request_timeout)
 
     elif provider == LLMProvider.OLLAMA.value:
         # Ollama local — always uses localhost, no auth needed
@@ -225,12 +227,10 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('GLM_API_KEY')
         if not api_key:
             raise ValueError("GLM_API_KEY not set in settings or environment")
-        model = GLMModel(api_key=api_key, model_name=model_name)
+        model = GLMModel(api_key=api_key, model_name=model_name, timeout=request_timeout)
 
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
-
-    request_timeout = float(getattr(settings, 'request_timeout', 120))
     model = TemperatureConfiguredModel(model, settings.temperature, request_timeout, settings.max_tokens)
 
     # Create embedder

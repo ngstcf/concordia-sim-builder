@@ -395,12 +395,13 @@ class GLMModel:
     GLM (Zhipu AI) model wrapper using OpenAI-compatible API.
     GLM provides fast, reliable Chinese and English language models.
     """
-    def __init__(self, api_key: str, model_name: str = "glm-4-flash"):
+    def __init__(self, api_key: str, model_name: str = "glm-4-flash", timeout: float = 300.0):
         from openai import OpenAI
         # GLM uses OpenAI-compatible API
         self._client = OpenAI(
             api_key=api_key,
-            base_url="https://open.bigmodel.cn/api/paas/v4/"
+            base_url="https://open.bigmodel.cn/api/paas/v4/",
+            timeout=timeout,
         )
         self._model_name = model_name
 
@@ -496,9 +497,9 @@ class AnthropicModel:
     """
     Anthropic (Claude) model wrapper using the Anthropic API.
     """
-    def __init__(self, api_key: str, model_name: str = "claude-haiku-4-5"):
+    def __init__(self, api_key: str, model_name: str = "claude-haiku-4-5", timeout: float = 300.0):
         from anthropic import Anthropic
-        self._client = Anthropic(api_key=api_key)
+        self._client = Anthropic(api_key=api_key, timeout=timeout)
         self._model_name = model_name
 
     def _supports_temperature(self) -> bool:
