@@ -44,6 +44,14 @@ Template inventory is updated over time; the latest template count is always ref
 - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md)
 - [Urban Gentrification Simulation](docs/research-use-cases/urban-gentrification-simulation.md)
 
+---
+
+**v2.4.1 — Checkpoint Resume** is available on the `feat/resume-from-checkpoint` branch (tag: `v2.4.1`). This version adds mid-run simulation resumption using Concordia's native save/restore API. When a run is interrupted — server restart, network loss, or manual stop — it can be resumed from the nearest saved checkpoint without reloading the template or re-entering LLM settings. The agent state, memories, simulation log, and all configuration are persisted in a `.state.json` sidecar written alongside each checkpoint HTML file.
+
+**Limitations:** resumption is not supported for simulations using `player_specific_context` (formative memory initializer may re-run); step-controller, interview, and survey engines are untested; and `.state.json` sidecars store the API key in plaintext (avoid placing the `logs/` directory in shared or publicly accessible storage).
+
+---
+
 ## Sample Simulation Results
 
 Nine completed simulation runs are included in the [`logs/`](logs/) directory, spanning 8 distinct scenarios across 3 Game Master types. Each run was configured and executed entirely through the web interface using different LLM provider combinations.
