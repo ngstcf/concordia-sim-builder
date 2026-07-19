@@ -110,7 +110,9 @@ class GroundedVariablesComponent(
 
         lines = ["Current grounded variable values:"]
         for name, value in self._current_values.items():
-            cfg = self._variable_configs[name]
+            cfg = self._variable_configs.get(name)
+            if cfg is None:
+                continue
             lines.append(f"  - {name}: {value} ({cfg.variable_type.value})")
             if cfg.description:
                 lines.append(f"    Description: {cfg.description}")
@@ -119,21 +121,23 @@ class GroundedVariablesComponent(
 
     def set_state(self, state: str) -> None:
         """Set state from string (for deserialization)."""
-        # Parse state string to extract values
-        # Format: "name: value (type)"
         for line in state.split('\n'):
-            if ':' in line and not line.startswith('Current'):
-                parts = line.split(':', 1)
-                if len(parts) == 2:
-                    name = parts[0].strip().replace('- ', '').replace('  ', '')
-                    value_part = parts[1].strip()
-                    # Remove type info
-                    value = value_part.split('(')[0].strip()
-                    # Try to set the value
-                    try:
-                        self._current_values[name] = self._parse_value(name, value)
-                    except (KeyError, ValueError):
-                        pass
+            stripped = line.strip()
+            # Skip header, empty lines, and description sub-lines
+            if not stripped or stripped.startswith('Current') or stripped.startswith('Description:'):
+                continue
+            if ':' not in stripped:
+                continue
+            parts = stripped.split(':', 1)
+            name = parts[0].strip().replace('- ', '')
+            # Only restore variables that exist in this component's config
+            if not name or name not in self._variable_configs:
+                continue
+            value = parts[1].strip().split('(')[0].strip()
+            try:
+                self._current_values[name] = self._parse_value(name, value)
+            except (KeyError, ValueError):
+                pass
 
     def pre_act(
         self,
@@ -177,8 +181,9 @@ class GroundedVariablesComponent(
                     self._current_values[name] = validated_value
 
         # Record values AFTER updates so history reflects end-of-step state
-        for name, value in self._current_values.items():
-            self._history[name].append((self._step_counter, value))
+        for name in self._variable_configs:
+            if name in self._current_values:
+                self._history[name].append((self._step_counter, self._current_values[name]))
 
         return f"Variables updated: {list(updates.keys()) if updates else 'None'}"
 
