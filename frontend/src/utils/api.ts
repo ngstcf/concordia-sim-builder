@@ -209,13 +209,14 @@ export async function executeSimulationStream(
                   case 'simulation_complete':
                     streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onComplete');
+                    // Call immediately so the spinner clears without waiting for the log fetch
+                    onComplete?.(data);
                     if (data.log_filename) {
                       console.log('[executeSimulationStream] Fetching log content from:', data.log_filename);
                       fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
                         .then(response => response.json())
                         .then(logData => {
                           console.log('[executeSimulationStream] Log content fetched, length:', logData.html_content?.length);
-                          // Add the HTML content to the completion data
                           onComplete?.({
                             ...data,
                             results: logData.html_content,
@@ -224,11 +225,7 @@ export async function executeSimulationStream(
                         })
                         .catch(err => {
                           console.error('[executeSimulationStream] Failed to fetch log content:', err);
-                          // Still call onComplete even if fetch fails
-                          onComplete?.(data);
                         });
-                    } else {
-                      onComplete?.(data);
                     }
                     eventCount++;
                     break;
@@ -356,13 +353,12 @@ export async function resumeSimulationStream(
                     break;
                   case 'simulation_complete':
                     streamCompleted = true;
+                    onComplete?.(data);
                     if (data.log_filename) {
                       fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
                         .then(r => r.json())
                         .then(logData => onComplete?.({ ...data, results: logData.html_content, timestamp: logData.modified }))
-                        .catch(() => onComplete?.(data));
-                    } else {
-                      onComplete?.(data);
+                        .catch(() => { /* onComplete already called above */ });
                     }
                     eventCount++;
                     break;
