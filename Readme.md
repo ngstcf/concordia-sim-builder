@@ -83,7 +83,7 @@ Each simulation produces three output files:
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
 - **8 LLM Providers** — OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
 - **Separate GM LLM** — Independent model selection for Game Master
-- **Checkpoint & Resume** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped (uses Concordia's native `load_from_checkpoint` API). **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim.
+- **Checkpoint, Resume & Extend** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped. A teal **Extend** button appears on every completed run in Recent Simulations — enter how many additional steps to run and continue from the final state, whether the simulation ended early (LLM decision) or reached `max_steps`. All state is persisted via Concordia's native `load_from_checkpoint` API; LLM settings, agent config, and all memories are restored from the sidecar — no template reload needed. **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim.
 - **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
 - **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
@@ -250,13 +250,13 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/simulations/recent` | GET | List recent simulation logs |
+| `/api/simulations/recent` | GET | List recent simulation logs (includes `resumable` flag + `state_filename`) |
 | `/api/simulations/logs/{filename}` | GET | Get simulation log HTML |
 | `/api/simulations/logs/{filename}` | DELETE | Delete simulation log + metadata |
 | `/api/simulations/logs/{filename}/analytics` | GET | Analytics data for all 9 result tabs |
 | `/api/simulations/logs/checkpoints` | GET | List checkpoint files (includes `resumable` flag + `state_filename`) |
 | `/api/simulations/logs/checkpoints` | DELETE | Delete checkpoint files + `.state.json` sidecars |
-| `/api/simulations/resume` | POST | Resume simulation from a `.state.json` checkpoint (SSE stream) |
+| `/api/simulations/resume` | POST | Resume or extend simulation from a `.state.json` sidecar (SSE stream); accepts optional `additional_steps` to run beyond the saved state |
 | `/api/simulations/logs/config` | GET | Log streaming config (debug/LLM flags) |
 | `/api/simulations/logs/stream` | GET | SSE endpoint for live log streaming |
 
