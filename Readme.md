@@ -46,9 +46,12 @@ Template inventory is updated over time; the latest template count is always ref
 
 ---
 
-**v2.4.1 — Checkpoint Resume** is available on the `feat/resume-from-checkpoint` branch (tag: `v2.4.1`). This version adds mid-run simulation resumption using Concordia's native save/restore API. When a run is interrupted — server restart, network loss, or manual stop — it can be resumed from the nearest saved checkpoint without reloading the template or re-entering LLM settings. The agent state, memories, simulation log, and all configuration are persisted in a `.state.json` sidecar written alongside each checkpoint HTML file.
+**v2.4.1 — Checkpoint Resume & Extend** is available on the `feat/resume-from-checkpoint` branch (tag: `v2.4.1`). This version adds two capabilities built on Concordia's native save/restore API:
 
-**Limitations:** resumption is not supported for simulations using `player_specific_context` (formative memory initializer may re-run); step-controller, interview, and survey engines are untested; and `.state.json` sidecars store the API key in plaintext (avoid placing the `logs/` directory in shared or publicly accessible storage).
+- **Resume interrupted runs** — when a run is stopped (server restart, network loss, manual cancel), click **Resume** on any checkpoint in the Checkpoints panel to continue from that point. No template reload or re-entry of LLM settings required; all agent state, memories, and configuration are restored from a `.state.json` sidecar saved alongside each checkpoint HTML file.
+- **Extend completed runs** — when a simulation finishes (whether the LLM terminated early or `max_steps` was reached), an **Extend** button appears on the Recent Simulations row. Enter how many additional steps to run and the simulation continues from its final state with full memory intact.
+
+**Limitations:** resumption is not supported for simulations using `player_specific_context` (formative memory initializer may re-run); step-controller, interview, and survey engines are untested; `.state.json` sidecars store the API key in plaintext (avoid placing the `logs/` directory in shared or publicly accessible storage); the Extend button only appears for runs completed after upgrading to v2.4.1.
 
 ---
 
