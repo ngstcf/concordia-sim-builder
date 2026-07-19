@@ -282,6 +282,7 @@ export async function executeSimulationStream(
  */
 export async function resumeSimulationStream(
   stateFilename: string,
+  additionalSteps: number | undefined,
   onProgress?: (progress: { step: number; max_steps: number; elapsed: number; est_remaining: number; est_time_str: string }) => void,
   onComplete?: (result: any) => void,
   onError?: (error: string) => void,
@@ -289,16 +290,18 @@ export async function resumeSimulationStream(
   onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
   onDisconnect?: () => void,
 ): Promise<void> {
-  console.log('[resumeSimulationStream] Starting resume from:', stateFilename);
+  console.log('[resumeSimulationStream] Starting resume from:', stateFilename, 'additionalSteps:', additionalSteps);
 
   let streamCompleted = false;
   let simulationStarted = false;
 
   try {
+    const body: Record<string, unknown> = { state_filename: stateFilename };
+    if (additionalSteps !== undefined) body.additional_steps = additionalSteps;
     const response = await fetch(`${API_BASE_URL}/api/simulations/resume`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state_filename: stateFilename }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -751,7 +754,15 @@ export async function healthCheck(): Promise<{ status: string }> {
 /**
  * Get recent simulation logs
  */
-export async function getRecentSimulations(limit: number = 20): Promise<any[]> {
+export async function getRecentSimulations(limit: number = 20): Promise<Array<{
+  filename: string;
+  path: string;
+  size: number;
+  modified: number;
+  created: number;
+  resumable: boolean;
+  state_filename: string | null;
+}>> {
   const response = await api.get('/api/simulations/recent', { params: { limit } });
   return response.data;
 }

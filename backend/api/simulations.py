@@ -610,14 +610,25 @@ async def resume_simulation(request: ResumeRequest):
         raise HTTPException(status_code=422, detail=f"Could not reconstruct simulation config: {e}")
 
     steps_completed = int(resume_state.get('steps_completed', 0))
-    remaining = config.max_steps - steps_completed
-    if remaining <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Simulation already complete ({steps_completed}/{config.max_steps} steps done)."
-        )
 
-    print(f"[RESUME] Starting resume from {state_filename} (step {steps_completed}/{config.max_steps})")
+    if request.additional_steps:
+        # Extend: run this many more steps beyond what was already done.
+        # Works for both completed runs (remaining == 0) and partial/early-terminated runs.
+        config.max_steps = steps_completed + request.additional_steps
+        print(f"[RESUME] Extending from {state_filename} "
+              f"(step {steps_completed} + {request.additional_steps} additional)")
+    else:
+        remaining = config.max_steps - steps_completed
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Simulation already complete ({steps_completed}/{config.max_steps} steps). "
+                    "Provide additional_steps to extend."
+                )
+            )
+        print(f"[RESUME] Starting resume from {state_filename} "
+              f"(step {steps_completed}/{config.max_steps})")
 
     return StreamingResponse(
         run_simulation_stream(config, llm_settings, gm_llm_settings, resume_state=resume_state),
@@ -713,12 +724,16 @@ async def get_recent_simulations(limit: int = 20):
                 continue
 
             stat = file_path.stat()
+            state_file = file_path.with_suffix('.state.json')
+            resumable = state_file.is_file()
             log_files.append({
                 "filename": file_path.name,
                 "path": str(file_path),
                 "size": stat.st_size,
                 "modified": stat.st_mtime,
-                "created": stat.st_ctime
+                "created": stat.st_ctime,
+                "resumable": resumable,
+                "state_filename": state_file.name if resumable else None,
             })
         except Exception:
             continue

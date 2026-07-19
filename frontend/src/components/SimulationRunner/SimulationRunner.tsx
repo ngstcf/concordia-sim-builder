@@ -623,8 +623,8 @@ export default function SimulationRunner() {
     console.log('[handleRun] executeSimulationStream completed');
   };
 
-  const handleResume = async (stateFilename: string) => {
-    console.log('[handleResume] Resuming from:', stateFilename);
+  const handleResume = async (stateFilename: string, additionalSteps?: number) => {
+    console.log('[handleResume] Resuming from:', stateFilename, 'additionalSteps:', additionalSteps);
     setRunning(true);
     setError(null);
     setResults(null);
@@ -636,6 +636,7 @@ export default function SimulationRunner() {
 
     await resumeSimulationStream(
       stateFilename,
+      additionalSteps,
       // onProgress
       (progressData: any) => {
         if (progressData.task_id) setTaskId(progressData.task_id);

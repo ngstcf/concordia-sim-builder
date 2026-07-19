@@ -307,6 +307,12 @@ class ResumeRequest(BaseModel):
         ...,
         description="Basename of the .state.json file under the logs/ directory (e.g. '20260718_120000_Alice_Bob_My_premise_checkpoint_step5.state.json')"
     )
+    additional_steps: Optional[int] = Field(
+        None,
+        ge=1,
+        le=1000,
+        description="Extra steps to run beyond the state's steps_completed. Required when the run already reached max_steps; optional for extending partial or early-terminated runs."
+    )
 
     class Config:
         json_schema_extra = {

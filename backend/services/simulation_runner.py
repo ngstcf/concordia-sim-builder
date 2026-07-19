@@ -1209,6 +1209,20 @@ async def run_simulation_stream(
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(agent_metadata, f, indent=2)
 
+        # Save resumable state sidecar alongside the final log so completed
+        # runs can be extended from the UI via the additional_steps flow.
+        try:
+            final_concordia_state = sim.make_checkpoint_data()
+            _save_resumable_state(
+                log_path, final_concordia_state, config, llm_settings,
+                gm_llm_settings,
+                steps_completed=step_count_tracker[0],
+                max_steps=step_count_tracker[0],
+            )
+            print(f"[CHECKPOINT] ✓ Final resumable state saved: {log_path.stem}.state.json")
+        except Exception as _frs_err:
+            print(f"[WARNING] Failed to save final resumable state: {_frs_err}")
+
         print(f"✓ Log saved to: {log_filename}")
         print(f"   Size: {len(styled_html):,} characters")
         print(f"✓ Metadata saved to: {metadata_filename}\n")

@@ -11,6 +11,8 @@ interface SimulationLog {
   size: number;
   modified: number;
   created: number;
+  resumable: boolean;
+  state_filename: string | null;
 }
 
 interface CheckpointFile {
@@ -24,7 +26,7 @@ interface CheckpointFile {
 
 interface RecentSimulationsProps {
   onLoadSimulation: (htmlContent: string, filename: string, modified: number) => void;
-  onResumeSimulation?: (stateFilename: string) => void;
+  onResumeSimulation?: (stateFilename: string, additionalSteps?: number) => void;
 }
 
 export default function RecentSimulations({ onLoadSimulation, onResumeSimulation }: RecentSimulationsProps) {
@@ -36,6 +38,7 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
   const [cleaning, setCleaning] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [checkpoints, setCheckpoints] = useState<CheckpointFile[]>([]);
+  const [extendState, setExtendState] = useState<{ filename: string; steps: number } | null>(null);
 
   useEffect(() => {
     loadRecentSimulations();
@@ -308,6 +311,55 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
                 </div>
               </div>
               <div className="flex-shrink-0 flex items-center gap-1">
+                {/* Extend button for resumable completed runs */}
+                {log.resumable && log.state_filename && onResumeSimulation && (
+                  extendState?.filename === log.filename ? (
+                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={extendState.steps}
+                        onChange={e => setExtendState({ filename: log.filename, steps: Math.max(1, parseInt(e.target.value) || 1) })}
+                        className="w-16 px-1 py-0.5 text-xs border border-teal-300 rounded focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        title="Additional steps to run"
+                        autoFocus
+                      />
+                      <span className="text-xs text-gray-500">steps</span>
+                      <button
+                        onClick={() => {
+                          onResumeSimulation(log.state_filename!, extendState.steps);
+                          setExtendState(null);
+                        }}
+                        className="px-2 py-0.5 rounded text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+                        title="Run additional steps"
+                      >
+                        Run
+                      </button>
+                      <button
+                        onClick={() => setExtendState(null)}
+                        className="px-1 py-0.5 rounded text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                        title="Cancel"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExtendState({ filename: log.filename, steps: 10 });
+                      }}
+                      className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors whitespace-nowrap"
+                      title="Extend this completed simulation with more steps"
+                    >
+                      <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Extend
+                    </button>
+                  )
+                )}
                 <button
                   onClick={(e) => handleDelete(e, log.filename)}
                   className="p-1 text-gray-300 hover:text-red-500 transition-colors"
