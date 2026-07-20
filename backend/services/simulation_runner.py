@@ -243,6 +243,18 @@ async def run_simulation_stream(
             'config': config.model_dump(mode='json')
         })
 
+        # For extend runs (resuming a *completed* simulation), disable early
+        # termination so the GM doesn't immediately say "Yes" before the first
+        # new step runs.  The user explicitly requested more steps, so the
+        # YOLO terminate check should not fire at step 0.
+        if resume_state:
+            src_completed = int(resume_state.get('steps_completed', 0))
+            src_max = int(resume_state.get('max_steps', 0))
+            if src_completed >= src_max > 0:
+                if getattr(config.game_master, 'allow_early_termination', False):
+                    config.game_master.allow_early_termination = False
+                    print("[RESUME] Extend mode: early termination disabled for this run")
+
         # Build simulation
         print("🔨 Building simulation from configuration...")
         sim = build_simulation(config, model, embedder, gm_model=gm_model)

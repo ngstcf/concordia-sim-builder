@@ -595,6 +595,21 @@ def build_simulation(
             debug_print(f"[DEBUG] Injected grounded_variables_component directly into '{gm.name}' "
                         f"(prefab '{config.game_master.prefab}' does not process extra_components)")
 
+    # When allow_early_termination=False, ensure every GM has NeverTerminate
+    # under DEFAULT_TERMINATE_COMPONENT_KEY so SwitchAct._terminate() short-
+    # circuits without asking the LLM.  Generic GM ignores can_terminate_simulation,
+    # so we inject here as a universal backstop.
+    if not config.game_master.allow_early_termination:
+        from concordia.components.game_master import terminate as gm_terminate
+        terminate_key = gm_terminate.DEFAULT_TERMINATE_COMPONENT_KEY
+        for gm in sim.game_masters:
+            if (hasattr(gm, '_context_components') and
+                    terminate_key not in gm._context_components):
+                never_terminate = gm_terminate.NeverTerminate()
+                gm._context_components[terminate_key] = never_terminate
+                print(f"[BUILD] Injected NeverTerminate into '{gm.name}' "
+                      f"(prefab '{config.game_master.prefab}')")
+
     return sim
 
 
