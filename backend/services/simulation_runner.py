@@ -319,9 +319,12 @@ async def run_simulation_stream(
                 raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
 
             try:
-                # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
-                step = checkpoint_data.get('checkpoint_counter', 0) + 1
-                step_count_tracker[0] = step
+                # Increment local counter rather than using checkpoint_counter, which
+                # can be inflated by extra make_checkpoint_data() calls (emergency
+                # checkpoint, final state save) in the run that produced the state.json
+                # we restored from — causing resume/extend step numbers to read high.
+                step_count_tracker[0] += 1
+                step = step_count_tracker[0]
                 elapsed = time.time() - start_time_progress[0]
 
                 # Log timestamp for debugging hangs
@@ -1377,9 +1380,8 @@ async def run_simulation_simple(
                 print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
                 raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
 
-            # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
-            step = checkpoint_data.get('checkpoint_counter', 0) + 1
-            step_count[0] = step
+            step_count[0] += 1
+            step = step_count[0]
             elapsed = time.time() - start_time_progress[0]
 
             # Calculate estimated time remaining
