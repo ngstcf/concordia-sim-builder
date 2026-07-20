@@ -145,12 +145,14 @@ class GroundedVariablesComponent(
         action_spec: Optional[entity_lib.ActionSpec] = None,
     ) -> str:
         """Provide current variable values and update instructions before the GM acts."""
-        lines = ["Current grounded variable values:"]
+        lines = ["Current grounded variable values (reassess ALL of these after each event):"]
         for name, value in self._current_values.items():
             cfg = self._variable_configs[name]
             line = f"  - {name}: {value}"
+            if cfg.allowed_values:
+                line += f"  [allowed: {', '.join(cfg.allowed_values)}]"
             if cfg.update_rule:
-                line += f"  ({cfg.update_rule})"
+                line += f"  — {cfg.update_rule}"
             lines.append(line)
         lines.append("")
         lines.append(
@@ -159,8 +161,9 @@ class GroundedVariablesComponent(
         )
         lines.append("  [VARIABLES: name1=value1, name2=value2]")
         lines.append(
-            "Include every variable that changed. If nothing changed,"
-            " write [VARIABLES: NONE]."
+            "Include EVERY variable whose value changed this step."
+            " Categorical variables must use one of their listed allowed values exactly."
+            " If nothing changed, write [VARIABLES: NONE]."
         )
         return "\n".join(lines)
 
