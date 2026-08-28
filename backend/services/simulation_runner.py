@@ -787,14 +787,22 @@ async def run_simulation_stream(
                     debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
                     debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
-                    results_df = questionnaire_component.get_questionnaires_results()
+                    # Capture raw per-question answers FIRST: this is what the
+                    # ICC(3,1) reliability path consumes and it must survive even
+                    # when aggregation fails. get_questionnaires_results() raises
+                    # for questionnaires whose `dimensions` attribute is None
+                    # (base_questionnaire._default_aggregate_results evaluates
+                    # `dimension in self.dimensions`), so run it separately and
+                    # never let an aggregation error discard the answers.
                     answers = questionnaire_component.get_answers()
                     questionnaire_answers = answers
-                    if results_df is not None and not results_df.empty:
-                        try:
+                    results_df = None
+                    try:
+                        results_df = questionnaire_component.get_questionnaires_results()
+                        if results_df is not None and not results_df.empty:
                             questionnaire_aggregates = results_df.to_dict()
-                        except Exception:
-                            questionnaire_aggregates = None
+                    except Exception as agg_err:
+                        print(f"[WARNING] Questionnaire aggregation failed (answers still captured): {agg_err}")
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")
@@ -1492,14 +1500,22 @@ async def run_simulation_simple(
                     debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
                     debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
-                    results_df = questionnaire_component.get_questionnaires_results()
+                    # Capture raw per-question answers FIRST: this is what the
+                    # ICC(3,1) reliability path consumes and it must survive even
+                    # when aggregation fails. get_questionnaires_results() raises
+                    # for questionnaires whose `dimensions` attribute is None
+                    # (base_questionnaire._default_aggregate_results evaluates
+                    # `dimension in self.dimensions`), so run it separately and
+                    # never let an aggregation error discard the answers.
                     answers = questionnaire_component.get_answers()
                     questionnaire_answers = answers
-                    if results_df is not None and not results_df.empty:
-                        try:
+                    results_df = None
+                    try:
+                        results_df = questionnaire_component.get_questionnaires_results()
+                        if results_df is not None and not results_df.empty:
                             questionnaire_aggregates = results_df.to_dict()
-                        except Exception:
-                            questionnaire_aggregates = None
+                    except Exception as agg_err:
+                        print(f"[WARNING] Questionnaire aggregation failed (answers still captured): {agg_err}")
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")

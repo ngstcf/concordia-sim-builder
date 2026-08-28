@@ -377,6 +377,22 @@ def build_simulation(
                 """Plotting not implemented for this use case."""
                 pass
 
+            def get_dimension_ranges(self) -> Dict[str, tuple[float, float]]:
+                """Per-dimension (min, max) score range.
+
+                Likert answers are scored as the 0-based choice index (see
+                QuestionnaireBase.process_answer), so a dimension spans
+                (0, n_choices - 1) using the widest choice list among its
+                questions. Choice-less dimensions default to (0.0, 1.0).
+                """
+                ranges: Dict[str, tuple[float, float]] = {}
+                for q in self.questions:
+                    n = len(q.choices) if getattr(q, "choices", None) else 0
+                    hi = float(n - 1) if n > 0 else 1.0
+                    _, prev_hi = ranges.get(q.dimension, (0.0, hi))
+                    ranges[q.dimension] = (0.0, max(prev_hi, hi))
+                return ranges
+
         # Convert dict questionnaires to QuestionnaireBase objects
         questionnaire_objects = []
         for qn_dict in questionnaires_data:
@@ -395,6 +411,16 @@ def build_simulation(
                     )
                     questions.append(question)
 
+                # Fall back to the set of per-question dimensions when the config
+                # omits a questionnaire-level `dimensions` list. The interviewer
+                # template only sets per-question `dimension`, leaving this None,
+                # which makes base_questionnaire._default_aggregate_results crash
+                # on `dimension in self.dimensions`. Deriving it here keeps
+                # aggregation working; the ICC path relies on per-answer
+                # dimensions and is unaffected either way.
+                derived_dimensions = qn_dict.get('dimensions') or sorted(
+                    {q.dimension for q in questions if q.dimension}
+                )
                 questionnaire = LikertQuestionnaire(
                     name=qn_dict['name'],
                     description=qn_dict['description'],
@@ -402,7 +428,7 @@ def build_simulation(
                     observation_preprompt=qn_dict['observation_preprompt'],
                     questions=questions,
                     preprompt=qn_dict.get('preprompt', ''),
-                    dimensions=qn_dict.get('dimensions')
+                    dimensions=derived_dimensions
                 )
                 questionnaire_objects.append(questionnaire)
                 debug_print(f"[DEBUG] Converted questionnaire: {questionnaire.name}")
@@ -557,8 +583,17 @@ def build_simulation(
 
     # Select engine based on config or GM prefab
     if config.game_master.prefab == 'interviewer__GameMaster':
-        from concordia.environment.engines import parallel
-        engine = parallel.ParallelQuestionnaireEngine()
+        # The interviewer / Likert (multiple-choice) questionnaire GM uses the
+        # game_master.questionnaire.Questionnaire component, whose JSON-list
+        # NEXT_ACTION_SPEC protocol only the ParallelQuestionnaireEngine drives.
+        # Upstream Concordia removed that engine (commit 030d2fa) in favor of the
+        # asynchronous engine for open-ended questionnaires; the multiple-choice
+        # path still needs it, so it is vendored in the backend to keep the
+        # pinned fork unmodified.  See backend/services/parallel_questionnaire_engine.py.
+        from backend.services.parallel_questionnaire_engine import (
+            ParallelQuestionnaireEngine,
+        )
+        engine = ParallelQuestionnaireEngine()
         debug_print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
     elif config.engine_type == EngineType.SIMULTANEOUS:
         from concordia.environment.engines import simultaneous
