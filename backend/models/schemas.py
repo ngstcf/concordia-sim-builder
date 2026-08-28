@@ -34,6 +34,7 @@ class LLMProvider(str, Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
     AZURE = "azure"  # Azure OpenAI
+    AZURE2 = "azure2"  # Secondary Azure OpenAI endpoint (AZURE_OAI_ENDPOINT2/KEY2)
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"

@@ -175,6 +175,28 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_version=api_version
         )
 
+    elif provider == LLMProvider.AZURE2.value:
+        # Secondary Azure OpenAI endpoint (e.g. a Kimi-K2.5 deployment).
+        # Parameters from .env: AZURE_OAI_KEY2, AZURE_OAI_ENDPOINT2, and
+        # optionally AZURE_OAI_VERSION2 (falls back to AZURE_OAI_VERSION).
+        # User provides only: model_name (the endpoint-2 deployment name).
+        api_key = api_key or os.getenv('AZURE_OAI_KEY2')
+        azure_endpoint = base_url or os.getenv('AZURE_OAI_ENDPOINT2')
+        api_version = (settings.api_version or os.getenv('AZURE_OAI_VERSION2')
+                       or os.getenv('AZURE_OAI_VERSION', '2024-12-01-preview'))
+
+        if not api_key:
+            raise ValueError("AZURE_OAI_KEY2 not found in environment. Please add it to your .env file.")
+        if not azure_endpoint:
+            raise ValueError("AZURE_OAI_ENDPOINT2 not found in environment. Please add it to your .env file.")
+
+        model = CustomGPTModel(
+            api_key=api_key,
+            model_name=model_name,
+            base_url=azure_endpoint,
+            api_version=api_version,
+        )
+
     elif provider == LLMProvider.DEEPSEEK.value:
         if not api_key:
             api_key = os.getenv('DEEPSEEK_API_KEY')
