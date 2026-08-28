@@ -81,7 +81,7 @@ Each simulation produces three output files:
 - **Grounded Variables** — Track simulation state variables with AI-powered post-processing
 - **Live Log Streaming** — Real-time terminal output mirrored to frontend via SSE with color-coded messages
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
-- **8 LLM Providers** — OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
+- **8 LLM Providers** — OpenAI, Azure OpenAI (up to two endpoints), DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
 - **Separate GM LLM** — Independent model selection for Game Master
 - **Checkpoint, Resume & Extend** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped. A teal **Extend** button appears on every completed run in Recent Simulations — enter how many additional steps to run and continue from the final state, whether the simulation ended early (LLM decision) or reached `max_steps`. All state is persisted via Concordia's native `load_from_checkpoint` API; LLM settings, agent config, and all memories are restored from the sidecar — no template reload needed. **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim.
 - **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
@@ -158,6 +158,10 @@ GEMINI_API_KEY=xxx
 ANTHROPIC_API_KEY=sk-xxx
 AZURE_OAI_KEY=xxx
 AZURE_OAI_ENDPOINT=https://your-resource.openai.azure.com
+
+# Optional: second Azure OpenAI resource (provider id "azure2")
+# AZURE_OAI_KEY2=xxx
+# AZURE_OAI_ENDPOINT2=https://your-second-resource.openai.azure.com
 
 # Optional: Separate GM LLM (defaults to agent LLM if not set)
 # GM_LLM_PROVIDER=openai
@@ -325,6 +329,10 @@ This is the GM-level mechanism behind the Builder's **Social Media Activity Mode
 **2. `simultaneous_resolution_gm__GameMasterSimultaneous` — variable-clock wiring** *(minor)*
 
 The contrib clock already supported variable time increments, but the prefab never forwarded the configuration. The patch threads `use_variable_increments` and `variable_increment_rules` from GM params into the clock, enabling multi-interval / variable-step schedules from the Builder.
+
+**3. Vendored `ParallelQuestionnaireEngine` — backend, not a fork patch** *(material for questionnaires)*
+
+Upstream Concordia removed this engine (and `EntityAgent.stateless_act`) in commit `030d2fa`, but it is the only engine that can drive the multiple-choice questionnaire component's JSON-list protocol used by the `interviewer__GameMaster` prefab — without it, interviewer runs record no answers and batch ICC reliability is empty. Rather than patching the fork further, the engine is vendored into the backend at `backend/services/parallel_questionnaire_engine.py` (recovered verbatim from the commit before its removal, with a module-level replica of `stateless_act`; provenance in the module docstring). The pinned fork stays limited to the two patches above.
 
 ### Reproducing the patched environment
 
