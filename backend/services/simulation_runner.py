@@ -472,6 +472,9 @@ async def run_simulation_stream(
         watchdog_enabled = os.getenv('WATCHDOG_ENABLED', 'true').lower() == 'true'
         watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600')) if watchdog_enabled else None  # Default: 10 minutes
         last_progress_time = [time.time()]  # Use list for mutable access
+        # One emergency save + throttled warnings per hang episode; re-armed
+        # when progress resumes (a hung run used to save a file every 5 s).
+        watchdog_episode = {"saved": False, "last_warn": 0.0}
 
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
@@ -508,12 +511,17 @@ async def run_simulation_stream(
                             print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
                     if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
-                        print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
-                        print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
-                        print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
+                        _now = time.time()
+                        if _now - watchdog_episode["last_warn"] >= 300:
+                            watchdog_episode["last_warn"] = _now
+                            print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
+                            print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
+                            print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
 
-                        # Try to save emergency checkpoint if hung
+                        # Try to save one emergency checkpoint per hang episode
                         try:
+                            if watchdog_episode["saved"]:
+                                raise StopIteration  # already saved this episode
                             print(f"[WATCHDOG] Attempting emergency checkpoint save...")
                             hung_raw_log = sim.get_raw_log()
                             hung_html = _raw_log_to_html(hung_raw_log)
@@ -537,10 +545,17 @@ async def run_simulation_stream(
                             )
 
                             print(f"[WATCHDOG] ✓ Emergency checkpoint saved: {hung_filename} ({len(hung_styled):,} chars)")
+                            watchdog_episode["saved"] = True
+                        except StopIteration:
+                            pass
                         except Exception as hung_error:
                             print(f"[WATCHDOG] Failed to save emergency checkpoint: {hung_error}")
 
                         # Don't kill the simulation - just warn and continue monitoring
+                    elif watchdog_episode["saved"] or watchdog_episode["last_warn"]:
+                        # Progress resumed: re-arm for a future hang episode.
+                        watchdog_episode["saved"] = False
+                        watchdog_episode["last_warn"] = 0.0
                     # Check if simulation is done
                     continue
 

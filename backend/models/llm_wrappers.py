@@ -82,6 +82,14 @@ class CustomGPTModel:
             self._client = OpenAI(api_key=api_key, timeout=timeout)
         self._model_name = model_name
         self._extra_body = extra_body or {}
+        # Cap concurrent in-flight requests per model instance: large
+        # populations fan out one thread per agent, and some providers
+        # queue rather than reject excess concurrency (observed: 100-way
+        # fan-out to DeepSeek wedged at step 0 with no errors and no
+        # timeouts firing). Env LLM_MAX_CONCURRENCY, default 16.
+        import threading as _threading
+        _limit = int(os.getenv("LLM_MAX_CONCURRENCY", "16") or 16)
+        self._concurrency = _threading.Semaphore(max(1, _limit))
         self._timeout = timeout
 
     def _use_max_completion_tokens(self) -> bool:
@@ -218,7 +226,8 @@ class CustomGPTModel:
                 else:
                     request_params["max_tokens"] = max_tokens
 
-                response = self._client.chat.completions.create(**request_params)
+                with self._concurrency:
+                    response = self._client.chat.completions.create(**request_params)
 
                 elapsed = time.time() - attempt_start
                 llm_print(f"[LLM] Response received in {elapsed:.1f}s")
