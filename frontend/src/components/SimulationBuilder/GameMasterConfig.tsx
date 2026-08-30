@@ -337,7 +337,8 @@ export default function GameMasterConfig() {
                 }}
               />
               <p className="mt-1 text-xs text-gray-500">
-                {'<= 1.0'} is interpreted as probability. {'> 1.0'} is treated as a relative intensity weight.
+                Each agent's per-step acting probability is its rate divided by this value, capped at 1.0.
+                Rates above this value cannot be honored (one act per agent per step) and are clipped with a warning.
               </p>
             </div>
 
@@ -348,7 +349,7 @@ export default function GameMasterConfig() {
               <textarea
                 rows={2}
                 className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
-                placeholder="Alice:1, Bob:0.4, Glenn:10"
+                placeholder="Alice:0.8, Bob:0.8, Glenn:0.9"
                 value={Object.entries((config.game_master.parameters?.per_agent_activity_rates || {}) as Record<string, number>)
                   .map(([name, rate]) => `${name}:${rate}`)
                   .join(', ')}
@@ -371,7 +372,41 @@ export default function GameMasterConfig() {
                 }}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Format: `name:rate` comma-separated. Use higher rates for high-frequency actors.
+                Format: `name:rate` comma-separated. To make one agent relatively more active,
+                lower the other agents' rates rather than raising its own above the default.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Context Window (steps)
+              </label>
+              <input
+                type="number"
+                min={1}
+                step="1"
+                className="w-full border border-gray-300 rounded-md shadow-sm py-1.5 px-2 text-sm"
+                placeholder="empty = full history"
+                value={(config.game_master.parameters?.context_window_steps ?? '') as number | ''}
+                onChange={(e) => {
+                  const params = config.game_master.parameters || {};
+                  const next: Record<string, any> = { ...params };
+                  if (e.target.value === '') {
+                    delete next.context_window_steps;
+                  } else {
+                    next.context_window_steps = parseInt(e.target.value, 10) || 1;
+                  }
+                  setGameMaster({
+                    ...config.game_master,
+                    parameters: next,
+                  });
+                }}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Bounds each agent's (and the Game Master's) observation history to roughly the
+                last N steps of forum activity. Empty keeps full history, which grows with
+                population and steps (~140 tokens per post) and can exceed the model's context
+                in large populations; validation projects the fit before you run.
               </p>
             </div>
           </div>
