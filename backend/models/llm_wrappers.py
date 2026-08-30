@@ -503,10 +503,11 @@ class AnthropicModel:
     """
     Anthropic (Claude) model wrapper using the Anthropic API.
     """
-    def __init__(self, api_key: str, model_name: str = "claude-haiku-4-5", timeout: float = 300.0):
+    def __init__(self, api_key: str, model_name: str = "claude-haiku-4-5", timeout: float = 300.0, extra_body: dict = None):
         from anthropic import Anthropic
         self._client = Anthropic(api_key=api_key, timeout=timeout)
         self._model_name = model_name
+        self._extra_body = extra_body or {}
 
     def _supports_temperature(self) -> bool:
         """Opus 4.7+ uses extended thinking and rejects the temperature parameter."""
@@ -551,6 +552,11 @@ class AnthropicModel:
 
                 if seed is not None:
                     params["seed"] = seed
+
+                # Provider-specific passthrough (e.g. reasoning_effort);
+                # the anthropic SDK sends extra_body verbatim in the body.
+                if self._extra_body:
+                    params["extra_body"] = dict(self._extra_body)
 
                 response = self._client.messages.create(**params)
 

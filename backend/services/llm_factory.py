@@ -223,7 +223,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in settings or environment")
-        model = AnthropicModel(api_key=api_key, model_name=model_name, timeout=request_timeout)
+        model = AnthropicModel(api_key=api_key, model_name=model_name, timeout=request_timeout, extra_body=settings.extra_body)
 
     elif provider == LLMProvider.OLLAMA.value:
         # Ollama local — always uses localhost, no auth needed
