@@ -486,6 +486,44 @@ def build_simulation(
             gm_params['extra_components'][f'contrib_{cc.component_id}'] = component
             debug_print(f"[DEBUG] Added contrib GM component: {cc.component_id}")
 
+    # Replace the async social media GM's activity scheduler. The upstream one
+    # normalizes every agent's rate by the roster maximum, so raising one
+    # agent's rate silently suppresses all the others (see
+    # backend/prefabs/activity_scheduler.py). Overriding the same component key
+    # keeps the pinned fork untouched.
+    if config.game_master.prefab == 'async_social_media__GameMaster':
+        from backend.prefabs.activity_scheduler import IndependentActivityScheduler
+        from concordia.components import game_master as _gm_components
+
+        scheduler = IndependentActivityScheduler(
+            player_names=[a.name for a in config.agents],
+            default_activity_rate=gm_params.get('default_activity_rate', 1.0),
+            per_agent_activity_rates=gm_params.get('per_agent_activity_rates', {}),
+            activity_seed=gm_params.get('activity_seed'),
+        )
+        if 'extra_components' not in gm_params:
+            gm_params['extra_components'] = {}
+        gm_params['extra_components'][
+            _gm_components.next_acting.DEFAULT_NEXT_ACTING_COMPONENT_KEY
+        ] = scheduler
+
+        clipped = scheduler.clipped_players()
+        if clipped:
+            # Not silently reinterpretable: one act per step is the engine's
+            # ceiling, so an amplification factor cannot be honoured.
+            reference = gm_params.get('default_activity_rate', 1.0)
+            detail = ', '.join(f'{n} ({r})' for n, r in sorted(clipped.items()))
+            print(
+                f"[WARNING] activity rates above default_activity_rate={reference} "
+                f"cannot be honoured (the engine allows at most one act per "
+                f"agent per step) and were clipped to 1.0: {detail}. To express "
+                f"relative amplification, scale the other agents down instead."
+            )
+        debug_print(
+            f"[DEBUG] Installed IndependentActivityScheduler for "
+            f"{len(config.agents)} players ({len(clipped)} rate(s) clipped)"
+        )
+
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
         role=prefab_lib.Role.GAME_MASTER,

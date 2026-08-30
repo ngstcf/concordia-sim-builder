@@ -182,12 +182,21 @@ changes candidate support and trust in the information environment.""",
             "parameters": {
                 "forum_name": "MastoTown",
                 "default_activity_rate": 1.0,
+                # Rates follow the source study (Puelma Touzel et al. 2024,
+                # sandbox-social/mastodon-sim): voters act with per-episode
+                # probability 0.8 and the malicious actor 0.9 -- a modest bump,
+                # with the manipulation carried by goal/context, not volume.
+                # (An earlier version set Glenn_Boost to 10.0, misreading the
+                # paper's "base usage rate of 10 [times per day, of 48
+                # episodes]" as a 10x multiplier; the engine allows at most
+                # one act per agent per step, so rates above 1.0 are not
+                # achievable in any case.)
                 "per_agent_activity_rates": {
-                    "Glenn_Boost": 10.0,
-                    "Alicia_Civic": 1.2,
-                    "Omar_Transit": 0.9,
-                    "Nina_Facts": 1.6,
-                    "Diego_LocalBiz": 1.3,
+                    "Glenn_Boost": 0.9,
+                    "Alicia_Civic": 0.8,
+                    "Omar_Transit": 0.8,
+                    "Nina_Facts": 0.8,
+                    "Diego_LocalBiz": 0.8,
                     "Priya_Student": 0.8,
                 },
                 "activity_seed": 42,
