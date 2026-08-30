@@ -161,6 +161,7 @@ export interface LLMSettings {
   max_tokens: number;
   api_version?: string;  // For Azure OpenAI
   request_timeout: number;
+  extra_body?: Record<string, any>;  // Provider-specific request fields (e.g. reasoning_effort)
 }
 
 // Execution Request

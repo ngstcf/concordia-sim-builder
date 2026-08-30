@@ -882,6 +882,30 @@ export default function SimulationRunner() {
                   onChange={(e) => setLLMSettings({ ...llmSettings, request_timeout: parseInt(e.target.value) || 120 })}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Reasoning Effort
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments only. Menus vary by provider: gpt-5.6 none|low|medium|high|xhigh; Anthropic low|medium|high|xhigh|max; DeepSeek low|high|max. Unsupported values fail fast with a clear API error naming the allowed set.">ⓘ</span>
+                </label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={(llmSettings.extra_body?.reasoning_effort as string) ?? ''}
+                  onChange={(e) => {
+                    const eb: Record<string, any> = { ...(llmSettings.extra_body || {}) };
+                    if (e.target.value === '') delete eb.reasoning_effort;
+                    else eb.reasoning_effort = e.target.value;
+                    setLLMSettings({ ...llmSettings, extra_body: Object.keys(eb).length ? eb : undefined });
+                  }}
+                >
+                  <option value="">Model default</option>
+                  <option value="none">none (fastest)</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="xhigh">xhigh</option>
+                  <option value="max">max</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1000,6 +1024,30 @@ export default function SimulationRunner() {
                       />
                     )}
                   </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Reasoning Effort
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments only. Menus vary by provider: gpt-5.6 none|low|medium|high|xhigh; Anthropic low|medium|high|xhigh|max; DeepSeek low|high|max. Unsupported values fail fast with a clear API error naming the allowed set.">ⓘ</span>
+                </label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={(gmLlmSettings.extra_body?.reasoning_effort as string) ?? ''}
+                  onChange={(e) => {
+                    const eb: Record<string, any> = { ...(gmLlmSettings.extra_body || {}) };
+                    if (e.target.value === '') delete eb.reasoning_effort;
+                    else eb.reasoning_effort = e.target.value;
+                    setGmLlmSettings({ ...gmLlmSettings, extra_body: Object.keys(eb).length ? eb : undefined });
+                  }}
+                >
+                  <option value="">Model default</option>
+                  <option value="none">none (fastest)</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="xhigh">xhigh</option>
+                  <option value="max">max</option>
+                </select>
+              </div>
                 </div>
               )}
             </div>
