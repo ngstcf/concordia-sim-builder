@@ -51,7 +51,7 @@ Nine completed simulation runs are included in the [`logs/`](logs/) directory, s
 Each simulation produces three output files:
 
 - **`.html`** — Concordia simulation log (structured entries with full narrative)
-- **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration)
+- **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration, plus outcome fields: completion status, steps completed vs. max steps, and error details when a run fails)
 - **`_analysis.md`** — LLM-powered analysis report (executive summary, effectiveness assessment, insights, recommendations)
 
 | # | Scenario | GM Type | Agents | Agent LLM | GM LLM | Duration |
@@ -312,19 +312,21 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 
 The Builder runs against Concordia **v2.4.0** with two small local patches to Game Master prefabs — the tree that produced the published Mastodon influence experiment results. The patches are published as a public fork, [**`ngstcf/concordia@5ed8813`**](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), which `requirements.txt` pins directly. They are also captured as a standalone tracked patch for review and offline use: [`patches/concordia-2.4.0-local.patch`](patches/concordia-2.4.0-local.patch).
 
-> **⚠️ Reproducibility:** the stock PyPI `gdm-concordia==2.4.0` does **not** contain these changes — with the unpatched library, per-agent activity rates are silently ignored (every agent posts on every step) and the Mastodon experiment will not reproduce. `requirements.txt` therefore pins the patched fork above, so `pip install -r requirements.txt` is sufficient.
+> **⚠️ Reproducibility:** the stock PyPI `gdm-concordia==2.4.0` does **not** contain these changes. The Builder's vendored activation scheduler (see item 1's update below) now provides per-agent activity sampling at runtime regardless of the library tree, but the pinned fork remains the supported, tested configuration and still carries the variable-clock patch (item 2). `requirements.txt` pins the fork, so `pip install -r requirements.txt` is sufficient.
 
 ### What changed and why
 
-**1. `async_social_media__GameMaster` — per-agent stochastic activation** *(material)*
+**1. `async_social_media__GameMaster` — per-agent stochastic activation** *(material; sampling rule now superseded at runtime, see the update below)*
 
-Stock v2.4.0 activates **every** eligible player on **every** step — its next-acting component simply returns all player names, with no notion of posting frequency. The Mastodon influence experiment depends on *differential* posting volume: a malicious actor posting at ~10× the baseline to dominate the feed, with the effect diluting as the honest population grows. That mechanism did not survive Concordia's upstream port of the prefab, so we re-introduced it at the GM level:
+Stock v2.4.0 activates **every** eligible player on **every** step — its next-acting component simply returns all player names, with no notion of posting frequency. Per-agent posting schedules did not survive Concordia's upstream port of the prefab, so the fork re-introduced them at the GM level:
 
 - Added `default_activity_rate`, `per_agent_activity_rates`, and `activity_seed` parameters.
-- Added probabilistic per-agent sampling in the next-acting component (rate ≤ 1.0 → probability; rate > 1.0 → relative intensity, normalized to the most active agent).
+- Added probabilistic per-agent sampling in the next-acting component.
 - Seeded the RNG for reproducibility, and guaranteed the engine still advances when no agent is sampled in a step.
 
-This is the GM-level mechanism behind the Builder's **Social Media Activity Model** sliders. Without it, the experiment's central manipulation — influence by posting volume — cannot be expressed.
+This is the GM-level mechanism behind the Builder's **Social Media Activity Model** sliders.
+
+**Update (Aug 2026): corrected activation semantics, vendored into the backend.** The fork patch's sampling rule normalized rates above 1.0 against the roster maximum, which gave a per-agent parameter global side effects (raising one agent's rate silently suppressed every other agent's activation) and made the rule discontinuous at 1.0 (an agent at rate 1.6 could act far less often than one at 0.8). The Builder now overrides the GM's next-acting component at build time with a vendored scheduler, [`backend/prefabs/activity_scheduler.py`](backend/prefabs/activity_scheduler.py): each agent's per-step probability is `min(1, rate / default_activity_rate)`, independent of every other agent's rate. Because the engine allows at most one act per agent per step, rates above `default_activity_rate` cannot be honored; they are clipped to 1.0 with a startup warning naming the affected agents. To express "agent X is N times as active," scale the *other* agents down instead. The fork's parameter plumbing is still used; only its sampling rule is superseded. The bundled Mastodon template follows the source study's implementation ([sandbox-social/mastodon-sim](https://github.com/sandbox-social/mastodon-sim)): voters act with per-step probability 0.8 and the malicious actor 0.9, the manipulation being carried by the agent's goal and content rather than posting volume.
 
 **2. `simultaneous_resolution_gm__GameMasterSimultaneous` — variable-clock wiring** *(minor)*
 
