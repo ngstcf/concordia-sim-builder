@@ -175,6 +175,7 @@ AZURE_OAI_ENDPOINT=https://your-resource.openai.azure.com
 LLM_TIMEOUT=180                  # Per-request timeout in seconds (default: 180)
 LLM_REASONING_TIMEOUT=300        # Timeout for reasoning models like O3 (default: 300)
 LLM_MAX_RETRIES=2                # Retry attempts (default: 2)
+LLM_MAX_CONCURRENCY=64           # Max concurrent LLM requests per model instance (default: 16)
 WATCHDOG_TIMEOUT_SECONDS=600     # Hang detection timeout (default: 600)
 WATCHDOG_ENABLED=true            # Set false to disable hang detection
 
