@@ -153,7 +153,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set in settings or environment")
-        model = CustomGPTModel(api_key=api_key, model_name=model_name, base_url=base_url)
+        model = CustomGPTModel(api_key=api_key, model_name=model_name, base_url=base_url, extra_body=settings.extra_body)
 
     elif provider == LLMProvider.AZURE.value:
         # Azure OpenAI Service
@@ -172,7 +172,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key=api_key,
             model_name=model_name,
             base_url=azure_endpoint,
-            api_version=api_version
+            api_version=api_version,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.AZURE2.value:
@@ -195,6 +196,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             model_name=model_name,
             base_url=azure_endpoint,
             api_version=api_version,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.DEEPSEEK.value:
@@ -205,7 +207,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key=api_key,
             model_name=model_name,
-            base_url='https://api.deepseek.com'
+            base_url='https://api.deepseek.com',
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.GEMINI.value:
@@ -228,7 +231,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key='ollama',
             model_name=model_name,
-            base_url=ollama_base_url
+            base_url=ollama_base_url,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.OLLAMA_REMOTE.value:
@@ -240,7 +244,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key=ollama_api_key,
             model_name=model_name,
-            base_url=ollama_base_url
+            base_url=ollama_base_url,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.GLM.value:

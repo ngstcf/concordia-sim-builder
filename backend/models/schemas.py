@@ -270,6 +270,12 @@ class LLMSettings(BaseModel):
     max_tokens: int = Field(16384, ge=1, le=65536, description="Maximum tokens to generate")
     api_version: Optional[str] = Field(None, description="API version for Azure OpenAI (e.g., '2024-02-15-preview'). Env: AZURE_OAI_API_VERSION")
     request_timeout: int = Field(300, ge=10, le=600, description="Per-request timeout in seconds for LLM calls")
+    extra_body: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Provider-specific request fields passed through to the "
+                    "API body verbatim (e.g., reasoning_effort or speed on "
+                    "reasoning-model deployments). OpenAI-compatible "
+                    "providers only.")
 
     # Validators to strip whitespace from string fields
     @field_validator('model_name', 'base_url', 'api_key', mode='before')

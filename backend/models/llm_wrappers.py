@@ -27,7 +27,7 @@ class CustomGPTModel:
     Custom GPT model wrapper that handles API compatibility issues.
     Works with OpenAI, Azure OpenAI, DeepSeek, and other OpenAI-compatible endpoints.
     """
-    def __init__(self, api_key: str, model_name: str, base_url: str = None, timeout: float = 300.0, verify_ssl: bool = True, disable_ssl_for_https: bool = False, api_version: str = None):
+    def __init__(self, api_key: str, model_name: str, base_url: str = None, timeout: float = 300.0, verify_ssl: bool = True, disable_ssl_for_https: bool = False, api_version: str = None, extra_body: dict = None):
         from openai import OpenAI, AzureOpenAI
         import httpx
 
@@ -81,6 +81,7 @@ class CustomGPTModel:
         else:
             self._client = OpenAI(api_key=api_key, timeout=timeout)
         self._model_name = model_name
+        self._extra_body = extra_body or {}
         self._timeout = timeout
 
     def _use_max_completion_tokens(self) -> bool:
@@ -201,6 +202,11 @@ class CustomGPTModel:
                     "seed": seed,
                     "timeout": timeout  # Enforce timeout at request level
                 }
+
+                # Provider-specific passthrough fields (e.g. reasoning_effort,
+                # speed on reasoning deployments); sent verbatim in the body.
+                if self._extra_body:
+                    request_params["extra_body"] = dict(self._extra_body)
 
                 # Only add temperature for non-reasoning models
                 if not is_reasoning_model:
