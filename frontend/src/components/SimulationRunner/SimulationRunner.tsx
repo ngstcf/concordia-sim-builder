@@ -885,7 +885,7 @@ export default function SimulationRunner() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Reasoning Effort
-                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments only. Menus vary by provider: gpt-5.6 none|low|medium|high|xhigh; Anthropic low|medium|high|xhigh|max; DeepSeek low|high|max. Unsupported values fail fast with a clear API error naming the allowed set.">ⓘ</span>
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments using the reasoning_effort field: gpt-5.6 none|low|medium|high|xhigh; DeepSeek none|low|high|max (default high). Anthropic uses different fields (thinking / output_config.effort): set those via JSON import. Unsupported values fail fast with a clear API error.">ⓘ</span>
                 </label>
                 <select
                   className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1027,7 +1027,7 @@ export default function SimulationRunner() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Reasoning Effort
-                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments only. Menus vary by provider: gpt-5.6 none|low|medium|high|xhigh; Anthropic low|medium|high|xhigh|max; DeepSeek low|high|max. Unsupported values fail fast with a clear API error naming the allowed set.">ⓘ</span>
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments using the reasoning_effort field: gpt-5.6 none|low|medium|high|xhigh; DeepSeek none|low|high|max (default high). Anthropic uses different fields (thinking / output_config.effort): set those via JSON import. Unsupported values fail fast with a clear API error.">ⓘ</span>
                 </label>
                 <select
                   className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
