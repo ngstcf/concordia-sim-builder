@@ -203,6 +203,28 @@ class BatchRunner:
                             yield f"data: {json.dumps(run_progress_event)}\n\n"
                         elif inner_event_type == 'simulation_complete':
                             log_filename = inner_event_data.get('log_filename', '')
+                            # A run that died mid-way still emits
+                            # simulation_complete, because the runner salvages
+                            # partial results before reporting. Its 'completed'
+                            # flag is the authoritative outcome; without this
+                            # check a failed or cancelled run is recorded as a
+                            # successful one and failed_runs stays 0.
+                            if not inner_event_data.get('completed', True):
+                                error_msg = (
+                                    inner_event_data.get('error')
+                                    or inner_event_data.get('message')
+                                    or 'Simulation did not complete'
+                                )
+                                run_error_event = {
+                                    'type': 'run_error',
+                                    'batch_id': batch_id,
+                                    'run_index': run_index,
+                                    'total_runs': total_runs,
+                                    'error': error_msg,
+                                    'error_type': inner_event_data.get('error_type'),
+                                    'steps_completed': inner_event_data.get('steps_completed'),
+                                }
+                                yield f"data: {json.dumps(run_error_event)}\n\n"
                         elif inner_event_type == 'error':
                             error_msg = inner_event_data.get('error', 'Unknown error')
                             run_error_event = {

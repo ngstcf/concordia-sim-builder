@@ -1120,11 +1120,26 @@ async def run_simulation_stream(
                 "model": gm_llm_settings.model_name,
             }
 
+        # Outcome fields. Without them the metadata records only that a run
+        # happened, not whether it finished: recovering the step count meant
+        # inferring it from grounded-variable tick counts after the fact.
+        if was_cancelled:
+            run_status = "cancelled"
+        elif simulation_error:
+            run_status = "failed"
+        else:
+            run_status = "completed"
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
             "completed_at": end_time_iso,
             "elapsed_seconds": round(elapsed, 1),
+            "status": run_status,
+            "steps_completed": step_count_tracker[0],
+            "max_steps": max_steps,
+            "error": simulation_error,
+            "error_type": simulation_error_type,
             "llm": {
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
@@ -1825,11 +1840,18 @@ async def run_simulation_simple(
                 "model": gm_llm_settings.model_name,
             }
 
+        # Outcome fields, as in the streaming path. This entry point has no
+        # error capture of its own, so only cancellation is distinguishable.
+        run_status = "cancelled" if was_cancelled else "completed"
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
             "completed_at": end_time_iso,
             "elapsed_seconds": round(elapsed, 1),
+            "status": run_status,
+            "steps_completed": step_count[0],
+            "max_steps": config.max_steps,
             "llm": {
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
