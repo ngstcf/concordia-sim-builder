@@ -431,6 +431,36 @@ async def validate_config(config: SimulationConfig):
     if len(agent_names) != len(set(agent_names)):
         warnings.append("Agent names should be unique for clarity")
 
+    # Context feasibility projection for the async social media GM: every
+    # broadcast post lands in every agent's history (~140 tokens per entry),
+    # so prompts grow with population x steps unless a window bounds them.
+    if config.game_master.prefab == 'async_social_media__GameMaster':
+        gm_p = config.game_master.parameters or {}
+        default_rate = gm_p.get('default_activity_rate', 1.0) or 1.0
+        rates = gm_p.get('per_agent_activity_rates', {}) or {}
+        expected_acts = sum(
+            min(1.0, rates.get(a.name, default_rate) / default_rate)
+            if rates.get(a.name, default_rate) > 0 else 0.0
+            for a in config.agents)
+        window = gm_p.get('context_window_steps')
+        horizon = float(window) if window else float(config.max_steps or 20)
+        entries = expected_acts * horizon
+        est_tokens = int(entries * 140) + 8000
+        if est_tokens > 100_000:
+            if window:
+                warnings.append(
+                    f"context_window_steps={window} projects ~{est_tokens // 1000}k "
+                    f"tokens per prompt (~{entries:.0f} history entries at ~140 "
+                    f"tokens each); 128k-context models will truncate or fail. "
+                    f"Reduce the window or the population.")
+            else:
+                warnings.append(
+                    f"Unbounded agent memory with {len(config.agents)} agents x "
+                    f"{config.max_steps} steps projects ~{est_tokens // 1000}k tokens "
+                    f"per prompt by the final step (~{entries:.0f} entries at ~140 "
+                    f"tokens each), beyond typical 128k contexts. Set "
+                    f"game_master.parameters.context_window_steps to bound it.")
+
     # Validate game master
     if not config.game_master.name:
         errors.append("Game master must have a name")

@@ -140,6 +140,38 @@ def build_simulation(
         )
         instances.append(initializer_config)
 
+    # Context-window control for the async social media GM: convert a window
+    # expressed in engine steps into per-agent history bounds, using the
+    # scheduler's expected actions per step. Without a bound, every broadcast
+    # post lands in every agent's prompt and context grows with population x
+    # steps (~140 tokens per entry), which exceeds a 128k window long before
+    # large populations finish. The GM's own observation buffer is bounded
+    # with the same value where the scheduler is installed below.
+    context_window_entries = None
+    if (config.game_master.prefab == 'async_social_media__GameMaster'
+            and (config.game_master.parameters or {}).get('context_window_steps')):
+        _gm_p = config.game_master.parameters
+        _default_rate = _gm_p.get('default_activity_rate', 1.0) or 1.0
+        _rates = _gm_p.get('per_agent_activity_rates', {}) or {}
+        _expected_acts = sum(
+            min(1.0, _rates.get(a.name, _default_rate) / _default_rate)
+            if _rates.get(a.name, _default_rate) > 0 else 0.0
+            for a in config.agents
+        )
+        _window = float(_gm_p['context_window_steps'])
+        context_window_entries = int(_expected_acts * _window * 1.25) + 8
+        for _agent in config.agents:
+            _comps = dict(_agent.components or {})
+            _comps.setdefault('observation_history_length',
+                              context_window_entries)
+            _comps.setdefault('self_perception_history_length',
+                              context_window_entries)
+            _agent.components = _comps
+        print(f"[INFO] context_window_steps={_window:g}: bounding agent and "
+              f"GM observation history to {context_window_entries} entries "
+              f"(~{context_window_entries * 140 // 1000}k tokens per prompt "
+              f"at ~140 tokens/entry)")
+
     # Create entity instances
     for agent_config in config.agents:
         entity_params = {
@@ -506,6 +538,17 @@ def build_simulation(
         gm_params['extra_components'][
             _gm_components.next_acting.DEFAULT_NEXT_ACTING_COMPONENT_KEY
         ] = scheduler
+
+        if context_window_entries:
+            # The GM accumulates the same broadcast stream as the agents, so
+            # an unbounded GM buffer hits the identical context wall; bound
+            # it with the same entry budget (override installed over the
+            # prefab's default LastNObservations key, fork untouched).
+            from concordia.components import agent as _actor_components
+            gm_params['extra_components'][
+                _actor_components.observation.DEFAULT_OBSERVATION_COMPONENT_KEY
+            ] = _actor_components.observation.LastNObservations(
+                history_length=context_window_entries)
 
         clipped = scheduler.clipped_players()
         if clipped:
