@@ -47,6 +47,7 @@ from backend.services.llm_factory import get_available_providers
 from backend.services.simulation_state import simulation_state
 from backend.utils.debug_print import debug_print, DEBUG_ENABLED, LLM_LOGGING_ENABLED
 from backend.utils.log_broadcaster import broadcaster
+from backend.utils import event_journal
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
@@ -743,6 +744,10 @@ async def get_recent_simulations(limit: int = 20):
     if not logs_dir.exists():
         return []
 
+    # Outcome badges come from the tiny per-task journals, never from
+    # .metadata.json (which reaches gigabytes on large runs).
+    outcomes = event_journal.run_outcomes()
+
     # Get all HTML files in logs directory, excluding checkpoints
     log_files = []
     for file_path in logs_dir.glob("*.html"):
@@ -756,6 +761,7 @@ async def get_recent_simulations(limit: int = 20):
             stat = file_path.stat()
             state_file = file_path.with_suffix('.state.json')
             resumable = state_file.is_file()
+            outcome = outcomes.get(file_path.name)
             log_files.append({
                 "filename": file_path.name,
                 "path": str(file_path),
@@ -764,6 +770,8 @@ async def get_recent_simulations(limit: int = 20):
                 "created": stat.st_ctime,
                 "resumable": resumable,
                 "state_filename": state_file.name if resumable else None,
+                "outcome": outcome["outcome"] if outcome else None,
+                "outcome_error": outcome.get("error") if outcome else None,
             })
         except Exception:
             continue
@@ -2393,6 +2401,18 @@ async def step_controller_stop(task_id: str):
 async def get_simulations_status():
     """Get status of all tracked simulations."""
     return simulation_state.get_all_simulations()
+
+
+@router.get("/health")
+async def get_health_status(incidents: int = 50):
+    """Failure-observability snapshot for the browser: running tasks with
+    time since last step progress, and the most recent journaled
+    incidents (durable, unlike the live log ring buffer)."""
+    return {
+        "server_time": time.time(),
+        "tasks": list(simulation_state.get_all_simulations().values()),
+        "incidents": event_journal.tail(incidents),
+    }
 
 
 @router.get("/status/{task_id}")

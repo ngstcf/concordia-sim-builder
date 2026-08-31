@@ -15,6 +15,7 @@ import GroundedVariablesChart from './GroundedVariablesChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
 import BatchRunner from './BatchRunner';
+import HealthStrip from './HealthStrip';
 import LogViewer from './LogViewer';
 import type { LogEntry } from './LogViewer';
 
@@ -1241,6 +1242,8 @@ export default function SimulationRunner() {
         {/* Right Column - Results */}
         <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Validation Status */}
+          <HealthStrip />
+
           {validation && (
             <div className={`rounded-xl p-4 ${validation.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
               <div className="flex items-start">

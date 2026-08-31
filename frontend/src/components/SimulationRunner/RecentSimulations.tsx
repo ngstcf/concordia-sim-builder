@@ -13,6 +13,8 @@ interface SimulationLog {
   created: number;
   resumable: boolean;
   state_filename: string | null;
+  outcome?: 'completed' | 'failed' | 'cancelled' | null;
+  outcome_error?: string | null;
 }
 
 interface CheckpointFile {
@@ -308,6 +310,21 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>{formatDate(log.modified)}</span>
                   <span>{formatFileSize(log.size)}</span>
+                  {log.outcome === 'failed' && (
+                    <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium" title={log.outcome_error || 'Run failed'}>
+                      failed
+                    </span>
+                  )}
+                  {log.outcome === 'cancelled' && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                      cancelled
+                    </span>
+                  )}
+                  {log.outcome === 'completed' && (
+                    <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                      ✓
+                    </span>
+                  )}
                 </div>
                 {/* Extend inline controls — rendered below title to avoid squeezing it */}
                 {log.resumable && log.state_filename && onResumeSimulation && extendState?.filename === log.filename && (

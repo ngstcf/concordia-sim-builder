@@ -413,6 +413,39 @@ export async function executeSimulationSimple(
   return response.data;
 }
 
+export interface HealthTask {
+  task_id: string;
+  started_at: string;
+  status: string;
+  steps_completed: number;
+  seconds_since_progress: number;
+  error: string | null;
+  config: { premise: string; max_steps: number; num_agents: number };
+}
+
+export interface HealthIncident {
+  ts: number;
+  time: string;
+  kind: string;
+  message: string;
+  [key: string]: any;
+}
+
+export interface HealthStatus {
+  server_time: number;
+  tasks: HealthTask[];
+  incidents: HealthIncident[];
+}
+
+/**
+ * Failure-observability snapshot: running tasks with time since last
+ * progress, plus recent journaled incidents (durable across reconnects).
+ */
+export async function getHealth(incidents = 50): Promise<HealthStatus> {
+  const response = await api.get(`/api/simulations/health?incidents=${incidents}`);
+  return response.data;
+}
+
 /**
  * Get a blank configuration template
  */

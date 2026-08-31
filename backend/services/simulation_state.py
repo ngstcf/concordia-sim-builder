@@ -2,10 +2,13 @@
 Simulation state manager for tracking and controlling running simulations.
 """
 import asyncio
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 import threading
+
+from backend.utils import event_journal
 
 
 @dataclass
@@ -17,6 +20,7 @@ class RunningSimulation:
     status: str = "running"
     should_cancel: bool = False
     steps_completed: int = 0
+    last_progress_at: float = field(default_factory=time.time)
     error: Optional[str] = None
     step_controller: Optional[Any] = None
     log_filename: Optional[str] = None
@@ -52,7 +56,12 @@ class SimulationStateManager:
         with self._lock:
             sim = RunningSimulation(task_id=task_id, config=config)
             self._simulations[task_id] = sim
-            return sim
+        event_journal.record(
+            "run_registered", task_id=task_id,
+            max_steps=getattr(config, "max_steps", None),
+            num_agents=len(config.agents) if hasattr(config, "agents") else None,
+        )
+        return sim
 
     def get_simulation(self, task_id: str) -> Optional[RunningSimulation]:
         """Get a simulation by task ID (checks running first, then completed)."""
@@ -91,6 +100,7 @@ class SimulationStateManager:
                 sim.status = status
             if steps_completed is not None:
                 sim.steps_completed = steps_completed
+                sim.last_progress_at = time.time()
             if error:
                 sim.error = error
 
@@ -101,6 +111,7 @@ class SimulationStateManager:
         with self._lock:
             sim = self._simulations.pop(task_id, None)
             if sim:
+                prior_status = sim.status
                 sim.status = "completed"
                 sim.log_filename = log_filename
                 sim.completion_data = completion_data
@@ -108,8 +119,25 @@ class SimulationStateManager:
                 if len(self._completed) > 20:
                     oldest = next(iter(self._completed))
                     del self._completed[oldest]
-                return True
-            return False
+        if sim:
+            # Terminal journal event: this is the choke point every
+            # execution path (stream, simple, resume, cancel) funnels
+            # through, and it feeds the run list's outcome badges.
+            data = completion_data or {}
+            if prior_status == "cancelled":
+                kind = "run_cancelled"
+            elif data.get("completed", sim.error is None):
+                kind = "run_completed"
+            else:
+                kind = "run_failed"
+            event_journal.record(
+                kind, task_id=task_id, log_filename=log_filename,
+                steps_completed=sim.steps_completed,
+                error=data.get("error") or sim.error,
+                error_type=data.get("error_type"),
+            )
+            return True
+        return False
 
     def cleanup_simulation(self, task_id: str) -> bool:
         """Remove a simulation from tracking entirely."""
@@ -127,6 +155,8 @@ class SimulationStateManager:
                     "started_at": sim.started_at.isoformat(),
                     "status": sim.status,
                     "steps_completed": sim.steps_completed,
+                    "seconds_since_progress": round(
+                        time.time() - sim.last_progress_at),
                     "error": sim.error,
                     "config": {
                         "premise": sim.config.premise[:100] if hasattr(sim.config, 'premise') else "N/A",

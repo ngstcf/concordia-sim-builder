@@ -15,6 +15,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from backend.models.schemas import ExecutionRequest, LLMSettings, SimulationConfig
 from backend.services.simulation_state import simulation_state
+from backend.utils import event_journal
 
 
 BATCH_DIR = Path("logs")
@@ -127,6 +128,8 @@ class BatchRunner:
             ],
         }
         self._batches[batch_id] = batch_state
+        event_journal.record("batch_started", batch_state['batch_name'],
+                             batch_id=batch_id, total_runs=total_runs)
 
         yield f"data: {json.dumps({'type': 'batch_start', 'batch_id': batch_id, 'total_runs': total_runs, 'param_combinations': batch_state['param_combinations']})}\n\n"
 
@@ -134,6 +137,10 @@ class BatchRunner:
         for combo in param_combinations:
             for repeat in range(num_runs):
                 if batch_state['status'] == 'cancelled':
+                    event_journal.record(
+                        "batch_cancelled", batch_state['batch_name'],
+                        batch_id=batch_id,
+                        completed_runs=batch_state['completed_runs'])
                     yield f"data: {json.dumps({'type': 'batch_cancelled', 'batch_id': batch_id, 'completed_runs': batch_state['completed_runs']})}\n\n"
                     self._save_batch_metadata(batch_state)
                     return
@@ -248,6 +255,10 @@ class BatchRunner:
                     run_result['status'] = 'failed'
                     run_result['error'] = error_msg
                     batch_state['failed_runs'] += 1
+                    event_journal.record(
+                        "batch_run_failed", error_msg[:300],
+                        batch_id=batch_id, run_index=run_index,
+                        total_runs=total_runs, log_filename=log_filename)
                 else:
                     run_result['status'] = 'completed'
                     batch_state['completed_runs'] += 1
@@ -259,6 +270,10 @@ class BatchRunner:
         batch_state['status'] = 'completed'
         batch_state['completed_at'] = datetime.now().isoformat()
         self._save_batch_metadata(batch_state)
+        event_journal.record(
+            "batch_complete", batch_state['batch_name'], batch_id=batch_id,
+            completed_runs=batch_state['completed_runs'],
+            failed_runs=batch_state['failed_runs'])
 
         yield f"data: {json.dumps({'type': 'batch_complete', 'batch_id': batch_id, 'total_runs': total_runs, 'completed_runs': batch_state['completed_runs'], 'failed_runs': batch_state['failed_runs'], 'run_results': batch_state['run_results']})}\n\n"
 
