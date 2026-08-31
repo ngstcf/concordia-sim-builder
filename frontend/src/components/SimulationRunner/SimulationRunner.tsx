@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, resumeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
+import { API_BASE_URL, executeSimulationStream, resumeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
@@ -332,7 +332,6 @@ export default function SimulationRunner() {
   const startPollingRecovery = useCallback((tid: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
     let failCount = 0;
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
     const stopPolling = (clearBanner = true) => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -344,7 +343,7 @@ export default function SimulationRunner() {
       stopPolling();
       if (data.log_filename) {
         try {
-          const res = await fetch(`${API_BASE}/api/simulations/logs/${data.log_filename}`);
+          const res = await fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`);
           const logData = await res.json();
           setResults({ ...data, results: logData.html_content, timestamp: logData.modified });
         } catch {
