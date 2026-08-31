@@ -159,7 +159,11 @@ def build_simulation(
             for a in config.agents
         )
         _window = float(_gm_p['context_window_steps'])
-        context_window_entries = int(_expected_acts * _window * 1.25) + 8
+        # Factor 1.0: the budget holds exactly the window's expected activity.
+        # (An earlier 1.25 inflation made a 6-step window hold ~7.5 steps and,
+        # with per-entry token length growing late in long runs, overflowed a
+        # 128k context by 27 tokens at N=100 step 17.)
+        context_window_entries = int(_expected_acts * _window) + 8
         for _agent in config.agents:
             _comps = dict(_agent.components or {})
             _comps.setdefault('observation_history_length',
