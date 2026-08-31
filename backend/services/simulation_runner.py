@@ -327,6 +327,13 @@ async def run_simulation_stream(
                 step = step_count_tracker[0]
                 elapsed = time.time() - start_time_progress[0]
 
+                # Keep the task registry in sync: reattaching clients poll
+                # /status/{task_id}.steps_completed, which otherwise stays 0
+                # for streamed runs (only the non-stream path updated it).
+                simulation_state.update_simulation_status(
+                    task_id, steps_completed=step
+                )
+
                 # Log timestamp for debugging hangs
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[HEARTBEAT] {current_time} - Step {step}/{max_steps} callback received")
