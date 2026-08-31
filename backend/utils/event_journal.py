@@ -35,7 +35,13 @@ _lock = threading.Lock()
 # First match wins; keep specific tags ahead of broad phrases.
 _PATTERNS = [
     ("content_filter", re.compile(r"\[FILTER\]")),
-    ("watchdog", re.compile(r"\[WATCHDOG\]")),
+    # Only actionable watchdog lines. The runner also prints a routine
+    # per-minute status line under the same tag ("LLM call in progress
+    # (2s) | 890 calls total"); journaling those filled the incident feed
+    # at roughly one entry per minute of a healthy run, and since
+    # "watchdog" is an alerting kind in the UI it meant a browser
+    # notification every minute.
+    ("watchdog", re.compile(r"\[WATCHDOG\].*(WARNING|hung|[Ee]mergency)")),
     ("emergency_save", re.compile(r"EMERGENCY_CHECKPOINT|WATCHDOG_EMERGENCY")),
     ("checkpoint", re.compile(r"\[CHECKPOINT\]")),
     ("error", re.compile(r"\[ERROR\]|Traceback \(most recent call last\)")),

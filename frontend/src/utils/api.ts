@@ -434,6 +434,17 @@ export interface HealthIncident {
 export interface HealthStatus {
   server_time: number;
   tasks: HealthTask[];
+  /**
+   * Process-global LLM-call liveness. This, not seconds_since_progress, is
+   * the stall signal: the asynchronous engine reports a step only when its
+   * first entity acts, so a healthy large-population run can go two full
+   * steps between progress events.
+   */
+  llm?: {
+    calls_in_flight: number;
+    total_calls: number;
+    seconds_since_call: number | null;
+  };
   incidents: HealthIncident[];
 }
 

@@ -221,22 +221,28 @@ still answer *"did anything fail while I was away?"*
 ### What you see in the UI
 
 - **Health strip** (top of the Runner page). For every running simulation
-  it shows `step X/Y · progress Ns ago`, colored by time since the last
-  completed step: green (fresh), amber (>5 min), red (>15 min). Click
-  **show incidents** to expand the recent event feed (failures in red).
-  Click **🔔 enable alerts** once to grant browser-notification
+  it shows `step ≥X/Y · active Ns ago`, colored by time since the last
+  LLM call: green (fresh), amber (>5 min), red (>15 min). A grey chip
+  shows total LLM calls this backend session and how many are in flight.
+  Click **show incidents** to expand the recent event feed (failures in
+  red). Click **🔔 enable alerts** once to grant browser-notification
   permission; you will then get a desktop notification on run failures,
-  content-filter events, watchdog warnings, and stalls (>15 min without
-  progress) while the tab is open, even in a background window.
+  content-filter events, watchdog warnings, and stalls (>15 min with no
+  LLM activity) while the tab is open, even in a background window.
 - **Outcome badges** in Recent Simulations: **✓** (completed), red
   **failed** (hover for the error message), amber **cancelled**. Runs
   executed before this feature have no journal and show no badge.
 
-Interpreting stalls: "progress Ns ago" measures time since the last
-*completed* engine step. Large populations legitimately take minutes per
-step, so amber during a heavy run is normal; red plus a step counter that
-has not moved across refreshes is the signal worth investigating (start
-with the incident feed, then the live log panel).
+Interpreting stalls: "active Ns ago" measures time since the last LLM
+call started or returned, and a call in flight counts as active however
+long the provider takes — a slow response is work in progress, not a
+stall. Liveness deliberately does *not* use the step counter: the
+asynchronous social-media engine reports a step only when its first
+entity happens to act, so a healthy large-population run can go two full
+steps between step events (hence `step ≥X`, a lower bound on true engine
+progress). Large populations legitimately take minutes per step, so amber
+during a heavy run is normal; red is the signal worth investigating
+(start with the incident feed, then the live log panel).
 
 ### Where the data lives
 
@@ -263,8 +269,10 @@ Journaled event kinds:
 ### API
 
 - `GET /api/simulations/health?incidents=50` — running tasks (with
-  `steps_completed` and `seconds_since_progress`) plus the most recent
-  journaled incidents. This is what the Health strip polls every 30 s.
+  `steps_completed` and `seconds_since_progress`), an `llm` block
+  (`calls_in_flight`, `total_calls`, `seconds_since_call`) that is the
+  liveness signal, plus the most recent journaled incidents. This is what
+  the Health strip polls every 30 s.
 - `GET /api/simulations/recent` — each entry now carries `outcome`
   (`completed` / `failed` / `cancelled` / `null`) and `outcome_error`.
 
@@ -310,7 +318,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/status` | GET | Status of all running simulations |
 | `/api/simulations/status/{task_id}` | GET | Status of specific simulation |
-| `/api/simulations/health` | GET | Running tasks with time since last step progress + recent journaled incidents (`?incidents=N`) |
+| `/api/simulations/health` | GET | Running tasks, LLM-call liveness, and recent journaled incidents (`?incidents=N`) |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation (saves partial results) |
 | `/api/simulations/control/{task_id}/pause` | POST | Pause (step controller engine) |
 | `/api/simulations/control/{task_id}/resume` | POST | Resume |

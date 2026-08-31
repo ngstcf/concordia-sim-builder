@@ -517,7 +517,28 @@ async def run_simulation_stream(
                         else:
                             print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
-                    if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
+                    # A hang means "no LLM work happening", not "no step
+                    # progress reported". Under the asynchronous engine a step
+                    # is reported only when entity 0 acts, so at N=100
+                    # (~10 min/step) two steps can pass without a progress
+                    # event and the timeout fired on healthy runs — 7 spurious
+                    # WATCHDOG_EMERGENCY saves on the N=100 legs, including at
+                    # step 0, where a single step already exceeds the default
+                    # 600 s. LLM-call recency advances many times per step.
+                    _llm_stalled = True
+                    if watchdog_enabled and watchdog_timeout:
+                        from backend.services.llm_factory import get_llm_activity
+                        _act = get_llm_activity()
+                        _last_llm = max(_act.get('last_call_start') or 0.0,
+                                        _act.get('last_call_end') or 0.0)
+                        _llm_stalled = (
+                            _act.get('calls_in_flight', 0) <= 0
+                            and (not _last_llm
+                                 or time.time() - _last_llm > watchdog_timeout)
+                        )
+
+                    if (watchdog_enabled and watchdog_timeout and _llm_stalled
+                            and time_since_progress > watchdog_timeout):
                         _now = time.time()
                         if _now - watchdog_episode["last_warn"] >= 300:
                             watchdog_episode["last_warn"] = _now

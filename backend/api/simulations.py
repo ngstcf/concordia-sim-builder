@@ -2406,11 +2406,31 @@ async def get_simulations_status():
 @router.get("/health")
 async def get_health_status(incidents: int = 50):
     """Failure-observability snapshot for the browser: running tasks with
-    time since last step progress, and the most recent journaled
-    incidents (durable, unlike the live log ring buffer)."""
+    time since last step progress, LLM-call liveness, and the most recent
+    journaled incidents (durable, unlike the live log ring buffer).
+
+    Liveness comes from `llm`, not from `seconds_since_progress`. Step
+    progress is a poor liveness signal under the asynchronous engine, which
+    reports a step only when entity 0 happens to act, so a healthy run can
+    go two full steps between progress events. LLM-call recency advances
+    many times per step regardless of engine or population size.
+    """
+    from backend.services.llm_factory import get_llm_activity
+    act = get_llm_activity()
+    now = time.time()
+    last_call = max(act.get("last_call_start") or 0.0,
+                    act.get("last_call_end") or 0.0)
     return {
-        "server_time": time.time(),
+        "server_time": now,
         "tasks": list(simulation_state.get_all_simulations().values()),
+        # Process-global (the backend runs one simulation at a time), so
+        # this sits at the top level rather than per task.
+        "llm": {
+            "calls_in_flight": act.get("calls_in_flight", 0),
+            "total_calls": act.get("total_calls", 0),
+            "seconds_since_call": (round(now - last_call)
+                                   if last_call else None),
+        },
         "incidents": event_journal.tail(incidents),
     }
 

@@ -11,7 +11,7 @@ import { getHealth } from '../../utils/api';
 import type { HealthStatus, HealthIncident } from '../../utils/api';
 
 const POLL_MS = 30_000;
-const STALL_AMBER_S = 300;   // 5 min without step progress
+const STALL_AMBER_S = 300;   // 5 min without LLM activity
 const STALL_RED_S = 900;     // 15 min: notify
 const ALERT_KINDS = ['run_failed', 'batch_run_failed', 'error', 'watchdog', 'content_filter'];
 
@@ -25,6 +25,17 @@ function formatAge(seconds: number): string {
   if (seconds < 90) return `${seconds}s`;
   if (seconds < 5400) return `${Math.round(seconds / 60)}m`;
   return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+/**
+ * Seconds of LLM inactivity, or null if the backend does not report it.
+ * A call in flight means zero idle time however long it has been waiting:
+ * a slow provider response is work in progress, not a stall.
+ */
+function stallAge(h: HealthStatus): number | null {
+  if (!h.llm) return null;
+  if (h.llm.calls_in_flight > 0) return 0;
+  return h.llm.seconds_since_call ?? null;
 }
 
 export default function HealthStrip() {
@@ -58,12 +69,16 @@ export default function HealthStrip() {
         if (h.incidents.length > 0) {
           seen.lastIncidentTs = Math.max(seen.lastIncidentTs, ...h.incidents.map(i => i.ts));
         }
+        // Stall = no LLM work, not "no step reported". Falls back to step
+        // progress only when the backend predates the `llm` field.
+        const idle = stallAge(h);
         for (const t of h.tasks) {
-          if (t.status === 'running' && t.seconds_since_progress > STALL_RED_S && !seen.stalledTasks.has(t.task_id)) {
+          const age = idle ?? t.seconds_since_progress;
+          if (t.status === 'running' && age > STALL_RED_S && !seen.stalledTasks.has(t.task_id)) {
             seen.stalledTasks.add(t.task_id);
-            notify('Simulation may be stalled', `No step progress for ${formatAge(t.seconds_since_progress)} (step ${t.steps_completed}/${t.config?.max_steps ?? '?'})`);
+            notify('Simulation may be stalled', `No LLM activity for ${formatAge(age)} (step ${t.steps_completed}/${t.config?.max_steps ?? '?'})`);
           }
-          if (t.seconds_since_progress < STALL_AMBER_S) {
+          if (age < STALL_AMBER_S) {
             seen.stalledTasks.delete(t.task_id);
           }
         }
@@ -96,17 +111,27 @@ export default function HealthStrip() {
           <span className="text-gray-400">no running simulations</span>
         )}
         {running.map(t => {
-          const age = t.seconds_since_progress;
+          const idle = stallAge(health);
+          const age = idle ?? t.seconds_since_progress;
           const color = age >= STALL_RED_S ? 'bg-red-100 text-red-700'
             : age >= STALL_AMBER_S ? 'bg-amber-100 text-amber-700'
             : 'bg-green-100 text-green-700';
           return (
             <span key={t.task_id} className={`px-2 py-0.5 rounded ${color}`}
               title={t.config?.premise || t.task_id}>
-              step {t.steps_completed}/{t.config?.max_steps ?? '?'} · progress {formatAge(age)} ago
+              step ≥{t.steps_completed}/{t.config?.max_steps ?? '?'} ·{' '}
+              {idle === null
+                ? `progress ${formatAge(age)} ago`
+                : `active ${formatAge(age)} ago`}
             </span>
           );
         })}
+        {health.llm && health.llm.total_calls > 0 && (
+          <span className="text-gray-400" title="LLM calls this backend session">
+            {health.llm.total_calls.toLocaleString()} LLM calls
+            {health.llm.calls_in_flight > 0 && ` · ${health.llm.calls_in_flight} in flight`}
+          </span>
+        )}
         <button
           onClick={() => setShowIncidents(s => !s)}
           className="text-teal-600 hover:text-teal-800"
