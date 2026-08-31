@@ -1463,7 +1463,6 @@ async def run_simulation_simple(
             results = sim.play(
                 max_steps=config.max_steps,
                 get_state_callback=progress_callback,
-                verbose=True
             )
         except SimulationCancelled:
             was_cancelled = True
