@@ -85,6 +85,7 @@ Each simulation produces three output files:
 - **Separate GM LLM** — Independent model selection for Game Master
 - **Checkpoint, Resume & Extend** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped. A teal **Extend** button appears on every completed run in Recent Simulations — enter how many additional steps to run and continue from the final state, whether the simulation ended early (LLM decision) or reached `max_steps`. All state is persisted via Concordia's native `load_from_checkpoint` API; LLM settings, agent config, and all memories are restored from the sidecar — no template reload needed. **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim.
 - **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
+- **Failure Observability** — Durable event journal, run outcome badges, a Health strip with stall detection, and opt-in browser notifications, so the browser can answer "did anything fail?" even after disconnects or overnight runs (see [Monitoring Long-Running Simulations](#monitoring-long-running-simulations))
 - **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
 For the complete building guide, see [SIMULATION_BUILDING_GUIDE.md](docs/SIMULATION_BUILDING_GUIDE.md).
@@ -209,6 +210,69 @@ npm run dev
 
 Frontend: `http://localhost:5173`
 
+## Monitoring Long-Running Simulations
+
+Long runs outlive browser sessions: connections drop, laptops sleep, and a
+failure at 3 a.m. used to be visible only in the server terminal. The
+platform therefore keeps a **durable failure journal** on the server and
+surfaces it in the UI, so you can close the browser, come back later, and
+still answer *"did anything fail while I was away?"*
+
+### What you see in the UI
+
+- **Health strip** (top of the Runner page). For every running simulation
+  it shows `step X/Y · progress Ns ago`, colored by time since the last
+  completed step: green (fresh), amber (>5 min), red (>15 min). Click
+  **show incidents** to expand the recent event feed (failures in red).
+  Click **🔔 enable alerts** once to grant browser-notification
+  permission; you will then get a desktop notification on run failures,
+  content-filter events, watchdog warnings, and stalls (>15 min without
+  progress) while the tab is open, even in a background window.
+- **Outcome badges** in Recent Simulations: **✓** (completed), red
+  **failed** (hover for the error message), amber **cancelled**. Runs
+  executed before this feature have no journal and show no badge.
+
+Interpreting stalls: "progress Ns ago" measures time since the last
+*completed* engine step. Large populations legitimately take minutes per
+step, so amber during a heavy run is normal; red plus a step counter that
+has not moved across refreshes is the signal worth investigating (start
+with the incident feed, then the live log panel).
+
+### Where the data lives
+
+Events append to JSONL files under `logs/events/` — one global file per
+day (`events-YYYYMMDD.jsonl`) and one small file per run
+(`task-{task_id}.jsonl`). They survive backend restarts, are safe to
+delete (you lose only badges and incident history, never simulation
+data), and are grep-friendly:
+
+```json
+{"ts": 1788178119.6, "time": "2026-08-31T21:28:39", "kind": "run_failed",
+ "task_id": "d5c1…", "log_filename": "20260831_212839_….html",
+ "steps_completed": 0, "error": "Error code: 404 - …", "error_type": "NotFoundError"}
+```
+
+Journaled event kinds:
+
+| Group | Kinds |
+|-------|-------|
+| Run lifecycle | `run_registered`, `run_completed`, `run_failed`, `run_cancelled` |
+| Batch lifecycle | `batch_started`, `batch_run_failed`, `batch_complete`, `batch_cancelled` |
+| Captured from server output | `content_filter`, `watchdog`, `checkpoint`, `emergency_save`, `provider_error`, `provider_retry`, `error` |
+
+### API
+
+- `GET /api/simulations/health?incidents=50` — running tasks (with
+  `steps_completed` and `seconds_since_progress`) plus the most recent
+  journaled incidents. This is what the Health strip polls every 30 s.
+- `GET /api/simulations/recent` — each entry now carries `outcome`
+  (`completed` / `failed` / `cancelled` / `null`) and `outcome_error`.
+
+Scope note: this is *observability through the browser* — detection still
+requires polling from an open tab. Server-side alerting that needs no tab
+at all (webhooks, scheduled sentinels) is planned as part of a dedicated
+long-run operating mode.
+
 ## Templates (38)
 
 | Category | Templates |
@@ -246,6 +310,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/status` | GET | Status of all running simulations |
 | `/api/simulations/status/{task_id}` | GET | Status of specific simulation |
+| `/api/simulations/health` | GET | Running tasks with time since last step progress + recent journaled incidents (`?incidents=N`) |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation (saves partial results) |
 | `/api/simulations/control/{task_id}/pause` | POST | Pause (step controller engine) |
 | `/api/simulations/control/{task_id}/resume` | POST | Resume |
@@ -257,7 +322,7 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/simulations/recent` | GET | List recent simulation logs (includes `resumable` flag + `state_filename`) |
+| `/api/simulations/recent` | GET | List recent simulation logs (includes `resumable` flag, `state_filename`, and journal-derived `outcome` / `outcome_error`) |
 | `/api/simulations/logs/{filename}` | GET | Get simulation log HTML |
 | `/api/simulations/logs/{filename}` | DELETE | Delete simulation log + metadata |
 | `/api/simulations/logs/{filename}/analytics` | GET | Analytics data for all 9 result tabs |
