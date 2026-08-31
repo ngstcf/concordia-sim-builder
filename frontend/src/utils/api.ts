@@ -408,7 +408,7 @@ export async function executeSimulationSimple(
     config: configToUse,
     llm_settings: llmSettings
   }, {
-    timeout: SIMULATION_TIMEOUT, // Configurable timeout (default: 30 minutes)
+    timeout: SIMULATION_TIMEOUT, // Configurable timeout (default: 5 hours)
   });
   return response.data;
 }
