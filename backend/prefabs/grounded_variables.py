@@ -37,6 +37,7 @@ class VariableConfig:
     max_value: Optional[float] = None  # For numerical/percentage
     allowed_values: Optional[List[str]] = None  # For categorical
     update_rule: Optional[str] = None  # Description of how it updates
+    cumulative: bool = False  # Running total: carried forward, never decreases
 
 
 class GroundedVariablesComponent(
@@ -145,15 +146,35 @@ class GroundedVariablesComponent(
         action_spec: Optional[entity_lib.ActionSpec] = None,
     ) -> str:
         """Provide current variable values and update instructions before the GM acts."""
-        lines = ["Current grounded variable values (reassess ALL of these after each event):"]
+        lines = ["Current grounded variable values:"]
         for name, value in self._current_values.items():
             cfg = self._variable_configs[name]
             line = f"  - {name}: {value}"
             if cfg.allowed_values:
                 line += f"  [allowed: {', '.join(cfg.allowed_values)}]"
+            if cfg.cumulative:
+                line += ("  [RUNNING TOTAL: report the previous value plus"
+                         " whatever this event adds; it can never decrease]")
             if cfg.update_rule:
                 line += f"  — {cfg.update_rule}"
             lines.append(line)
+        lines.append("")
+        # "Reassess ALL of these" is right for state variables and wrong for
+        # counters. A game master seeing only recent history re-derives a
+        # count from the current event, so a total meant to accumulate spikes
+        # while something is happening and decays back toward zero afterwards
+        # — which is what made the Mastodon template's misinfo_exposure end
+        # every run near 0 regardless of condition. Keep the blanket wording
+        # verbatim when nothing accumulates, so existing scenarios are
+        # unaffected.
+        if any(c.cumulative for c in self._variable_configs.values()):
+            lines.append(
+                "Reassess each value above from the current state of the world,"
+                " EXCEPT those marked RUNNING TOTAL: carry those forward and add"
+                " this event's contribution."
+            )
+        else:
+            lines.append("Reassess ALL of these after each event.")
         lines.append("")
         lines.append(
             "IMPORTANT: After narrating what happens, you MUST append a"
@@ -243,6 +264,9 @@ class GroundedVariablesComponent(
             desc = f"  {name} = {self._current_values[name]} ({cfg.variable_type.value})"
             if cfg.description:
                 desc += f" — {cfg.description}"
+            if cfg.cumulative:
+                desc += (" [RUNNING TOTAL: previous value plus what this event"
+                         " adds; never decreases]")
             if cfg.update_rule:
                 desc += f" [rule: {cfg.update_rule}]"
             variable_descriptions.append(desc)
@@ -311,6 +335,23 @@ None"""
         except (ValueError, TypeError):
             return None
 
+    def _apply_monotonic_floor(
+        self, name: str, cfg: VariableConfig, num_value: float
+    ) -> float:
+        """Stop a cumulative total from going backwards.
+
+        The prompt asks the game master to carry running totals forward, but
+        one lapse would otherwise discard the accumulated count for the rest
+        of the run. Enforcing it here makes the guarantee structural rather
+        than a request the model may ignore.
+        """
+        if not cfg.cumulative:
+            return num_value
+        current = self._current_values.get(name)
+        if isinstance(current, (int, float)) and not isinstance(current, bool):
+            return max(num_value, float(current))
+        return num_value
+
     def _validate_value(self, name: str, value: Any) -> Optional[Any]:
         """Validate a value against the variable configuration."""
         cfg = self._variable_configs.get(name)
@@ -332,13 +373,13 @@ None"""
                     num_value = cfg.min_value
                 if cfg.max_value is not None and num_value > cfg.max_value:
                     num_value = cfg.max_value
-                return num_value
+                return self._apply_monotonic_floor(name, cfg, num_value)
 
             elif cfg.variable_type == VariableType.PERCENTAGE:
                 num_value = float(value)
                 # Clamp to 0-100
                 num_value = max(0, min(100, num_value))
-                return num_value
+                return self._apply_monotonic_floor(name, cfg, num_value)
 
             elif cfg.variable_type == VariableType.CATEGORICAL:
                 str_value = str(value)
@@ -400,6 +441,7 @@ def create_grounded_variables_component(
             max_value=config.get("max_value"),
             allowed_values=config.get("allowed_values"),
             update_rule=config.get("update_rule"),
+            cumulative=bool(config.get("cumulative", False)),
         ))
 
     return GroundedVariablesComponent(

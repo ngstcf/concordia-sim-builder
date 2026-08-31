@@ -228,10 +228,27 @@ changes candidate support and trust in the information environment.""",
                 },
                 {
                     "name": "misinfo_exposure",
+                    # Specified as a running total, not a level. The original
+                    # wording ("count-like indicator ... observed in the feed")
+                    # read as an instantaneous reading, so the game master
+                    # re-estimated it from the current event: the value rose
+                    # while a claim was circulating and fell back afterwards,
+                    # ending near 0 in every run and in both conditions, which
+                    # made it useless as a manipulation check.
                     "variable_type": "numerical",
-                    "description": "Count-like indicator of misinformation exposures observed in the feed",
+                    "description": (
+                        "Running total of misinformation exposures since the"
+                        " simulation began: one per participant who saw a post"
+                        " or reply repeating an unsupported claim about the"
+                        " election"
+                    ),
                     "default_value": 0,
                     "min_value": 0,
+                    "cumulative": True,
+                    "update_rule": (
+                        "Add the number of participants who saw an unsupported"
+                        " claim this step to the previous total; never decrease"
+                    ),
                 },
             ],
         },

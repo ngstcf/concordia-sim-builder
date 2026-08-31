@@ -106,6 +106,16 @@ class VariableConfig(BaseModel):
     max_value: Optional[float] = Field(None, description="Maximum value (for numerical/percentage)")
     allowed_values: Optional[List[str]] = Field(None, description="Allowed values (for categorical)")
     update_rule: Optional[str] = Field(None, description="Description of how variable updates")
+    cumulative: bool = Field(
+        False,
+        description=(
+            "Treat as a running total: the Game Master carries the previous "
+            "value forward and adds to it, and the value is never allowed to "
+            "decrease. Use for counters (exposures, incidents, items "
+            "collected); leave false for state variables that are re-estimated "
+            "each step (support levels, morale, temperature)."
+        ),
+    )
 
 
 class AvailableAction(BaseModel):
