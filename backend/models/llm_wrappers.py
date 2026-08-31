@@ -270,6 +270,19 @@ class CustomGPTModel:
 
             except (AuthenticationError, APIError) as e:
                 elapsed = time.time() - attempt_start
+                # Optional content-filter resilience: a provider-side filter
+                # rejects the PROMPT, so retries cannot help and one rejection
+                # would otherwise kill the whole run. When
+                # LLM_CONTENT_FILTER_FALLBACK is set, return a neutral,
+                # visible placeholder instead and log the event; occurrences
+                # are countable in the logs and should be reported with any
+                # results (a filtered response resembles a moderated one).
+                if (os.getenv("LLM_CONTENT_FILTER_FALLBACK")
+                        and "content_filter" in str(e)):
+                    print(f"[FILTER] content-filter fallback engaged for "
+                          f"{self._model_name} after {elapsed:.1f}s "
+                          f"(prompt rejected by provider policy)")
+                    return "(no response: filtered by provider content policy)"
                 llm_print(f"[LLM] Error: {type(e).__name__} after {elapsed:.1f}s: {e}")
                 # Don't retry auth/config errors - these won't fix themselves
                 raise
