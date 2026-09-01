@@ -9,6 +9,7 @@ Based on the existing WorldState and Inventory components in Concordia.
 """
 
 import dataclasses
+import logging
 import re
 from typing import Any, Optional, Dict, List, Union
 from enum import Enum
@@ -16,6 +17,8 @@ from enum import Enum
 from concordia.language_model import language_model
 from concordia.typing import entity_component
 from concordia.typing import entity as entity_lib
+
+logger = logging.getLogger(__name__)
 
 
 class VariableType(str, Enum):
@@ -38,6 +41,32 @@ class VariableConfig:
     allowed_values: Optional[List[str]] = None  # For categorical
     update_rule: Optional[str] = None  # Description of how it updates
     cumulative: bool = False  # Running total: carried forward, never decreases
+    max_delta: Optional[float] = None  # Largest permitted increase per update
+    group: Optional[str] = None  # Name of the VariableGroup this belongs to
+
+
+@dataclasses.dataclass
+class VariableGroup:
+    """A set of variables that jointly partition a whole.
+
+    Per-variable bounds cannot express "these shares describe one
+    population". Two support percentages may each be a legal 0-100 value
+    while summing to an impossible total, because the game master
+    re-estimates each share independently at every event and nothing checks
+    them against each other. The bad total then enters the exported dataset
+    silently.
+
+    Declaring the members as a group makes the joint constraint explicit and
+    checkable at the moment of update.
+    """
+    name: str
+    members: List[str]
+    sums_to: float
+    tolerance: float = 1.0
+    # renormalize: rescale members to satisfy the sum, preserving proportions.
+    # reject:      discard this step's updates to the group, keep prior values.
+    # flag:        leave values untouched; only record the violation.
+    on_violation: str = "renormalize"
 
 
 class GroundedVariablesComponent(
@@ -63,6 +92,7 @@ class GroundedVariablesComponent(
         variable_configs: List[VariableConfig],
         initial_values: Optional[Dict[str, Any]] = None,
         pre_act_label: str = '\nGrounded Variables',
+        variable_groups: Optional[List[VariableGroup]] = None,
     ):
         """Initialize the grounded variables component.
 
@@ -71,10 +101,16 @@ class GroundedVariablesComponent(
             variable_configs: List of variable configurations
             initial_values: Optional initial values (defaults to config defaults)
             pre_act_label: Label for pre-act output
+            variable_groups: Optional joint constraints across variables
         """
         self._model = model
         self._variable_configs = {cfg.name: cfg for cfg in variable_configs}
         self._pre_act_label = pre_act_label
+        self._variable_groups = list(variable_groups or [])
+        # Every invariant breach, in order, so a run's measurement integrity is
+        # inspectable after the fact instead of being inferred from impossible
+        # numbers in the exported dataset.
+        self._violations: List[Dict[str, Any]] = []
 
         # Initialize current values
         self._current_values: Dict[str, Any] = {}
@@ -162,11 +198,10 @@ class GroundedVariablesComponent(
         # "Reassess ALL of these" is right for state variables and wrong for
         # counters. A game master seeing only recent history re-derives a
         # count from the current event, so a total meant to accumulate spikes
-        # while something is happening and decays back toward zero afterwards
-        # — which is what made the Mastodon template's misinfo_exposure end
-        # every run near 0 regardless of condition. Keep the blanket wording
-        # verbatim when nothing accumulates, so existing scenarios are
-        # unaffected.
+        # while something is happening and decays back toward zero once it
+        # stops, which leaves a cumulative counter useless as a measure. Keep
+        # the blanket wording verbatim when nothing accumulates, so existing
+        # scenarios are unaffected.
         if any(c.cumulative for c in self._variable_configs.values()):
             lines.append(
                 "Reassess each value above from the current state of the world,"
@@ -197,6 +232,9 @@ class GroundedVariablesComponent(
         if not updates:
             updates = self._extract_variable_updates(event)
 
+        # Snapshot before applying, so a rejected group update can be undone.
+        previous = dict(self._current_values)
+
         # Apply updates with validation
         for name, new_value in updates.items():
             if name in self._variable_configs:
@@ -204,12 +242,89 @@ class GroundedVariablesComponent(
                 if validated_value is not None:
                     self._current_values[name] = validated_value
 
+        # Per-variable validation cannot see across variables; enforce the
+        # declared joint constraints only after the whole update set is in.
+        self._enforce_groups(previous)
+
         # Record values AFTER updates so history reflects end-of-step state
         for name in self._variable_configs:
             if name in self._current_values:
                 self._history[name].append((self._step_counter, self._current_values[name]))
 
         return f"Variables updated: {list(updates.keys()) if updates else 'None'}"
+
+    def _enforce_groups(self, previous: Dict[str, Any]) -> None:
+        """Check and repair declared cross-variable constraints."""
+        for group in self._variable_groups:
+            present = [
+                name for name in group.members
+                if isinstance(self._current_values.get(name), (int, float))
+                and not isinstance(self._current_values.get(name), bool)
+            ]
+            if len(present) < 2:
+                continue
+
+            total = sum(float(self._current_values[name]) for name in present)
+            if abs(total - group.sums_to) <= group.tolerance:
+                continue
+
+            observed = {name: self._current_values[name] for name in present}
+            action = group.on_violation
+
+            if action == "renormalize" and total > 0:
+                scale = group.sums_to / total
+                for name in present:
+                    self._current_values[name] = round(
+                        float(self._current_values[name]) * scale, 4
+                    )
+            elif action == "reject":
+                for name in present:
+                    if name in previous:
+                        self._current_values[name] = previous[name]
+            else:
+                action = "flag"
+
+            self._record_violation(
+                kind="group_sum",
+                detail={
+                    "group": group.name,
+                    "members": present,
+                    "observed": observed,
+                    "observed_sum": round(total, 4),
+                    "expected_sum": group.sums_to,
+                    "action": action,
+                    "repaired": {
+                        name: self._current_values[name] for name in present
+                    },
+                },
+            )
+
+    def _record_violation(self, kind: str, detail: Dict[str, Any]) -> None:
+        """Record an invariant breach and make it visible in the run log."""
+        entry = {"step": self._step_counter, "kind": kind, **detail}
+        self._violations.append(entry)
+        logger.warning("grounded-variable invariant breach: %s", entry)
+
+    def get_violations(self) -> List[Dict[str, Any]]:
+        """Return every invariant breach recorded so far."""
+        return list(self._violations)
+
+    def get_integrity_summary(self) -> Dict[str, Any]:
+        """Summarize measurement integrity for this run.
+
+        A count of zero is itself a result: it says the declared invariants
+        held for every update, which is what makes the exported series worth
+        analyzing.
+        """
+        by_kind: Dict[str, int] = {}
+        for v in self._violations:
+            by_kind[v["kind"]] = by_kind.get(v["kind"], 0) + 1
+        return {
+            "updates_seen": self._step_counter,
+            "violations": len(self._violations),
+            "violations_by_kind": by_kind,
+            "groups_declared": [g.name for g in self._variable_groups],
+        }
 
     def get_value(self, name: str) -> Any:
         """Get the current value of a variable."""
@@ -335,6 +450,41 @@ None"""
         except (ValueError, TypeError):
             return None
 
+    def _apply_delta_cap(
+        self, name: str, cfg: VariableConfig, num_value: float
+    ) -> float:
+        """Bound how far one update may move a variable.
+
+        A running total with no ceiling is the other way a declared bound can
+        be missing: `min_value: 0` with `cumulative: True` and no `max_value`
+        permits unbounded growth. Because history is appended at every
+        game-master phase, and there can be many phases per step, a counter
+        meant to top out near the population size can drift orders of
+        magnitude above it. A per-update cap bounds growth to something the
+        design can justify (for a per-participant count, the population size)
+        without requiring a total to be known in advance.
+        """
+        if cfg.max_delta is None:
+            return num_value
+        current = self._current_values.get(name)
+        if not isinstance(current, (int, float)) or isinstance(current, bool):
+            return num_value
+        ceiling = float(current) + cfg.max_delta
+        if num_value > ceiling:
+            self._record_violation(
+                kind="max_delta",
+                detail={
+                    "variable": name,
+                    "previous": current,
+                    "proposed": num_value,
+                    "max_delta": cfg.max_delta,
+                    "action": "clamped",
+                    "repaired": ceiling,
+                },
+            )
+            return ceiling
+        return num_value
+
     def _apply_monotonic_floor(
         self, name: str, cfg: VariableConfig, num_value: float
     ) -> float:
@@ -373,12 +523,14 @@ None"""
                     num_value = cfg.min_value
                 if cfg.max_value is not None and num_value > cfg.max_value:
                     num_value = cfg.max_value
+                num_value = self._apply_delta_cap(name, cfg, num_value)
                 return self._apply_monotonic_floor(name, cfg, num_value)
 
             elif cfg.variable_type == VariableType.PERCENTAGE:
                 num_value = float(value)
                 # Clamp to 0-100
                 num_value = max(0, min(100, num_value))
+                num_value = self._apply_delta_cap(name, cfg, num_value)
                 return self._apply_monotonic_floor(name, cfg, num_value)
 
             elif cfg.variable_type == VariableType.CATEGORICAL:
@@ -399,6 +551,7 @@ def create_grounded_variables_component(
     model: language_model.LanguageModel,
     variable_configs: List[Dict[str, Any]],
     initial_values: Optional[Dict[str, Any]] = None,
+    variable_groups: Optional[List[Dict[str, Any]]] = None,
 ) -> GroundedVariablesComponent:
     """Create a grounded variables component from configuration dictionaries.
 
@@ -406,6 +559,9 @@ def create_grounded_variables_component(
         model: Language model to use
         variable_configs: List of variable configuration dictionaries
         initial_values: Optional initial values
+        variable_groups: Optional joint constraints, each a dictionary with
+            `name`, `members`, `sums_to`, and optionally `tolerance` and
+            `on_violation`
 
     Returns:
         A GroundedVariablesComponent instance
@@ -432,7 +588,7 @@ def create_grounded_variables_component(
     parsed_configs = []
     for config in variable_configs:
         var_type = VariableType(config.get("variable_type", "numerical"))
-        parsed_configs.append(VariableConfig(
+        cfg = VariableConfig(
             name=config["name"],
             variable_type=var_type,
             description=config.get("description", ""),
@@ -442,10 +598,68 @@ def create_grounded_variables_component(
             allowed_values=config.get("allowed_values"),
             update_rule=config.get("update_rule"),
             cumulative=bool(config.get("cumulative", False)),
+            max_delta=config.get("max_delta"),
+            group=config.get("group"),
+        )
+        # A running total with neither a ceiling nor a per-update cap can grow
+        # without limit, and the growth is invisible until the exported series
+        # is inspected. Warn at construction, where the scenario author can
+        # still fix the declaration, rather than after the compute is spent.
+        if cfg.cumulative and cfg.max_value is None and cfg.max_delta is None:
+            logger.warning(
+                "grounded variable '%s' is cumulative with no max_value and no"
+                " max_delta: its running total is unbounded above",
+                cfg.name,
+            )
+        parsed_configs.append(cfg)
+
+    declared = {c.name for c in parsed_configs}
+    parsed_groups = []
+    for group in variable_groups or []:
+        members = [m for m in group.get("members", []) if m in declared]
+        missing = [m for m in group.get("members", []) if m not in declared]
+        if missing:
+            logger.warning(
+                "variable group '%s' names undeclared variables: %s",
+                group.get("name"), missing,
+            )
+        if len(members) < 2 or group.get("sums_to") is None:
+            continue
+        parsed_groups.append(VariableGroup(
+            name=group.get("name") or "+".join(members),
+            members=members,
+            sums_to=float(group["sums_to"]),
+            tolerance=float(group.get("tolerance", 1.0)),
+            on_violation=group.get("on_violation", "renormalize"),
+        ))
+
+    # Also accept the constraint declared inline on the variables themselves,
+    # so a scenario can name a group without a separate top-level block.
+    for name in sorted({c.group for c in parsed_configs if c.group}):
+        if any(g.name == name for g in parsed_groups):
+            continue
+        members = [c.name for c in parsed_configs if c.group == name]
+        if len(members) < 2:
+            continue
+        percentages = all(
+            c.variable_type == VariableType.PERCENTAGE
+            for c in parsed_configs if c.group == name
+        )
+        if not percentages:
+            logger.warning(
+                "variable group '%s' declared inline but its members are not"
+                " all percentages, so no total can be inferred; declare it in"
+                " variable_groups with an explicit sums_to",
+                name,
+            )
+            continue
+        parsed_groups.append(VariableGroup(
+            name=name, members=members, sums_to=100.0
         ))
 
     return GroundedVariablesComponent(
         model=model,
         variable_configs=parsed_configs,
-        initial_values=initial_values
+        initial_values=initial_values,
+        variable_groups=parsed_groups,
     )
