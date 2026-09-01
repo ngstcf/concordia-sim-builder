@@ -9,10 +9,19 @@ and metadata JSON files.
 import csv
 import io
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# A log with no ENTRIES block and a log whose ENTRIES block will not parse are
+# different situations that both used to return an empty list, so a truncated
+# or corrupted log exported as a run that simply did nothing. The empty return
+# is kept, since a partial export is more useful than a failed one, but the
+# parse failure now says so.
 
 
 def _extract_entries(html: str) -> List[Dict]:
@@ -21,7 +30,10 @@ def _extract_entries(html: str) -> List[Dict]:
         return []
     try:
         return json.loads(match.group(1))
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "ENTRIES block found but did not parse (%s); exporting an empty "
+            "action and narration list for this log", exc)
         return []
 
 
@@ -31,7 +43,10 @@ def _extract_content_store(html: str) -> Dict[str, str]:
         return {}
     try:
         return json.loads(match.group(1))
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "CONTENT_STORE block found but did not parse (%s); references in "
+            "this log will not resolve", exc)
         return {}
 
 
@@ -105,7 +120,13 @@ def _parse_gm_narrations_from_html(html_content: str) -> List[Dict[str, Any]]:
 
     rows = []
     for entry in entries:
-        if entry.get('entry_type') not in ('game_master', 'scene'):
+        # 'step' is what the asynchronous engine tags its game master entries
+        # with; 'game_master' and 'scene' come from the synchronous engines.
+        # Matching only the latter two silently exported an empty narration
+        # list for every asynchronous run, which is the whole Mastodon series.
+        # The types are disjoint from 'entity', so agent actions cannot be
+        # picked up here by mistake.
+        if entry.get('entry_type') not in ('game_master', 'scene', 'step'):
             continue
         step = entry.get('step', 0)
         summary = entry.get('summary', '')
