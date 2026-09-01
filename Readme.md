@@ -498,6 +498,16 @@ The contrib clock already supported variable time increments, but the prefab nev
 
 Upstream Concordia removed this engine (and `EntityAgent.stateless_act`) in commit `030d2fa`, but it is the only engine that can drive the multiple-choice questionnaire component's JSON-list protocol used by the `interviewer__GameMaster` prefab — without it, interviewer runs record no answers and batch ICC reliability is empty. Rather than patching the fork further, the engine is vendored into the backend at `backend/services/parallel_questionnaire_engine.py` (recovered verbatim from the commit before its removal, with a module-level replica of `stateless_act`; provenance in the module docstring). The pinned fork stays limited to the two patches above.
 
+**4. Asynchronous engine — progress reporting** *(reporting only; not in the pinned commit)*
+
+The asynchronous engine gives each entity its own loop and documents `checkpoint_callback` as running "after each iteration," but the call sat past the two `continue` statements taken when the entity draws no turn, so an iteration in which it did not act passed through silently — and only entity 0 receives the callback at all. The backend counted invocations, so it measured `max_steps × activity_rate(first agent in the roster)`: a completed 20-step run with that agent acting at rate 0.8 reported **16 of 20** and looked truncated. Because the rate that governs the count belongs to whichever agent happens to be listed first, the size of the undercount also varies with configuration: two setups that differ only in that agent's activity rate report different completed-step totals for the same `max_steps`, which can be mistaken for a real difference in how long the runs went.
+
+The iterations were always real: exported action records reach the final step with the full cast acting, and action volumes are unaffected. Only the reporting was short — but it also misaligned interval checkpointing, since a state saved every 5 callbacks landed at true iterations ~6, ~13, ~19, so a checkpoint labelled step 10 was not one.
+
+Both skip paths now report, and `save_checkpoint` puts the engine's own loop index into `checkpoint_data` as `engine_step` so callers need not reconstruct it (`checkpoint_counter` cannot serve that purpose — `make_checkpoint_data()` increments it, and emergency and final saves happen outside the loop, so it counts snapshots rather than steps). The backend prefers `engine_step` and falls back to counting on an unpatched tree, so it works either way.
+
+Tracked separately as [`patches/concordia-async-step-reporting.patch`](patches/concordia-async-step-reporting.patch), which applies onto `5ed8813`. It is deliberately **not** folded into the pinned commit or `patches/concordia-2.4.0-local.patch`: that tree is the one every published result was produced on, and this patch postdates all of them. Apply it for accurate progress on asynchronous runs; nothing about simulation behavior changes with or without it.
+
 ### Reproducing the patched environment
 
 The published results used Concordia at commit `5482bca` (`git describe` → `v2.4.0-28-g5482bca`) plus the two patches above, published as the public fork [**`ngstcf/concordia@5ed8813`**](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`).

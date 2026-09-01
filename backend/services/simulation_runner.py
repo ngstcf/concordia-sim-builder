@@ -426,7 +426,8 @@ async def run_simulation_stream(
             """Sync progress callback for Concordia - prints terminal progress and queues SSE events.
 
             Args:
-                checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+                checkpoint_data: Concordia checkpoint data; carries 'engine_step'
+                    on the patched fork, and 'checkpoint_counter' on any build.
 
             Raises:
                 SimulationCancelled: If cancellation was requested, stops the engine loop.
@@ -436,11 +437,23 @@ async def run_simulation_stream(
                 raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
 
             try:
-                # Increment local counter rather than using checkpoint_counter, which
-                # can be inflated by extra make_checkpoint_data() calls (emergency
-                # checkpoint, final state save) in the run that produced the state.json
-                # we restored from — causing resume/extend step numbers to read high.
-                step_count_tracker[0] += 1
+                # Prefer the engine's own loop index. Counting callbacks instead
+                # undercounts on the asynchronous engine, where each entity runs
+                # its own loop and an iteration in which it did not act used to
+                # skip the callback: a finished run reported max_steps times the
+                # first agent's activity rate (20 x 0.8 = 16 of 20) and looked
+                # truncated. checkpoint_counter is not usable here — it counts
+                # snapshots, so emergency and final saves inflate it.
+                # Kept monotonic because the sequential engine reports its skip
+                # phase one lower than the step it is in.
+                engine_step = checkpoint_data.get('engine_step')
+                if engine_step is None:
+                    step_count_tracker[0] += 1
+                else:
+                    step_count_tracker[0] = max(
+                        step_count_tracker[0],
+                        _already_completed + int(engine_step),
+                    )
                 step = step_count_tracker[0]
                 elapsed = time.time() - start_time_progress[0]
 
@@ -1627,7 +1640,8 @@ async def run_simulation_simple(
             """Called after each step completes to show progress.
 
             Args:
-                checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+                checkpoint_data: Concordia checkpoint data; carries 'engine_step'
+                    on the patched fork, and 'checkpoint_counter' on any build.
 
             Raises:
                 SimulationCancelled: If cancellation was requested, stops the engine loop.
@@ -1636,7 +1650,14 @@ async def run_simulation_simple(
                 print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
                 raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
 
-            step_count[0] += 1
+            # See sync_progress_callback: the engine's index, not a callback
+            # tally, since the asynchronous engine skips callbacks for
+            # iterations in which its entity did not act.
+            engine_step = checkpoint_data.get('engine_step')
+            if engine_step is None:
+                step_count[0] += 1
+            else:
+                step_count[0] = max(step_count[0], int(engine_step))
             step = step_count[0]
             elapsed = time.time() - start_time_progress[0]
 

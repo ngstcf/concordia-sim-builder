@@ -1,0 +1,77 @@
+diff --git a/concordia/environment/engines/asynchronous.py b/concordia/environment/engines/asynchronous.py
+index 0d52caf..fa4571d 100644
+--- a/concordia/environment/engines/asynchronous.py
++++ b/concordia/environment/engines/asynchronous.py
+@@ -345,6 +345,25 @@ class Asynchronous(engine_lib.Engine):
+     if hasattr(game_master, 'set_capture_key_for_thread'):
+       game_master.set_capture_key_for_thread(thread_id, entity.name)
+ 
++    def report_iteration(index: int) -> None:
++      """Reports one completed iteration to the checkpoint callback.
++
++      Called on every path out of the loop body, including the ones where
++      this entity did not act. The callback is documented as running after
++      each iteration, but it used to sit past two `continue` statements, so
++      an entity that drew no turn passed through silently. A caller counting
++      invocations to follow progress therefore observed
++      `max_steps * activity_rate(entity)` rather than `max_steps`, and a
++      finished run looked truncated.
++      """
++      if checkpoint_callback is not None:
++        logging.debug(
++            'Calling checkpoint callback for %s at iteration %s',
++            entity.name,
++            index,
++        )
++        checkpoint_callback(index)
++
+     iteration = 0
+     try:
+       while not terminate_event.is_set() and iteration < max_steps:
+@@ -379,12 +398,14 @@ class Asynchronous(engine_lib.Engine):
+         )
+         iteration += 1
+         if not acting_entities:
++          report_iteration(iteration)
+           time.sleep(self._sleep_time)
+           continue
+ 
+         action_spec = action_specs[0]
+ 
+         if action_spec.output_type == entity_lib.OutputType.SKIP_THIS_STEP:
++          report_iteration(iteration)
+           time.sleep(self._sleep_time)
+           continue
+ 
+@@ -447,13 +468,7 @@ class Asynchronous(engine_lib.Engine):
+               )
+           )
+ 
+-        if checkpoint_callback is not None:
+-          logging.debug(
+-              'Calling checkpoint callback for %s at iteration %s',
+-              entity.name,
+-              iteration,
+-          )
+-          checkpoint_callback(iteration)
++        report_iteration(iteration)
+ 
+         if step_callback is not None:
+           step_data = step_controller_lib.StepData(
+diff --git a/concordia/prefabs/simulation/generic.py b/concordia/prefabs/simulation/generic.py
+index b8dfd82..fbfde19 100644
+--- a/concordia/prefabs/simulation/generic.py
++++ b/concordia/prefabs/simulation/generic.py
+@@ -518,6 +518,12 @@ class Simulation(simulation_lib.Simulation):
+   def save_checkpoint(self, step: int, checkpoint_path: str):
+     """Saves the state of all entities at the current step."""
+     checkpoint_data = self.make_checkpoint_data()
++    # The engine's own loop index, so a caller watching progress does not have
++    # to reconstruct it. `checkpoint_counter` cannot serve that purpose:
++    # make_checkpoint_data() increments it and callers also snapshot outside
++    # the loop (emergency saves, final state), so it counts snapshots rather
++    # than steps.
++    checkpoint_data["engine_step"] = step
+ 
+     if self._get_state_callback:
+       self._get_state_callback(checkpoint_data)
