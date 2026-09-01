@@ -56,7 +56,11 @@ class _Entity:
         self.observe_calls = 0
 
     def get_all_context_components(self):
-        return {"memory": self._memory}
+        # mappingproxy, as the real entity returns. A dict-returning stub is
+        # what let the probe ship reading no memory at all: the search tested
+        # isinstance(value, dict), every prompt came out empty, and every agent
+        # answered the model's context-free default.
+        return types.MappingProxyType({"memory": self._memory})
 
     def act(self, *a, **k):  # pragma: no cover - must never be called
         self.act_calls += 1
@@ -291,13 +295,37 @@ def test_one_failing_agent_does_not_stop_the_run():
     assert component.get_history("vote_intention")[0][1]["n_responding"] == 1
 
 
-def test_an_entity_without_reachable_memory_still_answers():
-    class _Bare:
-        name = "Bare"
+class _Bare:
+    """An entity the probe cannot read a memory bank from."""
+    name = "Bare"
 
+
+def test_an_entity_without_reachable_memory_is_not_asked_at_all():
+    """The earlier version of this test asserted the opposite, and that is how
+    the bug shipped: an entity with no reachable memory was still asked, still
+    answered, and its answer came from the model's priors rather than from the
+    simulation. A live smoke run then produced 108 responses that were all the
+    neutral option, summed to 100, and measured nothing. Refusing the question
+    is the point; a run that cannot be measured must look unmeasured."""
     component = _probe(_ScriptedModel({}), [_Bare()])
     _fire(component)
-    assert component.get_history("vote_intention")[0][1]["n_responding"] == 1
+
+    assert component.get_history("vote_intention") == []
+    reasons = " ".join(f["reason"] for f in component.get_failures())
+    assert "memory" in reasons
+
+
+def test_one_unreachable_agent_leaves_the_others_measured():
+    """The refusal is per agent, not per run: the reachable agents are still
+    surveyed, and the short denominator says how many were left out."""
+    component = _probe(_ScriptedModel({"Ana": "Candidate A"}),
+                       [_Entity("Ana"), _Bare()])
+    _fire(component)
+
+    _, entry = component.get_history("vote_intention")[0]
+    assert entry["n_responding"] == 1
+    assert entry["n_population"] == 2
+    assert entry["shares"]["Candidate A"] == pytest.approx(100.0)
 
 
 # --- Reporting and resume ------------------------------------------------

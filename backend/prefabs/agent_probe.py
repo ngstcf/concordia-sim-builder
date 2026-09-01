@@ -31,6 +31,7 @@ import dataclasses
 import datetime
 import logging
 import threading
+from collections import abc
 from typing import Any, Dict, List, Optional, Sequence
 
 from concordia.language_model import language_model
@@ -312,6 +313,20 @@ class AgentProbeComponent(
     def _ask(self, entity: Any, item: ProbeItem) -> Optional[str]:
         """Put one item to one agent and return its chosen option."""
         agent_name = getattr(entity, 'name', '<unnamed>')
+
+        # An agent whose memory cannot be reached would be asked about a
+        # simulation it has no access to, and would answer from the model's
+        # priors instead. That produces a confident, well-formed, perfectly
+        # summing series that is a constant. Refuse the question instead: an
+        # empty bank is fine and means the run has not started, but an absent
+        # one means the probe is not attached to what it thinks it is.
+        if self._find_memory_bank(entity) is None:
+            self._record_failure(
+                self._event_counter, item.name,
+                f"{agent_name}: no reachable memory bank, so the answer would "
+                f"come from the model rather than from the simulation")
+            return None
+
         try:
             prompt = self._build_prompt(entity, agent_name, item)
             index, answer, _ = self._model.sample_choice(
@@ -385,13 +400,19 @@ class AgentProbeComponent(
     @staticmethod
     def _find_memory_bank(entity: Any) -> Optional[Any]:
         """Locate an entity's memory bank, or None if it has no reachable one."""
+        # Mapping, not dict: get_all_context_components() returns a
+        # mappingproxy, which is not a dict subclass. Testing for dict skipped
+        # the accessor that has the components, so every prompt was built with
+        # no memory at all and every agent answered the model's context-free
+        # default. The survey still ran, still tallied and still summed to 100;
+        # it just was not measuring the simulation.
         components = {}
         for accessor in ('get_all_context_components', 'context_components'):
             try:
                 value = getattr(entity, accessor, None)
                 if callable(value):
                     value = value()
-                if isinstance(value, dict) and value:
+                if isinstance(value, abc.Mapping) and value:
                     components = value
                     break
             except Exception:  # noqa: BLE001
