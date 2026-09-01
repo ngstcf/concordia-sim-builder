@@ -175,6 +175,32 @@ def test_cumulative_counter_still_never_decreases():
     assert c.get_value("exposure_count") == 15
 
 
+def test_a_walked_back_total_is_recorded_not_just_repaired():
+    """A silently repaired series is indistinguishable from one that never
+    needed repair, so the clamp has to leave a trace. How often the game
+    master tried to walk a running total backwards is the difference between
+    a counter that held and one that was held up."""
+    c = _component(variables=[dict(EXPOSURE, max_delta=20)])
+    c.post_act("[VARIABLES: exposure_count=15]")
+    c.post_act("[VARIABLES: exposure_count=3]")
+
+    violations = c.get_violations()
+    assert [v["kind"] for v in violations] == ["monotonic"]
+    assert violations[0]["proposed"] == 3
+    assert violations[0]["previous"] == 15
+    assert violations[0]["repaired"] == 15
+
+
+def test_a_counter_that_only_grows_records_nothing():
+    """The trace has to stay quiet when the model behaves, or it says nothing."""
+    c = _component(variables=[dict(EXPOSURE, max_delta=20)])
+    for value in (4, 4, 9, 9, 14):
+        c.post_act(f"[VARIABLES: exposure_count={value}]")
+
+    assert c.get_value("exposure_count") == 14
+    assert c.get_violations() == []
+
+
 def test_unbounded_cumulative_counter_warns_at_construction(caplog):
     with caplog.at_level(logging.WARNING):
         _component(variables=[dict(EXPOSURE)])

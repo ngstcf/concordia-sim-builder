@@ -494,12 +494,29 @@ None"""
         one lapse would otherwise discard the accumulated count for the rest
         of the run. Enforcing it here makes the guarantee structural rather
         than a request the model may ignore.
+
+        The correction is recorded like any other, because a silently
+        repaired series is indistinguishable from one that never needed
+        repair. How often the game master tried to walk a running total
+        backwards is a property of the run worth being able to read.
         """
         if not cfg.cumulative:
             return num_value
         current = self._current_values.get(name)
         if isinstance(current, (int, float)) and not isinstance(current, bool):
-            return max(num_value, float(current))
+            floor = float(current)
+            if num_value < floor:
+                self._record_violation(
+                    kind="monotonic",
+                    detail={
+                        "variable": name,
+                        "previous": current,
+                        "proposed": num_value,
+                        "action": "clamped",
+                        "repaired": floor,
+                    },
+                )
+            return max(num_value, floor)
         return num_value
 
     def _validate_value(self, name: str, value: Any) -> Optional[Any]:
