@@ -4,6 +4,7 @@ Service for running simulations with streaming output.
 import asyncio
 import contextlib
 import json
+from collections import abc
 import datetime
 import os
 import re
@@ -192,25 +193,44 @@ def _find_gm_component(game_master, class_name: str):
     keep the ones they do accept, so a component that was certainly attached
     can still be absent from the first place you look.
     """
+    # Mapping, not dict: get_all_context_components() hands back a mappingproxy,
+    # which is not a dict subclass. Testing for dict silently skipped the one
+    # accessor that actually has the components, and the search then reported
+    # a correctly attached component as missing.
     def _components():
         for accessor in ('get_all_context_components', 'context_components'):
             try:
                 value = getattr(game_master, accessor, None)
                 if callable(value):
                     value = value()
-                if isinstance(value, dict):
+                if isinstance(value, abc.Mapping):
                     yield value
             except Exception:  # noqa: BLE001
                 continue
         act_component = getattr(game_master, 'act_component', None)
         nested = getattr(act_component, '_components', None)
-        if isinstance(nested, dict):
+        if isinstance(nested, abc.Mapping):
             yield nested
 
     for mapping in _components():
         for component in mapping.values():
             if component.__class__.__name__ == class_name:
                 return component
+
+
+def _find_component_on_any_gm(game_masters, class_name: str):
+    """Locate a component across every game master in a simulation.
+
+    game_masters[0] is the initializer whenever player_specific_context is set,
+    so a component that deliberately lives on the game master that runs the
+    simulation is absent from the first entry. Searching only the first entry
+    finds nothing and, worse, finds nothing quietly.
+    """
+    for game_master in game_masters or ():
+        found = _find_gm_component(game_master, class_name)
+        if found is not None:
+            return found
+    return None
     return None
 
 
@@ -934,10 +954,15 @@ async def run_simulation_stream(
                 traceback.print_exc()
 
         # Extract the per-agent probe series if one was administered.
+        #
+        # Searched across every game master rather than game_masters[0], which
+        # is the initializer whenever player_specific_context is set. The probe
+        # deliberately lives on the game master that runs the simulation, so
+        # looking only at the first one finds nothing.
         agent_probe_results = None
         if sim.game_masters and getattr(config.game_master, 'agent_probe', None):
-            probe_component = _find_gm_component(
-                sim.game_masters[0], 'AgentProbeComponent')
+            probe_component = _find_component_on_any_gm(
+                sim.game_masters, 'AgentProbeComponent')
             if probe_component is None:
                 # Loud, because the alternative is a run that looks complete
                 # and silently carries no measurement.

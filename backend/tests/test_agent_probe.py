@@ -10,6 +10,7 @@ import copy
 import json
 import os
 import tempfile
+import types
 
 import pandas as pd
 import pytest
@@ -469,3 +470,48 @@ def test_a_run_without_a_probe_exports_no_probe_key():
     metadata = copy.deepcopy(_PROBE_METADATA)
     metadata["game_master"].pop("agent_probe")
     assert "agent_probe" not in _export(metadata)
+
+
+# --- the runner has to look where the builder put it ----------------------
+#
+# The builder attaches the probe to the game master that runs the simulation,
+# which is not game_masters[0] when an initializer is present. A harvest that
+# searches only the first game master finds nothing, and a run that measured
+# perfectly then exports no series at all.
+
+class _StubGM:
+    """Returns a mappingproxy, as the real game master does.
+
+    This detail is the test: mappingproxy is not a dict subclass, so a search
+    that type-checks for dict skips the only accessor that has the components
+    and declares a correctly attached component missing.
+    """
+
+    def __init__(self, name, components=None):
+        self.name = name
+        self._components = dict(components or {})
+
+    def get_all_context_components(self):
+        return types.MappingProxyType(self._components)
+
+
+def test_the_probe_is_found_on_a_game_master_that_is_not_the_first():
+    from backend.services.simulation_runner import _find_component_on_any_gm
+
+    probe = AgentProbeComponent(_ScriptedModel({}), [ITEM], interval=1)
+    game_masters = [
+        _StubGM("initial setup rules"),                     # the initializer
+        _StubGM("MastoTown Rules", {"agent_probe_component": probe}),
+    ]
+
+    assert _find_component_on_any_gm(
+        game_masters, "AgentProbeComponent") is probe
+
+
+def test_a_missing_probe_is_reported_as_missing_not_guessed_at():
+    from backend.services.simulation_runner import _find_component_on_any_gm
+
+    assert _find_component_on_any_gm(
+        [_StubGM("a"), _StubGM("b")], "AgentProbeComponent") is None
+    assert _find_component_on_any_gm([], "AgentProbeComponent") is None
+    assert _find_component_on_any_gm(None, "AgentProbeComponent") is None
