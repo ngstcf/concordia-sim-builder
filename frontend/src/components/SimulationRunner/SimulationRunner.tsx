@@ -12,6 +12,7 @@ import TimelineVisualization from './TimelineVisualization';
 import ActionsView from './ActionsView';
 import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
+import AgentProbeChart from './AgentProbeChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
 import BatchRunner from './BatchRunner';
@@ -251,7 +252,7 @@ export default function SimulationRunner() {
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [showBatchRunner, setShowBatchRunner] = useState(false);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'agent-probe' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stepping' | 'stopped' | null>(null);
@@ -1580,6 +1581,19 @@ export default function SimulationRunner() {
                     >
                       Grounded Variables
                     </button>
+                    {/* Next to Grounded Variables on purpose: the two measure the
+                        same kind of quantity by different means, and comparing
+                        them is the point. */}
+                    <button
+                      onClick={() => setActiveTab('agent-probe')}
+                      className={`${
+                        activeTab === 'agent-probe'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
+                    >
+                      Agent Probe
+                    </button>
                     <button
                       onClick={() => setActiveTab('cooperation')}
                       className={`${
@@ -1678,6 +1692,10 @@ export default function SimulationRunner() {
                     simulationId={results.task_id || null}
                     llmSettings={llmSettings}
                   />
+                )}
+
+                {activeTab === 'agent-probe' && (
+                  <AgentProbeChart filename={results.log_filename || null} />
                 )}
 
                 {activeTab === 'cooperation' && (

@@ -9,7 +9,8 @@ import type {
   PrefabsResponseData,
   ProviderInfo,
   SimulationTemplate,
-  BatchReliabilityReport
+  BatchReliabilityReport,
+  AgentProbeResults
 } from '../types/simulation';
 
 // API base URL - default to localhost in development
@@ -890,11 +891,13 @@ export interface SimulationAnalytics {
   has_grounded_variables: boolean;
   has_components: boolean;
   has_measurements: boolean;
+  has_agent_probe?: boolean;
   // NEW: Feature-specific data
   nested_simulations: Record<string, NestedSimulationData>;
   grounded_variables: GroundedVariableData[];
   components: ComponentAnalysisData;
   measurements: Record<string, any[]>;
+  agent_probe?: AgentProbeResults;
 }
 
 export async function getSimulationAnalytics(filename: string): Promise<SimulationAnalytics> {

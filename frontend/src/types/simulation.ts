@@ -116,6 +116,55 @@ export interface AgentProbeConfig {
   memory_limit?: number;
 }
 
+// What one administration of one item recorded. n_responding is carried
+// separately from n_population because an item answered by half the roster is
+// a different measurement from one answered by all of it, and the shares alone
+// cannot tell them apart.
+export interface ProbeAdministration {
+  event_index: number;
+  shares: Record<string, number>;
+  counts: Record<string, number>;
+  n_responding: number;
+  n_population: number;
+  timestamp?: string;
+}
+
+export interface ProbeResponse {
+  event_index: number;
+  timestamp?: string;
+  item: string;
+  agent: string;
+  answer: string;
+}
+
+export interface ProbeFailure {
+  event_index: number;
+  item: string;
+  reason: string;
+}
+
+// What the probe managed to measure, as opposed to what it was asked to.
+export interface ProbeIntegrity {
+  population: number;
+  items: string[];
+  interval: number;
+  administrations: number;
+  events_seen: number;
+  failures: number;
+  per_item: Record<string, {
+    administrations: number;
+    min_responding: number;
+    max_responding: number;
+  }>;
+}
+
+export interface AgentProbeResults {
+  series: Record<string, ProbeAdministration[]>;
+  responses: ProbeResponse[];
+  failures: ProbeFailure[];
+  integrity: ProbeIntegrity;
+}
+
 // Available Action
 export interface AvailableAction {
   name: string;

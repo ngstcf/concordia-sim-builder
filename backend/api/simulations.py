@@ -1046,10 +1046,12 @@ async def get_simulation_analytics(filename: str):
     has_grounded_variables = False
     has_components = False
     has_measurements = False
+    has_agent_probe = False
     nested_sim_data = {}
     grounded_variables_data = {}
     component_data = {}
     measurements_data = {}
+    agent_probe_data = {}
 
     if metadata_path.exists():
         try:
@@ -1075,6 +1077,16 @@ async def get_simulation_analytics(filename: str):
                     has_grounded_variables = True
                     grounded_variables_data["variables"] = metadata["game_master"]["grounded_variables"]
                     debug_print(f"[DEBUG] Found {len(grounded_variables_data['variables'])} grounded variables")
+
+                # Passed through whole. The probe's series is already the
+                # analysis unit, and its integrity block is what lets a
+                # reader tell a measured series from a partial one, so
+                # reshaping here would only lose the distinction.
+                if metadata.get("game_master", {}).get("agent_probe"):
+                    has_agent_probe = True
+                    agent_probe_data = metadata["game_master"]["agent_probe"]
+                    debug_print(f"[DEBUG] Found agent probe with "
+                                f"{len(agent_probe_data.get('series', {}))} item(s)")
 
                 # NEW: Detect components
                 for agent in metadata.get("agents", []):
@@ -1148,11 +1160,13 @@ async def get_simulation_analytics(filename: str):
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
             "has_measurements": has_measurements,
+            "has_agent_probe": has_agent_probe,
             # NEW: Feature-specific data (populated from metadata)
             "nested_simulations": nested_sim_data,
             "grounded_variables": grounded_variables_data.get("variables", []),
             "components": component_data,
-            "measurements": measurements_data
+            "measurements": measurements_data,
+            "agent_probe": agent_probe_data
         }
 
         # Detect v2.4+ structured log format (content is in embedded JSON, not static HTML)
