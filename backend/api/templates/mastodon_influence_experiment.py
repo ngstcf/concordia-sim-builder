@@ -228,13 +228,12 @@ changes candidate support and trust in the information environment.""",
                 },
                 {
                     "name": "misinfo_exposure",
-                    # Specified as a running total, not a level. The original
-                    # wording ("count-like indicator ... observed in the feed")
-                    # read as an instantaneous reading, so the game master
-                    # re-estimated it from the current event: the value rose
-                    # while a claim was circulating and fell back afterwards,
-                    # ending near 0 in every run and in both conditions, which
-                    # made it useless as a manipulation check.
+                    # Specified as a running total, not a level. Wording that
+                    # reads as an instantaneous quantity ("count-like
+                    # indicator observed in the feed") invites the game master
+                    # to re-estimate it from the current event, so the value
+                    # rises while a claim is circulating and falls back once it
+                    # stops, which is useless as a manipulation check.
                     "variable_type": "numerical",
                     "description": (
                         "Running total of misinformation exposures since the"
@@ -251,6 +250,46 @@ changes candidate support and trust in the information environment.""",
                     ),
                 },
             ],
+            # The variables above are the game master's estimates, taken from
+            # the events it narrated. The probe below asks each resident
+            # directly and counts the answers, so its shares are shares of a
+            # known roster. Both run on the same simulation, which is what
+            # makes them comparable.
+            "agent_probe": {
+                "items": [
+                    {
+                        "name": "vote_intention",
+                        "question": (
+                            "The city election is coming up. Which candidate"
+                            " do you intend to vote for right now?"
+                        ),
+                        "options": ["Rivera", "Hale", "Undecided"],
+                        "description": (
+                            "Vote intention, tallied over the full resident"
+                            " roster"
+                        ),
+                    },
+                    {
+                        "name": "information_trust",
+                        "question": (
+                            "How much do you trust what you are reading about"
+                            " the election on MastoTown right now?"
+                        ),
+                        "options": ["Trust it", "Unsure", "Distrust it"],
+                        "description": (
+                            "Trust in the information environment, tallied"
+                            " over the full resident roster"
+                        ),
+                    },
+                ],
+                # Chosen so a 20-step run is surveyed about 20 times: this
+                # scenario produces roughly 22 game master events per step at
+                # this population size. Scale with the population, since a
+                # larger one produces proportionally more events per step and
+                # would otherwise be surveyed far more often.
+                "interval": 22,
+                "memory_limit": 40,
+            },
         },
         "shared_memories": [
             "MastoTown is a local Mastodon-like social network where residents debate city politics.",

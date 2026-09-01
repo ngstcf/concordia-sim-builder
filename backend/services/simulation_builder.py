@@ -488,10 +488,16 @@ def build_simulation(
             for var in config.game_master.grounded_variables
         ]
 
+        variable_groups = [
+            grp.model_dump() if hasattr(grp, 'model_dump') else grp
+            for grp in (config.game_master.variable_groups or [])
+        ]
+
         # Create the grounded variables component
         grounded_vars_component = create_grounded_variables_component(
             model=model,
-            variable_configs=variable_configs
+            variable_configs=variable_configs,
+            variable_groups=variable_groups,
         )
 
         # Add component to game master extra_components
@@ -503,6 +509,29 @@ def build_simulation(
         debug_print(f"[DEBUG] Component type: {type(grounded_vars_component).__name__}")
         debug_print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
         debug_print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
+
+    # Add the per-agent probe if provided. Independent of grounded_variables:
+    # configuring both administers a tallied and a narrator-estimated series
+    # over the same run, which is what makes the two comparable.
+    agent_probe_component = None
+    if config.game_master.agent_probe and config.game_master.agent_probe.items:
+        from backend.prefabs.agent_probe import create_agent_probe_component
+
+        probe_cfg = config.game_master.agent_probe
+        agent_probe_component = create_agent_probe_component(
+            model=model,
+            items=[item.model_dump() if hasattr(item, 'model_dump') else item
+                   for item in probe_cfg.items],
+            interval=probe_cfg.interval,
+            memory_limit=probe_cfg.memory_limit,
+        )
+
+        if agent_probe_component is not None:
+            if 'extra_components' not in gm_params:
+                gm_params['extra_components'] = {}
+            gm_params['extra_components']['agent_probe_component'] = agent_probe_component
+            debug_print(f"[DEBUG] Agent probe added with {len(probe_cfg.items)} item(s), "
+                        f"interval {probe_cfg.interval}")
 
     # Add contrib GM components if provided
     if config.game_master.contrib_components:
@@ -714,6 +743,27 @@ def build_simulation(
             gm._context_components['grounded_variables_component'] = grounded_vars_component
             debug_print(f"[DEBUG] Injected grounded_variables_component directly into '{gm.name}' "
                         f"(prefab '{config.game_master.prefab}' does not process extra_components)")
+
+    # The probe surveys the population, so it needs the entities, which do not
+    # exist until the simulation is constructed. Bind them here and inject the
+    # component for the same reason as above.
+    if agent_probe_component is not None and sim.game_masters:
+        entities = list(getattr(sim, 'entities', []) or [])
+        if entities:
+            agent_probe_component.bind_entities(entities)
+            gm = sim.game_masters[0]
+            if (hasattr(gm, '_context_components') and
+                    'agent_probe_component' not in gm._context_components):
+                gm._context_components['agent_probe_component'] = agent_probe_component
+                debug_print(f"[DEBUG] Injected agent_probe_component directly into '{gm.name}'")
+            print(f"[BUILD] Agent probe bound to {len(entities)} entities")
+        else:
+            # Silently measuring nothing is the failure mode the probe exists
+            # to prevent, so refuse to run rather than export an empty series.
+            raise ValueError(
+                "agent_probe is configured but the simulation exposes no "
+                "entities to survey, so the probe would produce no data."
+            )
 
     # When allow_early_termination=False, ensure every GM has NeverTerminate
     # under DEFAULT_TERMINATE_COMPONENT_KEY so SwitchAct._terminate() short-

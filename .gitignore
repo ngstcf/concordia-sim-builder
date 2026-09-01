@@ -105,6 +105,7 @@ images/
 # reference endpoints and keys. Pure unit tests, which need neither network nor
 # credentials, are whitelisted below so the behavior they pin ships with the code.
 backend/tests/*
+!backend/tests/test_agent_probe.py
 !backend/tests/test_grounded_variable_invariants.py
 !backend/tests/test_watchdog_finalization.py
 

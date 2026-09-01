@@ -185,6 +185,35 @@ def _classify_watchdog_state(
     return 'finalizing' if run_loop_finished else 'hung'
 
 
+def _find_gm_component(game_master, class_name: str):
+    """Locate a component on a game master by class name.
+
+    Prefabs differ in whether they accept extra_components and in where they
+    keep the ones they do accept, so a component that was certainly attached
+    can still be absent from the first place you look.
+    """
+    def _components():
+        for accessor in ('get_all_context_components', 'context_components'):
+            try:
+                value = getattr(game_master, accessor, None)
+                if callable(value):
+                    value = value()
+                if isinstance(value, dict):
+                    yield value
+            except Exception:  # noqa: BLE001
+                continue
+        act_component = getattr(game_master, 'act_component', None)
+        nested = getattr(act_component, '_components', None)
+        if isinstance(nested, dict):
+            yield nested
+
+    for mapping in _components():
+        for component in mapping.values():
+            if component.__class__.__name__ == class_name:
+                return component
+    return None
+
+
 def _save_resumable_state(
     base_path: Path,
     checkpoint_data: dict,
@@ -904,6 +933,42 @@ async def run_simulation_stream(
                 import traceback
                 traceback.print_exc()
 
+        # Extract the per-agent probe series if one was administered.
+        agent_probe_results = None
+        if sim.game_masters and getattr(config.game_master, 'agent_probe', None):
+            probe_component = _find_gm_component(
+                sim.game_masters[0], 'AgentProbeComponent')
+            if probe_component is None:
+                # Loud, because the alternative is a run that looks complete
+                # and silently carries no measurement.
+                print("[ERROR] Agent probe was configured but its component was "
+                      "not found on the game master; no probe data was recorded.")
+            else:
+                try:
+                    summary = probe_component.get_integrity_summary()
+                    agent_probe_results = {
+                        'series': {
+                            name: [
+                                {'event_index': event_index, **entry}
+                                for event_index, entry in series
+                            ]
+                            for name, series in
+                            probe_component.get_all_history().items()
+                        },
+                        # Individual answers, so a shift in the aggregate stays
+                        # traceable to the agents who changed their minds.
+                        'responses': probe_component.get_responses(),
+                        'failures': probe_component.get_failures(),
+                        'integrity': summary,
+                    }
+                    print(f"[PROBE] {summary['administrations']} administration(s) "
+                          f"over {summary['population']} agents, "
+                          f"{summary['failures']} failure(s)")
+                except Exception as e:
+                    print(f"[ERROR] Failed to extract agent probe results: {e}")
+                    import traceback
+                    traceback.print_exc()
+
         # Special handling for interviewer prefab to extract questionnaire results
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
             debug_print(f"[DEBUG] Interviewer prefab detected, extracting questionnaire results")
@@ -1306,6 +1371,15 @@ async def run_simulation_stream(
 
             agent_metadata["game_master"]["grounded_variables"] = grounded_vars_data
             debug_print(f"[DEBUG] Added {len(grounded_vars_data)} grounded variables to metadata")
+
+        # Probe results sit beside the grounded variables rather than replacing
+        # them: when both are configured the export carries a tallied and a
+        # narrator-estimated series for the same run, which is what makes the
+        # two instruments comparable.
+        if agent_probe_results:
+            agent_metadata["game_master"]["agent_probe"] = agent_probe_results
+            debug_print(f"[DEBUG] Added agent probe results for "
+                        f"{len(agent_probe_results['series'])} item(s)")
 
         for agent in config.agents:
             agent_info = {

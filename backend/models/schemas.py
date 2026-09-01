@@ -116,6 +116,99 @@ class VariableConfig(BaseModel):
             "each step (support levels, morale, temperature)."
         ),
     )
+    max_delta: Optional[float] = Field(
+        None,
+        description=(
+            "Largest increase permitted in a single update. Strongly "
+            "recommended for cumulative counters, which are otherwise "
+            "unbounded above: a per-participant count should not be able to "
+            "rise by more than the population size in one step."
+        ),
+    )
+    group: Optional[str] = Field(
+        None,
+        description=(
+            "Name of the variable group this belongs to. Percentage variables "
+            "sharing a group are treated as shares of one whole and must sum "
+            "to 100; use game_master.variable_groups for any other total."
+        ),
+    )
+
+
+class VariableGroupConfig(BaseModel):
+    """A joint constraint across several grounded variables.
+
+    Per-variable bounds cannot express "these shares describe one
+    population", so two support percentages can each be a legal 0-100 value
+    while summing to an impossible total. Declaring the group makes the
+    constraint checkable at the moment of update.
+    """
+    name: str = Field(..., description="Group name, used in violation reports")
+    members: List[str] = Field(..., description="Names of the member variables")
+    sums_to: float = Field(..., description="Total the members must sum to")
+    tolerance: float = Field(
+        1.0,
+        description="Absolute deviation from the total tolerated without repair"
+    )
+    on_violation: Literal["renormalize", "reject", "flag"] = Field(
+        "renormalize",
+        description=(
+            "renormalize: rescale members to the declared total, preserving "
+            "proportions. reject: discard the offending update and keep the "
+            "previous values. flag: record the violation and change nothing."
+        ),
+    )
+
+
+class ProbeItemConfig(BaseModel):
+    """One forced-choice survey question put directly to every agent.
+
+    A grounded variable asks the game master to estimate a population quantity
+    from the events it narrated, which gives the figure no denominator: the
+    shares are not shares of any particular roster, so nothing constrains them
+    to sum, and a residual category has no reason to be the remainder. A probe
+    item asks each agent instead and counts the answers, so the resulting
+    shares partition a population that is known.
+    """
+    name: str = Field(..., description="Series name in the exported dataset")
+    question: str = Field(
+        ...,
+        description="The question as put to the agent, in the second person"
+    )
+    options: List[str] = Field(
+        ...,
+        description=(
+            "Permitted answers. Responses are constrained to this list, so the "
+            "tally is exhaustive and the shares sum to 100."
+        )
+    )
+    description: str = Field("", description="Optional note carried to export")
+
+
+class AgentProbeConfig(BaseModel):
+    """Longitudinal per-agent measurement, administered alongside the run."""
+    items: List[ProbeItemConfig] = Field(
+        ...,
+        description="Survey items to administer to every agent"
+    )
+    interval: int = Field(
+        25,
+        ge=1,
+        description=(
+            "Administer once every this many game master events. The "
+            "asynchronous engine gives each entity its own thread with no "
+            "shared step boundary, so game master events are the only clock "
+            "every agent is measured against."
+        )
+    )
+    memory_limit: int = Field(
+        40,
+        ge=1,
+        description=(
+            "How many of an agent's most recent memories to put in front of "
+            "it when it answers. Bounds probe cost per agent."
+        )
+    )
 
 
 class AvailableAction(BaseModel):
@@ -147,6 +240,21 @@ class GameMasterConfig(BaseModel):
     grounded_variables: Optional[List[VariableConfig]] = Field(
         None,
         description="Optional grounded variables to track during simulation"
+    )
+    variable_groups: Optional[List[VariableGroupConfig]] = Field(
+        None,
+        description=(
+            "Optional joint constraints across grounded variables, for shares "
+            "of a common whole that must sum to a declared total"
+        )
+    )
+    agent_probe: Optional[AgentProbeConfig] = Field(
+        None,
+        description=(
+            "Optional per-agent survey administered during the run. Can be "
+            "used alongside grounded_variables, in which case each run yields "
+            "both a tallied and a narrator-estimated series for comparison."
+        )
     )
     critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
         None,
