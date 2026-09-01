@@ -6,7 +6,10 @@ residual category that never moves, or a total with no ceiling, because none
 of those arithmetic outcomes is reachable from counting answers.
 """
 
+import copy
 import json
+import os
+import tempfile
 
 import pandas as pd
 import pytest
@@ -198,16 +201,35 @@ def test_memory_is_truncated_to_the_configured_limit():
 
 # --- Cadence -------------------------------------------------------------
 
-def test_the_probe_fires_only_on_its_interval():
+def test_the_probe_fires_on_the_first_event_then_only_on_its_interval():
     component = _probe(_ScriptedModel({}), [_Entity("Ana")], interval=5)
-    _fire(component, times=4)
-    assert component.get_history("vote_intention") == []
-
     _fire(component)
+    assert len(component.get_history("vote_intention")) == 1, \
+        "the first event should establish a baseline"
+
+    _fire(component, times=3)
     assert len(component.get_history("vote_intention")) == 1
 
-    _fire(component, times=5)
+    _fire(component)
     assert len(component.get_history("vote_intention")) == 2
+
+    _fire(component, times=5)
+    assert len(component.get_history("vote_intention")) == 3
+
+
+def test_the_baseline_is_read_on_the_same_instrument_as_every_later_point():
+    """Without a baseline the only available starting value is the game
+    master's declared default, and comparing a probe reading against a declared
+    default reintroduces the instrument mixing the probe exists to remove."""
+    component = _probe(_ScriptedModel({}), [_Entity("Ana")], interval=100)
+    _fire(component)
+
+    baseline = component.get_history("vote_intention")
+    assert len(baseline) == 1
+    event_index, entry = baseline[0]
+    assert event_index == 1
+    assert sum(entry["shares"].values()) == pytest.approx(100.0)
+    assert entry["n_responding"] == entry["n_population"] == 1
 
 
 def test_events_are_stamped_on_the_series():
@@ -217,7 +239,7 @@ def test_events_are_stamped_on_the_series():
     _fire(component, times=9)
 
     assert [index for index, _ in component.get_history("vote_intention")] \
-        == [3, 6, 9]
+        == [1, 3, 6, 9]
 
 
 def test_a_probe_with_no_entities_records_nothing():
@@ -286,9 +308,9 @@ def test_integrity_summary_describes_what_was_measured():
 
     summary = component.get_integrity_summary()
     assert summary["population"] == 4
-    assert summary["administrations"] == 2
+    assert summary["administrations"] == 3  # baseline at 1, then 2 and 4
     assert summary["events_seen"] == 4
-    assert summary["failures"] == 2
+    assert summary["failures"] == 3
     assert summary["per_item"]["vote_intention"]["min_responding"] == 3
 
 
@@ -375,3 +397,75 @@ def test_apportionment_stays_faithful_to_the_counts():
     assert entry["shares"]["Candidate A"] == pytest.approx(200 / 3, abs=1e-4)
     assert entry["shares"]["Candidate B"] == pytest.approx(100 / 3, abs=1e-4)
     assert entry["shares"]["Undecided"] == 0.0
+
+
+# --- the series has to survive the trip to disk ---------------------------
+#
+# The component can measure perfectly and still deliver nothing: the run
+# writes a metadata sidecar and the exporter builds the analysis payload from
+# it, so a series that the exporter does not carry is a series the analysis
+# never sees. That failure is silent, which is the one this component exists
+# to rule out.
+
+def _export(metadata: dict) -> dict:
+    from backend.utils.data_exporter import export_full_json
+    directory = tempfile.mkdtemp()
+    metadata_path = os.path.join(directory, "run.metadata.json")
+    html_path = os.path.join(directory, "run.html")
+    with open(metadata_path, "w", encoding="utf-8") as handle:
+        json.dump(metadata, handle)
+    with open(html_path, "w", encoding="utf-8") as handle:
+        handle.write("<html></html>")
+    return export_full_json(html_path, metadata_path)
+
+
+_PROBE_METADATA = {
+    "timestamp": "t", "premise": "p", "engine_type": "asynchronous",
+    "elapsed_seconds": 1, "llm": {}, "gm_llm": {}, "agents": [],
+    "game_master": {
+        "grounded_variables": [{"name": "rivera_support", "history": [1, 2]}],
+        "agent_probe": {
+            "series": {"vote_intention": [
+                {"event": 1,
+                 "shares": {"Candidate Rivera": 50.0, "Candidate Hale": 50.0},
+                 "counts": {"Candidate Rivera": 3, "Candidate Hale": 3},
+                 "n_responding": 6, "n_population": 6},
+            ]},
+            "integrity": {"population": 6, "administrations": 1,
+                          "events_seen": 1, "failures": 0},
+            "responses": [{"agent": "Ana", "item": "vote_intention",
+                           "answer": "Candidate Rivera", "event": 1}],
+            "failures": [],
+        },
+    },
+}
+
+
+def test_the_probe_series_reaches_the_export():
+    export = _export(copy.deepcopy(_PROBE_METADATA))
+
+    probe = export["agent_probe"]
+    assert probe["integrity"]["population"] == 6
+    assert probe["series"]["vote_intention"][0]["event"] == 1
+    # The grounded variables still come through: the probe is the primary
+    # instrument, not the only one, and the paired comparison needs both.
+    assert [v["name"] for v in export["grounded_variables"]] == ["rivera_support"]
+
+
+def test_the_integrity_block_survives_alongside_the_series():
+    """A partial series and a complete one look identical without it."""
+    metadata = copy.deepcopy(_PROBE_METADATA)
+    metadata["game_master"]["agent_probe"]["integrity"]["failures"] = 4
+    metadata["game_master"]["agent_probe"]["failures"] = [
+        {"agent": "Ben", "item": "vote_intention", "error": "provider timeout"},
+    ]
+
+    probe = _export(metadata)["agent_probe"]
+    assert probe["integrity"]["failures"] == 4
+    assert probe["failures"][0]["agent"] == "Ben"
+
+
+def test_a_run_without_a_probe_exports_no_probe_key():
+    metadata = copy.deepcopy(_PROBE_METADATA)
+    metadata["game_master"].pop("agent_probe")
+    assert "agent_probe" not in _export(metadata)

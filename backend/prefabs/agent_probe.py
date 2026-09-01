@@ -207,11 +207,21 @@ class AgentProbeComponent(
         return ''
 
     def post_act(self, event: str) -> str:
-        """Count game master events and administer the probe when due."""
+        """Count game master events and administer the probe when due.
+
+        The first event always administers, giving the series a baseline read
+        on the same instrument as every later point. Without it the only
+        available starting value is the game master's declared default, and
+        comparing a probe reading against a declared default is the instrument
+        mixing this component exists to avoid. It is a baseline in the sense
+        that the population has not yet been exposed to the run, not that
+        nothing at all has happened: one entity has acted by this point.
+        """
         with self._lock:
             self._event_counter += 1
-            due = (self._event_counter % self._interval == 0)
             event_index = self._event_counter
+            due = (event_index == 1
+                   or event_index % self._interval == 0)
 
         if due and self._entities and self._items:
             self._administer(event_index)

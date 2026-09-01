@@ -223,6 +223,7 @@ def export_full_json(
 
     metadata = {}
     grounded_variables = []
+    agent_probe = {}
     game_theoretic = {}
 
     if os.path.exists(metadata_path):
@@ -237,6 +238,11 @@ def export_full_json(
                 'description': var.get('description', ''),
                 'history': var.get('history', []),
             })
+
+        # Carried through whole rather than reshaped: the probe's series is
+        # already the analysis unit, and its integrity and failure blocks are
+        # what let a reader tell a measured series from a partial one.
+        agent_probe = gm.get('agent_probe') or {}
 
         game_theoretic = metadata.get('game_theoretic', {})
 
@@ -262,6 +268,9 @@ def export_full_json(
         'gm_narrations': gm_rows,
         'grounded_variables': grounded_variables,
     }
+
+    if agent_probe:
+        result['agent_probe'] = agent_probe
 
     if game_theoretic:
         result['game_theoretic'] = game_theoretic

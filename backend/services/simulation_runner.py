@@ -2079,6 +2079,15 @@ async def run_simulation_simple(
                 for var in config.game_master.grounded_variables
             ]
 
+        # This path records the declared configuration, not what the run
+        # measured; the streamed path is the one that harvests component
+        # histories. Say so rather than letting a configured probe produce an
+        # export with no series in it and no indication why.
+        if getattr(config.game_master, 'agent_probe', None):
+            print("[PROBE] Simulation ran on the simple path, which does not "
+                  "harvest component histories: no probe series will appear in "
+                  "this export. Use the streaming endpoint to collect it.")
+
         for agent in config.agents:
             agent_info = {
                 "id": agent.id,

@@ -747,16 +747,36 @@ def build_simulation(
     # The probe surveys the population, so it needs the entities, which do not
     # exist until the simulation is constructed. Bind them here and inject the
     # component for the same reason as above.
+    #
+    # Unlike the grounded variables, the probe is injected into the *named* game
+    # master rather than game_masters[0], which is the initializer whenever
+    # player_specific_context is set. The probe's cadence counts game master
+    # events, so letting it also count setup events would shift every
+    # administration by however many events initialization happened to take and
+    # would put the first reading before the formative memories exist.
     if agent_probe_component is not None and sim.game_masters:
         entities = list(getattr(sim, 'entities', []) or [])
         if entities:
             agent_probe_component.bind_entities(entities)
-            gm = sim.game_masters[0]
+            gm = next((g for g in sim.game_masters
+                       if getattr(g, 'name', None) == config.game_master.name),
+                      sim.game_masters[0])
             if (hasattr(gm, '_context_components') and
                     'agent_probe_component' not in gm._context_components):
                 gm._context_components['agent_probe_component'] = agent_probe_component
                 debug_print(f"[DEBUG] Injected agent_probe_component directly into '{gm.name}'")
-            print(f"[BUILD] Agent probe bound to {len(entities)} entities")
+            # extra_components may have placed the probe on other game masters,
+            # including the initializer. Detach it everywhere but the named one.
+            for other in sim.game_masters:
+                if other is gm:
+                    continue
+                if getattr(other, '_context_components', None) and \
+                        other._context_components.get('agent_probe_component') is agent_probe_component:
+                    del other._context_components['agent_probe_component']
+                    debug_print(f"[DEBUG] Detached agent_probe_component from '{other.name}' "
+                                f"so setup events do not advance the probe cadence")
+            print(f"[BUILD] Agent probe bound to {len(entities)} entities, "
+                  f"measuring on '{gm.name}'")
         else:
             # Silently measuring nothing is the failure mode the probe exists
             # to prevent, so refuse to run rather than export an empty series.
