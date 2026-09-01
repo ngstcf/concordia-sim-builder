@@ -78,7 +78,8 @@ Each simulation produces three output files:
 - **Formative Memories** — Generate agent backstories with standalone endpoint and in-editor button
 - **Nested Simulations** — PhoneGameMaster pattern for running mini-simulations within simulations
 - **Measurements** — Inject measurements into any engine with Component Logs tab in results
-- **Grounded Variables** — Track simulation state variables with AI-powered post-processing
+- **Grounded Variables** — Track simulation state variables with AI-powered post-processing, with optional joint constraints (`variable_groups`) for shares of a common whole that must sum to a declared total
+- **Agent Probe** — Administer a fixed multiple-choice question to every agent during the run and tally the answers, so a measured quantity has the roster as its denominator rather than a narrator's estimate (see [Measuring by Counting](#measuring-by-counting))
 - **Live Log Streaming** — Real-time terminal output mirrored to frontend via SSE with color-coded messages
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
 - **8 LLM Providers** — OpenAI, Azure OpenAI (up to two endpoints), DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
@@ -280,6 +281,89 @@ Scope note: this is *observability through the browser* — detection still
 requires polling from an open tab. Server-side alerting that needs no tab
 at all (webhooks, scheduled sentinels) is planned as part of a dedicated
 long-run operating mode.
+
+## Measuring by Counting
+
+Grounded variables are estimated by the Game Master: asked what share of a
+population holds some view, it reads the current situation and narrates a
+figure. That is useful as situational state carried in the narrative, but
+nothing ties the number to the agents that exist, so it should not be read
+as a measurement of them. Two features address this. Both are configured in
+the Game Master form (Agent Probe, and Joint Constraints under Grounded
+Variables) and both round-trip through the simulation config JSON, so they
+can equally be set by hand or through `POST /api/simulations/execute`.
+
+### Agent probe
+
+Puts a fixed multiple-choice question to every agent at a set cadence and
+tallies the answers. The denominator is the roster by construction, so the
+shares cannot fail to sum to 100, and every point is attributable to named
+respondents.
+
+```json
+"game_master": {
+  "agent_probe": {
+    "items": [{
+      "name": "vote_intention",
+      "question": "Which candidate do you currently intend to vote for?",
+      "options": ["Candidate A", "Candidate B", "Undecided"]
+    }],
+    "interval": 54,
+    "memory_limit": 40
+  }
+}
+```
+
+`interval` counts **Game Master events, not engine steps**. Under the
+asynchronous engine each entity runs its own loop with no shared step
+boundary, so events are the only clock every agent is measured against.
+Cost scales with population, so an interval tuned for a small cast
+oversamples a large one by the same factor the cast grew: size it from the
+number of agents expected to act, not from a fixed number of steps. The
+Game Master form does that conversion for you: pick a cadence in steps and
+it derives the event interval from the cast and their activity rates, then
+previews how many measurements the run will yield and what they will cost
+in model calls.
+
+The probe reads memory and never makes an agent act or observe, so it does
+not perturb the run. Results land at the top level of the JSON export
+under `agent_probe`, in four blocks: `series` (the tally per item over
+time), `responses` (every individual answer, with the agent that gave it),
+`failures` (each reading that did not come back, with a reason), and
+`integrity` (administrations, events seen, and failure count).
+
+Read `integrity` before the series. An agent that cannot be surveyed is
+recorded as a failure and left out of that reading's denominator, rather
+than being given a default answer, so a series that moved because fewer
+agents answered is distinguishable from one that moved because the
+population changed. If a component is configured but cannot be found at
+harvest time, the run says so loudly rather than exporting nothing.
+
+### Variable groups
+
+Per-variable bounds cannot express that several variables describe one
+whole: each share can be a legal 0-100 value while the total is
+impossible. `variable_groups` declares the joint constraint.
+
+```json
+"game_master": {
+  "variable_groups": [{
+    "name": "poll_shares",
+    "members": ["rivera_support", "hale_support", "undecided_rate"],
+    "sums_to": 100.0,
+    "tolerance": 1.0,
+    "on_violation": "renormalize"
+  }]
+}
+```
+
+`on_violation` is `renormalize` (rescale to the declared total, preserving
+proportions), `reject` (discard the offending update, keep the previous
+values), or `flag` (record it and change nothing). Violations are recorded
+under all three, so a rescaled series still shows where it had to be
+rescaled. Individual variables also accept `cumulative` (a running total
+that never decreases) and `max_delta` (the largest single-update
+increase), which together keep a counter from being unbounded above.
 
 ## Templates (38)
 

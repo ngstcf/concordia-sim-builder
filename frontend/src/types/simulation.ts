@@ -78,6 +78,42 @@ export interface VariableConfig {
   max_value?: number;
   allowed_values?: string[];
   update_rule?: string;
+  // Treat as a running total: the Game Master carries the previous value
+  // forward and adds to it, and it is never allowed to decrease.
+  cumulative?: boolean;
+  // Largest increase permitted in one update. Without it a cumulative
+  // counter is unbounded above.
+  max_delta?: number;
+  // Name of a variable group this belongs to; see VariableGroupConfig.
+  group?: string;
+}
+
+// A joint constraint across several grounded variables. Per-variable bounds
+// cannot express "these shares describe one population": each share can be a
+// legal 0-100 value while the total is impossible.
+export interface VariableGroupConfig {
+  name: string;
+  members: string[];
+  sums_to: number;
+  tolerance?: number;
+  on_violation?: 'renormalize' | 'reject' | 'flag';
+}
+
+// One forced-choice question put directly to every agent.
+export interface ProbeItemConfig {
+  name: string;
+  question: string;
+  options: string[];
+  description?: string;
+}
+
+// Longitudinal per-agent measurement administered alongside the run.
+export interface AgentProbeConfig {
+  items: ProbeItemConfig[];
+  // Counted in Game Master events, not engine steps: the asynchronous engine
+  // gives each entity its own loop with no shared step boundary.
+  interval: number;
+  memory_limit?: number;
 }
 
 // Available Action
@@ -114,6 +150,8 @@ export interface GameMasterConfig {
   acting_order: ActingOrder;
   parameters: Record<string, any>;
   grounded_variables?: VariableConfig[];
+  variable_groups?: VariableGroupConfig[];
+  agent_probe?: AgentProbeConfig;
   critical_decision_points?: CriticalDecisionPoint[];
   contrib_components?: ContribComponentConfig[];
   allow_early_termination?: boolean;
