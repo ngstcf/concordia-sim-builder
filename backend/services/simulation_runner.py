@@ -2,6 +2,7 @@
 Service for running simulations with streaming output.
 """
 import asyncio
+import contextlib
 import json
 import datetime
 import os
@@ -115,6 +116,73 @@ def _save_checkpoint_metadata(
     metadata_path = checkpoint_path.with_suffix('.metadata.json')
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
+
+
+@contextlib.contextmanager
+def _mark_run_loop_completion(sim, finished_flag: list):
+    """Record when the engine's run loop ends, before sim.play() returns.
+
+    play() does not return once the loop is done: it then builds a
+    SimulationLog from the raw log, which on a large run is minutes of pure
+    CPU with no LLM calls and no step events. From outside that is
+    indistinguishable from a hang. The step counter cannot stand in for "the
+    loop is done" because under the asynchronous engine it undercounts, so
+    mark the transition at its source.
+
+    Restores the original method on exit, and is a no-op if the simulation
+    exposes no engine, leaving watchdog behavior exactly as it was.
+    """
+    engine = getattr(sim, '_engine', None)
+    original_run_loop = getattr(engine, 'run_loop', None)
+    if original_run_loop is None:
+        yield
+        return
+
+    def _run_loop_marking_completion(*args, **kwargs):
+        try:
+            return original_run_loop(*args, **kwargs)
+        finally:
+            # Also on failure: the error path does heavy work of its own and
+            # must not be mistaken for a hang either.
+            finished_flag[0] = True
+
+    # run_loop is normally a class method, so assigning it back on exit would
+    # leave an instance attribute shadowing it. Remember which it was and undo
+    # the wrap exactly, leaving the engine as it was found.
+    shadowed_own_attribute = 'run_loop' in getattr(engine, '__dict__', {})
+    engine.run_loop = _run_loop_marking_completion
+    try:
+        yield
+    finally:
+        if shadowed_own_attribute:
+            engine.run_loop = original_run_loop
+        else:
+            try:
+                del engine.run_loop
+            except AttributeError:
+                engine.run_loop = original_run_loop
+
+
+def _classify_watchdog_state(
+    *,
+    llm_stalled: bool,
+    time_since_progress: float,
+    timeout: float | None,
+    run_loop_finished: bool,
+    enabled: bool = True,
+) -> str:
+    """Name what a quiet simulation is actually doing.
+
+    Returns 'ok' while there is LLM work or recent progress, 'finalizing' when
+    the run loop has ended and the results log is still being built, and
+    'hung' when neither explains the silence. Only 'hung' warrants an
+    emergency save; treating 'finalizing' as 'hung' cost a spurious
+    multi-hundred-megabyte write at the end of long runs.
+    """
+    if not (enabled and timeout and llm_stalled
+            and time_since_progress > timeout):
+        return 'ok'
+    return 'finalizing' if run_loop_finished else 'hung'
 
 
 def _save_resumable_state(
@@ -451,6 +519,10 @@ async def run_simulation_stream(
                 'task_id': task_id,
             })
 
+        # Set once the engine's run loop ends, while sim.play() is still busy
+        # building the results log. See _mark_run_loop_completion.
+        run_loop_finished = [False]
+
         def run_simulation_blocking():
             from backend.services.llm_factory import set_active_task_id
             set_active_task_id(task_id)
@@ -468,7 +540,8 @@ async def run_simulation_stream(
                 if step_ctrl is not None:
                     kwargs['step_controller'] = step_ctrl
                     kwargs['step_callback'] = step_data_callback
-                return sim.play(**kwargs)
+                with _mark_run_loop_completion(sim, run_loop_finished):
+                    return sim.play(**kwargs)
             finally:
                 set_active_task_id(None)
 
@@ -514,6 +587,8 @@ async def run_simulation_stream(
                         if activity['calls_in_flight'] > 0:
                             waiting = time.time() - activity['last_call_start']
                             print(f"[WATCHDOG] {current_time} - Step {step_count_tracker[0]}/{max_steps} | LLM call in progress ({waiting:.0f}s) | {activity['total_calls']} calls total")
+                        elif run_loop_finished[0]:
+                            print(f"[WATCHDOG] {current_time} - Run loop complete, building results log ({time_since_progress:.0f}s since last step event)")
                         else:
                             print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
@@ -537,8 +612,24 @@ async def run_simulation_stream(
                                  or time.time() - _last_llm > watchdog_timeout)
                         )
 
-                    if (watchdog_enabled and watchdog_timeout and _llm_stalled
-                            and time_since_progress > watchdog_timeout):
+                    _watchdog_state = _classify_watchdog_state(
+                        llm_stalled=_llm_stalled,
+                        time_since_progress=time_since_progress,
+                        timeout=watchdog_timeout,
+                        run_loop_finished=run_loop_finished[0],
+                        enabled=watchdog_enabled,
+                    )
+
+                    if _watchdog_state == 'finalizing':
+                        # Quiet by design, not stalled: keep it visible so a
+                        # genuine stall while serializing is still reportable,
+                        # but do not write an emergency copy of a run that is
+                        # about to save itself a few lines below.
+                        _now = time.time()
+                        if _now - watchdog_episode["last_warn"] >= 300:
+                            watchdog_episode["last_warn"] = _now
+                            print(f"[WATCHDOG] Run loop complete; results log still building after {time_since_progress:.0f}s. Emergency save suppressed.")
+                    elif _watchdog_state == 'hung':
                         _now = time.time()
                         if _now - watchdog_episode["last_warn"] >= 300:
                             watchdog_episode["last_warn"] = _now
