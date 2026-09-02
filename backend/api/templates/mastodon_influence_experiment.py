@@ -202,6 +202,11 @@ changes candidate support and trust in the information environment.""",
                 "activity_seed": 42,
             },
             "grounded_variables": [
+                # These three are shares of one discussion population, so
+                # per-variable bounds are not enough: each can sit inside 0-100
+                # while the three together describe an impossible electorate.
+                # The group below declares the joint constraint they were
+                # always under.
                 {
                     "name": "rivera_support",
                     "variable_type": "percentage",
@@ -209,6 +214,7 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 49,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "hale_support",
@@ -217,6 +223,7 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 45,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "undecided_rate",
@@ -225,6 +232,7 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 6,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "misinfo_exposure",
@@ -248,6 +256,32 @@ changes candidate support and trust in the information environment.""",
                         "Add the number of participants who saw an unsupported"
                         " claim this step to the previous total; never decrease"
                     ),
+                },
+            ],
+            # on_violation is "flag" on purpose. Rescaling would repair the
+            # numbers and destroy the evidence that they needed repairing,
+            # which is the one thing worth knowing about a narrator-estimated
+            # series; rejecting would freeze the series at its last legal
+            # value and quietly change the dynamics being studied. Flagging
+            # passes every value through unchanged and records each breach, so
+            # a run behaves exactly as it did before this group existed and
+            # the breach rate becomes a reportable property of it. Switch to
+            # renormalize only if a downstream analysis genuinely needs the
+            # shares to close, and report the count either way.
+            "variable_groups": [
+                {
+                    "name": "electorate",
+                    "members": [
+                        "rivera_support",
+                        "hale_support",
+                        "undecided_rate",
+                    ],
+                    "sums_to": 100,
+                    # 1 point absorbs the rounding of three integer
+                    # percentages and nothing more: a tolerance wide enough to
+                    # accommodate a real disagreement would defeat the check.
+                    "tolerance": 1.0,
+                    "on_violation": "flag",
                 },
             ],
             # The variables above are the game master's estimates, taken from
