@@ -54,16 +54,16 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
         count: data.total_count || 0,
         size: data.total_size || 0
       });
-      if (data.checkpoints && data.checkpoints.length > 0) {
-        setCheckpoints(data.checkpoints.map(cp => ({
-          filename: cp.filename,
-          path: cp.path,
-          size: cp.size,
-          modified: cp.modified,
-          resumable: cp.resumable ?? false,
-          state_filename: cp.state_filename ?? null,
-        })));
-      }
+      // Assigned unconditionally: after a sweep the list can legitimately be
+      // empty, and skipping the empty case left the deleted files on screen.
+      setCheckpoints((data.checkpoints ?? []).map(cp => ({
+        filename: cp.filename,
+        path: cp.path,
+        size: cp.size,
+        modified: cp.modified,
+        resumable: cp.resumable ?? false,
+        state_filename: cp.state_filename ?? null,
+      })));
     } catch (err) {
       console.error('Failed to load checkpoint info:', err);
       // Set empty state on error
@@ -76,7 +76,7 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
   };
 
   const handleDeleteCheckpoints = async () => {
-    if (!confirm('Are you sure you want to delete all checkpoint files? This cannot be undone.')) {
+    if (!confirm('Delete the checkpoint files that completed runs have made redundant? The most advanced checkpoint of any run that never finished is kept, so those runs can still be resumed. This cannot be undone.')) {
       return;
     }
 
@@ -84,10 +84,11 @@ export default function RecentSimulations({ onLoadSimulation, onResumeSimulation
     try {
       const result = await deleteCheckpointFiles();
       alert(result.message);
-      setCheckpointInfo({ count: 0, size: 0 });
-      setCheckpoints([]);
       setShowCleanup(false);
       setShowCheckpoints(false);
+      // Re-read rather than zeroing: the sweep spares the resume point of any
+      // run that never finished, so some checkpoints legitimately remain.
+      loadCheckpointInfo();
       // Reload simulations list
       loadRecentSimulations();
     } catch (err: any) {

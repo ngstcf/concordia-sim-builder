@@ -1058,15 +1058,25 @@ export async function getCheckpointFiles(): Promise<{
 }
 
 /**
- * Delete all checkpoint files
+ * Delete the checkpoint files that completed runs have made redundant.
+ *
+ * The most advanced checkpoint of a run that never finished is spared, since
+ * it is the only point that run can be resumed from. Pass includeUnfinished to
+ * clear those as well.
  */
-export async function deleteCheckpointFiles(): Promise<{
+export async function deleteCheckpointFiles(includeUnfinished = false): Promise<{
   success: boolean;
   deleted_count: number;
   deleted_files: string[];
+  bytes_reclaimed: number;
+  spared_count: number;
+  spared_files: string[];
+  unfinished_runs: number;
   message: string;
 }> {
-  const response = await api.delete('/api/simulations/logs/checkpoints');
+  const response = await api.delete('/api/simulations/logs/checkpoints', {
+    params: { include_unfinished: includeUnfinished },
+  });
   return response.data;
 }
 

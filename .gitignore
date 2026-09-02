@@ -109,6 +109,7 @@ backend/tests/*
 !backend/tests/test_export_parsing.py
 !backend/tests/test_grounded_variable_invariants.py
 !backend/tests/test_watchdog_finalization.py
+!backend/tests/test_checkpoint_sweep.py
 
 # Development backups
 *.bak

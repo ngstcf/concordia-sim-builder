@@ -885,20 +885,27 @@ async def get_checkpoint_files():
 
 
 @router.delete("/logs/checkpoints")
-async def delete_checkpoint_files():
+async def delete_checkpoint_files(include_unfinished: bool = False):
     """
-    Delete all checkpoint files from the logs directory.
+    Delete the checkpoint files a completed run has made redundant.
 
     Checkpoint files include:
     - Regular checkpoints: '*_checkpoint_stepN.html' + '.metadata.json'
     - Emergency checkpoints: '*_EMERGENCY_CHECKPOINT.html' + '.metadata.json'
     - Watchdog emergency: '*_WATCHDOG_EMERGENCY*.html' + '.metadata.json'
+    ...each with its '.state.json' resumable sidecar.
+
+    A run that never reached its final save has no resume point other than a
+    checkpoint, so by default the sweep spares the most advanced checkpoint of
+    every unfinished run and deletes the rest. Pass include_unfinished=true to
+    clear the directory regardless, which also discards those resume points.
 
     Returns:
-        Summary of deleted files
+        Summary of deleted and spared files
     """
-    import os
     from pathlib import Path
+
+    from backend.utils.checkpoint_sweep import partition
 
     try:
         logs_dir = Path("logs")
@@ -906,41 +913,70 @@ async def delete_checkpoint_files():
             return {
                 "success": False,
                 "message": "Logs directory not found",
-                "deleted_count": 0
+                "deleted_count": 0,
+                "deleted_files": [],
+                "bytes_reclaimed": 0,
+                "spared_count": 0,
+                "spared_files": [],
+                "unfinished_runs": 0
             }
 
-        # Find all checkpoint files, their metadata, and resumable state sidecars
-        checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
-        checkpoint_meta = list(logs_dir.glob("*_checkpoint_step*.metadata.json"))
-        checkpoint_state = list(logs_dir.glob("*_checkpoint_step*.state.json"))
-        emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
-        emergency_meta = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.metadata.json"))
-        emergency_state = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.state.json"))
-        watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
-        watchdog_meta = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.metadata.json"))
-        watchdog_state = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.state.json"))
+        # Every checkpoint type, with its metadata and resumable state sidecar.
+        patterns = ("*_checkpoint_step*", "*_EMERGENCY_CHECKPOINT*",
+                    "*_WATCHDOG_EMERGENCY*")
+        checkpoints = {
+            path.name: path
+            for pattern in patterns
+            for path in logs_dir.glob(pattern)
+            if path.is_file() and path.name.endswith(
+                (".html", ".metadata.json", ".state.json"))
+        }
 
-        # Combine all checkpoint types
-        all_checkpoint_files = (checkpoint_files + checkpoint_meta + checkpoint_state +
-                                emergency_files + emergency_meta + emergency_state +
-                                watchdog_files + watchdog_meta + watchdog_state)
+        spared_files: list[str] = []
+        unfinished_runs = 0
+        if include_unfinished:
+            doomed = sorted(checkpoints)
+        else:
+            # The final artifacts have to be in view as well: whether a
+            # checkpoint is redundant depends on whether its own run finished.
+            sweep = partition(
+                path.name for path in logs_dir.iterdir() if path.is_file()
+            )
+            doomed = sorted(set(sweep.redundant) & checkpoints.keys())
+            spared_files = sorted(set(sweep.spared) & checkpoints.keys())
+            unfinished_runs = sweep.unfinished_runs
 
         deleted_count = 0
         deleted_files = []
+        bytes_reclaimed = 0
 
-        for file_path in all_checkpoint_files:
+        for name in doomed:
+            file_path = checkpoints[name]
             try:
+                size = file_path.stat().st_size
                 file_path.unlink()
                 deleted_count += 1
-                deleted_files.append(str(file_path.name))
+                bytes_reclaimed += size
+                deleted_files.append(name)
             except Exception as e:
                 print(f"Failed to delete {file_path}: {e}")
+
+        message = f"Deleted {deleted_count} checkpoint file(s)"
+        if spared_files:
+            message += (
+                f"; kept {len(spared_files)} as the only resume point of"
+                f" {unfinished_runs} unfinished run(s)"
+            )
 
         return {
             "success": True,
             "deleted_count": deleted_count,
             "deleted_files": deleted_files,
-            "message": f"Deleted {deleted_count} checkpoint file(s)"
+            "bytes_reclaimed": bytes_reclaimed,
+            "spared_count": len(spared_files),
+            "spared_files": spared_files,
+            "unfinished_runs": unfinished_runs,
+            "message": message
         }
 
     except Exception as e:

@@ -278,6 +278,60 @@ def _save_resumable_state(
         return False
 
 
+def _retire_superseded_checkpoint(checkpoint_path: Path, final_path: Path) -> int:
+    """Delete an emergency checkpoint once the final artifacts supersede it.
+
+    The emergency copy written when the engine loop returns insures one narrow
+    window: HTML conversion and metadata extraction run between there and the
+    final save, and a failure in either would otherwise lose a run that had
+    already finished computing. Once the final log and its state sidecar are on
+    disk that insurance has expired, and what is left behind is a second copy
+    of the same checkpoint -- ``make_checkpoint_data()`` is called on both sides
+    with no stepping in between, so for a run that completed the two payloads
+    agree byte for byte. Keeping it costs one full state file per completed
+    run, which on a large run is hundreds of megabytes, retained for the life
+    of the logs directory.
+
+    Refuses to delete anything unless the final log and state are present and
+    non-empty, and leaves the state sidecar in place unless it is exactly the
+    size of the final one. An assumption that stops holding therefore costs
+    disk space, never a recovery point.
+
+    Returns the number of bytes reclaimed.
+    """
+    final_state = final_path.with_suffix('.state.json')
+    try:
+        if not (final_path.is_file() and final_path.stat().st_size > 0):
+            return 0
+        final_state_size = final_state.stat().st_size if final_state.is_file() else 0
+        if final_state_size <= 0:
+            return 0
+    except OSError:
+        return 0
+
+    checkpoint_state = checkpoint_path.with_suffix('.state.json')
+    reclaimed = 0
+    for path in (checkpoint_path,
+                 checkpoint_path.with_suffix('.metadata.json'),
+                 checkpoint_state):
+        try:
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            if path == checkpoint_state and size != final_state_size:
+                print(
+                    f"[CHECKPOINT] Kept {path.name}: {size:,} bytes against a"
+                    f" final state of {final_state_size:,}, so it is not the"
+                    " duplicate it is expected to be"
+                )
+                continue
+            path.unlink()
+            reclaimed += size
+        except OSError as exc:
+            print(f"[WARNING] Could not retire {path.name}: {exc}")
+    return reclaimed
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
     llm_settings: LLMSettings,
@@ -807,7 +861,10 @@ async def run_simulation_stream(
         print(f"{'='*60}\n")
 
         # EMERGENCY CHECKPOINT: Save results immediately after simulation completes
-        # This ensures we have a saved copy even if HTML conversion fails
+        # This ensures we have a saved copy even if HTML conversion fails.
+        # It is retired again once the final artifacts land -- see the call to
+        # _retire_superseded_checkpoint below.
+        emergency_path: Path | None = None
         try:
             print("[CHECKPOINT] Saving emergency checkpoint before HTML processing...")
             emergency_raw_log = sim.get_raw_log()
@@ -1495,17 +1552,32 @@ async def run_simulation_stream(
 
         # Save resumable state sidecar alongside the final log so completed
         # runs can be extended from the UI via the additional_steps flow.
+        final_state_saved = False
         try:
             final_concordia_state = sim.make_checkpoint_data()
-            _save_resumable_state(
+            final_state_saved = _save_resumable_state(
                 log_path, final_concordia_state, config, llm_settings,
                 gm_llm_settings,
                 steps_completed=step_count_tracker[0],
                 max_steps=step_count_tracker[0],
             )
-            print(f"[CHECKPOINT] ✓ Final resumable state saved: {log_path.stem}.state.json")
+            if final_state_saved:
+                print(f"[CHECKPOINT] ✓ Final resumable state saved: {log_path.stem}.state.json")
         except Exception as _frs_err:
             print(f"[WARNING] Failed to save final resumable state: {_frs_err}")
+
+        # The emergency copy has served its purpose now that the run is saved
+        # properly. Retire it only for a run that finished cleanly: a cancelled
+        # or failed run may have no other resume point, and its emergency state
+        # records the step budget the run was aiming at rather than the step it
+        # actually stopped on, which is the more useful of the two to keep.
+        if final_state_saved and run_status == "completed" and emergency_path is not None:
+            _reclaimed = _retire_superseded_checkpoint(emergency_path, log_path)
+            if _reclaimed:
+                print(
+                    "[CHECKPOINT] ✓ Retired superseded emergency checkpoint"
+                    f" ({_reclaimed:,} bytes reclaimed)"
+                )
 
         print(f"✓ Log saved to: {log_filename}")
         print(f"   Size: {len(styled_html):,} characters")
