@@ -30,6 +30,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Node dependencies (package.json is tracked; the installed tree is not)
+node_modules/
+
 # IDE
 .vscode/
 .idea/

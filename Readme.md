@@ -391,6 +391,9 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/models/{provider}` | GET | List models for a provider |
 | `/api/simulations/validate` | POST | Validate simulation configuration |
 | `/api/simulations/execute` | POST | Run simulation with real-time SSE streaming |
+| `/api/simulations/execute-simple` | POST | Run simulation and return complete results (non-streaming; no resumable state written) |
+| `/api/simulations/import` | POST | Import and validate a configuration from JSON |
+| `/api/simulations/export-template` | GET | Export a blank configuration template |
 | `/api/simulations/configs` | GET | List saved configurations |
 | `/api/simulations/configs` | POST | Save a named configuration |
 | `/api/simulations/configs/{slug}` | GET | Load a saved configuration |
@@ -405,10 +408,10 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/health` | GET | Running tasks, LLM-call liveness, and recent journaled incidents (`?incidents=N`) |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation (saves partial results) |
 | `/api/simulations/control/{task_id}/pause` | POST | Pause (step controller engine) |
-| `/api/simulations/control/{task_id}/resume` | POST | Resume |
+| `/api/simulations/control/{task_id}/play` | POST | Resume continuous execution |
 | `/api/simulations/control/{task_id}/step` | POST | Advance one step |
 | `/api/simulations/control/{task_id}/stop` | POST | Stop |
-| `/api/simulations/shutdown` | POST | Shutdown server |
+| `/api/server/shutdown` | POST | Shutdown server |
 
 ### Logs & Analytics
 
@@ -418,11 +421,24 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/logs/{filename}` | GET | Get simulation log HTML |
 | `/api/simulations/logs/{filename}` | DELETE | Delete simulation log + metadata |
 | `/api/simulations/logs/{filename}/analytics` | GET | Analytics data for all 9 result tabs |
+| `/api/simulations/logs/{filename}/export-json` | GET | Full structured export (grounded-variable histories, action records) |
+| `/api/simulations/logs/{filename}/export-csv` | GET | Structured export as CSV (`?data_type=variables\|actions\|...`) |
 | `/api/simulations/logs/checkpoints` | GET | List checkpoint files (includes `resumable` flag + `state_filename`) |
 | `/api/simulations/logs/checkpoints` | DELETE | Delete the checkpoint files + `.state.json` sidecars that completed runs have made redundant; the most advanced checkpoint of a run that never finished is spared, since it is that run's only resume point. `?include_unfinished=true` clears those too |
 | `/api/simulations/resume` | POST | Resume or extend simulation from a `.state.json` sidecar (SSE stream); accepts optional `additional_steps` to run beyond the saved state |
 | `/api/simulations/logs/config` | GET | Log streaming config (debug/LLM flags) |
 | `/api/simulations/logs/stream` | GET | SSE endpoint for live log streaming |
+
+### Batch Runs & Reliability
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/batch/execute` | POST | Run a batch of simulations with optional parameter sweeps |
+| `/api/simulations/batch/list` | GET | List completed batch runs |
+| `/api/simulations/batch/{batch_id}/status` | GET | Current status of a batch run |
+| `/api/simulations/batch/{batch_id}/cancel` | POST | Cancel a running batch |
+| `/api/simulations/batch/{batch_id}/export-csv` | GET | Aggregated CSV across all runs in a batch |
+| `/api/simulations/batch/{batch_id}/reliability` | GET | ICC(3,1) reliability report for questionnaire outcomes |
 
 ### Analysis & Variables
 
@@ -431,7 +447,11 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/analyze-simulation` | POST | LLM-powered analysis report |
 | `/api/simulations/grounded-variables/extract` | POST | Extract variable history from log using AI |
 | `/api/simulations/grounded-variables/{simulation_id}` | GET | Get grounded variables data |
-| `/api/simulations/formative-memories/generate` | POST | Generate agent backstory |
+| `/api/simulations/generate-formative-memories` | POST | Generate formative backstory memories for an agent |
+| `/api/simulations/generate-personas` | POST | Generate diverse personas via Concordia's persona generators |
+| `/api/simulations/generate-personas-census` | POST | Generate personas by sampling a demographic distribution |
+| `/api/simulations/parse-distribution` | POST | Parse a distribution spec from JSON or CSV content |
+| `/api/simulations/upload-distribution` | POST | Parse an uploaded CSV/JSON file into a distribution spec |
 
 ### Components & Templates
 
@@ -439,7 +459,8 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (38 templates; more are added based on user feedback as the project grows) |
+| `/api/simulations/contrib-components` | GET | Registry of available contrib GM components |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (39 templates; more are added based on user feedback as the project grows) |
 
 ## Supported Prefabs
 
@@ -548,7 +569,7 @@ concordia-sim-builder/
 ├── backend/
 │   ├── api/
 │   │   ├── simulations.py           # API endpoints + analytics
-│   │   └── templates/               # 38 template modules (growing over time based on user feedback)
+│   │   └── templates/               # 39 template modules (growing over time based on user feedback)
 │   ├── models/
 │   │   ├── schemas.py               # Pydantic models
 │   │   └── llm_wrappers.py          # LLM provider wrappers
@@ -560,7 +581,16 @@ concordia-sim-builder/
 │   ├── utils/
 │   │   ├── log_broadcaster.py       # SSE log broadcaster
 │   │   ├── stdout_tee.py            # stdout interceptor for log streaming
-│   │   └── debug_print.py           # Gated debug/LLM print functions
+│   │   ├── debug_print.py           # Gated debug/LLM print functions
+│   │   ├── logger.py                # Centralized backend logging config
+│   │   ├── logging_config.py        # Console-output suppression
+│   │   ├── event_journal.py         # Durable failure-event journal (logs/events/)
+│   │   ├── data_exporter.py         # Structured JSON/CSV export
+│   │   ├── grounded_variables_post_processor.py  # Variable-update extraction
+│   │   ├── checkpoint_sweep.py      # Decides which checkpoints a sweep may delete
+│   │   ├── simulation_analyzer.py   # LLM-powered content analysis
+│   │   └── thought_chain_fix.py     # LLM response-parsing repairs
+│   ├── tests/                       # Pure unit tests (no network/credentials)
 │   └── main.py                      # FastAPI app
 ├── frontend/
 │   ├── src/
@@ -588,7 +618,7 @@ concordia-sim-builder/
 │       ├── vaccine-hesitancy-study.md
 │       ├── phishing-attack-simulation.md
 │       └── urban-gentrification-simulation.md
-├── logs/                            # Simulation logs (see inventory below)
+├── logs/                            # Simulation logs, checkpoints, and events/ journals
 ├── CHANGELOG.md
 └── requirements.txt                 # Python dependencies (gdm-concordia pinned)
 ```
