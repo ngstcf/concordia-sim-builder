@@ -137,3 +137,13 @@ concordia-upstream/
 CONCORDIA_ISSUES.md
 
 simultech/
+
+# Assistant memory notes that land in the working tree. These describe
+# in-progress work rather than the code, so they do not belong in a public
+# repository. Anchored to the root: backend packages named memory/ are tracked.
+/memory/
+
+# Structured exports pulled from the analytics dashboard for local inspection
+# (browser downloads, including duplicate "(1).json" copies). Run output is
+# reproducible from the logs and is not tracked.
+/exportjson/
