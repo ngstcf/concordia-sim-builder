@@ -435,6 +435,18 @@ async def validate_config(config: SimulationConfig):
     # Context feasibility projection for the async social media GM: every
     # broadcast post lands in every agent's history (~140 tokens per entry),
     # so prompts grow with population x steps unless a window bounds them.
+    gm_p_any = config.game_master.parameters or {}
+    feed_mode = str(gm_p_any.get('feed_mode') or 'full').lower()
+    if feed_mode not in ('full', 'compacted'):
+        errors.append(
+            f"game_master.parameters.feed_mode must be 'full' or 'compacted', "
+            f"got '{gm_p_any.get('feed_mode')}'")
+    elif (feed_mode != 'full'
+          and config.game_master.prefab != 'async_social_media__GameMaster'):
+        warnings.append(
+            f"feed_mode='{feed_mode}' has no effect: feed compaction applies "
+            f"only to 'async_social_media__GameMaster'")
+
     if config.game_master.prefab == 'async_social_media__GameMaster':
         gm_p = config.game_master.parameters or {}
         default_rate = gm_p.get('default_activity_rate', 1.0) or 1.0
@@ -444,11 +456,27 @@ async def validate_config(config: SimulationConfig):
             if rates.get(a.name, default_rate) > 0 else 0.0
             for a in config.agents)
         window = gm_p.get('context_window_steps')
-        horizon = float(window) if window else float(config.max_steps or 20)
+        compacted = feed_mode == 'compacted'
+        if compacted:
+            # Compacted mode auto-bounds histories to a 6-step window when no
+            # explicit one is set, and replaces forgotten posts with a rolling
+            # digest, so the projection horizon is always the window.
+            horizon = float(window) if window else 6.0
+        else:
+            horizon = float(window) if window else float(config.max_steps or 20)
         entries = expected_acts * horizon
         est_tokens = int(entries * 140) + 8000
+        if compacted:
+            digest_words = int(gm_p.get('feed_digest_max_words', 250))
+            est_tokens += int(digest_words * 1.4)
         if est_tokens > 100_000:
-            if window:
+            if compacted:
+                warnings.append(
+                    f"feed_mode='compacted' with a {horizon:g}-step window still "
+                    f"projects ~{est_tokens // 1000}k tokens per prompt "
+                    f"(~{entries:.0f} history entries at ~140 tokens each); "
+                    f"reduce context_window_steps or the population.")
+            elif window:
                 warnings.append(
                     f"context_window_steps={window} projects ~{est_tokens // 1000}k "
                     f"tokens per prompt (~{entries:.0f} history entries at ~140 "
@@ -460,7 +488,9 @@ async def validate_config(config: SimulationConfig):
                     f"{config.max_steps} steps projects ~{est_tokens // 1000}k tokens "
                     f"per prompt by the final step (~{entries:.0f} entries at ~140 "
                     f"tokens each), beyond typical 128k contexts. Set "
-                    f"game_master.parameters.context_window_steps to bound it.")
+                    f"game_master.parameters.context_window_steps to bound it, or "
+                    f"feed_mode='compacted' to bound it with a digest of older "
+                    f"activity.")
 
     # Validate game master
     if not config.game_master.name:

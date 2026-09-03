@@ -148,9 +148,12 @@ def build_simulation(
     # large populations finish. The GM's own observation buffer is bounded
     # with the same value where the scheduler is installed below.
     context_window_entries = None
+    _gm_p_early = config.game_master.parameters or {}
+    _feed_mode = str(_gm_p_early.get('feed_mode') or 'full').lower()
     if (config.game_master.prefab == 'async_social_media__GameMaster'
-            and (config.game_master.parameters or {}).get('context_window_steps')):
-        _gm_p = config.game_master.parameters
+            and (_gm_p_early.get('context_window_steps')
+                 or _feed_mode == 'compacted')):
+        _gm_p = _gm_p_early
         _default_rate = _gm_p.get('default_activity_rate', 1.0) or 1.0
         _rates = _gm_p.get('per_agent_activity_rates', {}) or {}
         _expected_acts = sum(
@@ -158,7 +161,10 @@ def build_simulation(
             if _rates.get(a.name, _default_rate) > 0 else 0.0
             for a in config.agents
         )
-        _window = float(_gm_p['context_window_steps'])
+        # Compacted mode without an explicit window still needs bounded
+        # histories -- the digest is the compensation for what falls out, so
+        # a default 6-step window applies.
+        _window = float(_gm_p.get('context_window_steps') or 6.0)
         # Factor 1.0: the budget holds exactly the window's expected activity.
         # (An earlier 1.25 inflation made a 6-step window hold ~7.5 steps and,
         # with per-entry token length growing late in long runs, overflowed a
@@ -582,6 +588,34 @@ def build_simulation(
                 _actor_components.observation.DEFAULT_OBSERVATION_COMPONENT_KEY
             ] = _actor_components.observation.LastNObservations(
                 history_length=context_window_entries)
+
+        # Feed compaction: bound delivery size and fold aged posts into a
+        # rolling digest (see backend/prefabs/feed_compaction.py). Default
+        # 'full' leaves the upstream ForumObservation in place untouched.
+        feed_mode = str(gm_params.get('feed_mode') or 'full').lower()
+        if feed_mode == 'compacted':
+            from backend.prefabs.feed_compaction import CompactingForumObservation
+            from concordia.components.game_master import (
+                make_observation as _mo_components,
+            )
+            compactor = CompactingForumObservation(
+                model=gm_model or model,
+                recent_posts=int(gm_params.get('feed_recent_posts', 60)),
+                digest_max_words=int(gm_params.get('feed_digest_max_words', 250)),
+                vote_summary_top=int(gm_params.get('feed_vote_summary_top', 20)),
+                min_fold_batch=int(gm_params.get('feed_min_fold_batch', 25)),
+            )
+            gm_params['extra_components'][
+                _mo_components.DEFAULT_MAKE_OBSERVATION_COMPONENT_KEY
+            ] = compactor
+            debug_print(
+                "[DEBUG] Installed CompactingForumObservation "
+                f"(recent_posts={compactor._recent_posts}, "
+                f"digest_max_words={compactor._digest_max_words})"
+            )
+        elif feed_mode != 'full':
+            print(f"[WARNING] Unknown feed_mode '{feed_mode}'; "
+                  "using 'full' (no compaction)")
 
         clipped = scheduler.clipped_players()
         if clipped:
