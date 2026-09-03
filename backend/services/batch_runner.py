@@ -93,6 +93,10 @@ class BatchRunner:
             current_task = batch.get('current_task_id')
             if current_task:
                 simulation_state.cancel_simulation(current_task)
+            # Persist here, not only from the run loop: if the SSE client
+            # disconnected, the loop's generator is gone and this is the only
+            # place the cancellation can be made durable.
+            self._save_batch_metadata(batch)
             return True
         return False
 
@@ -189,6 +193,13 @@ class BatchRunner:
                             continue
 
                         if inner_event_type == 'simulation_start':
+                            # Arm batch-level cancellation: cancel_batch
+                            # forwards to this id. Left unset, cancelling the
+                            # batch marks it cancelled but the in-flight
+                            # simulation keeps running to completion.
+                            if inner_event_data.get('task_id'):
+                                batch_state['current_task_id'] = (
+                                    inner_event_data['task_id'])
                             msg = inner_event_data.get('message')
                             if msg:
                                 run_status_event = {
@@ -264,6 +275,7 @@ class BatchRunner:
                     batch_state['completed_runs'] += 1
 
                 batch_state['run_results'].append(run_result)
+                batch_state['current_task_id'] = None
 
                 yield f"data: {json.dumps({'type': 'run_complete', 'batch_id': batch_id, 'run_index': run_index, 'total_runs': total_runs, 'run_result': run_result, 'completed_runs': batch_state['completed_runs'], 'failed_runs': batch_state['failed_runs']})}\n\n"
 
@@ -286,25 +298,39 @@ class BatchRunner:
         except Exception as e:
             print(f"[BatchRunner] Failed to save batch metadata: {e}")
 
+    def _batch_summary(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            'batch_id': data.get('batch_id', ''),
+            'batch_name': data.get('batch_name', ''),
+            'status': data.get('status', ''),
+            'total_runs': data.get('total_runs', 0),
+            'completed_runs': data.get('completed_runs', 0),
+            'failed_runs': data.get('failed_runs', 0),
+            'started_at': data.get('started_at', ''),
+        }
+
     def list_batches(self) -> List[Dict[str, Any]]:
-        """List all batch metadata files."""
-        batches = []
+        """List all batches: live in-memory entries plus metadata files.
+
+        Metadata files are written at completion or cancellation, so a batch
+        that is still running (or whose SSE client disconnected mid-run)
+        exists only in memory. Previously this method read only the files,
+        which made such batches invisible here -- nothing that swept
+        /batch/list could find and cancel them. In-memory entries win on
+        conflict since the disk copy may lag.
+        """
+        by_id: Dict[str, Dict[str, Any]] = {}
         for f in sorted(BATCH_DIR.glob("batch_*.json"), reverse=True):
             try:
                 with open(f) as fh:
                     data = json.load(fh)
-                    batches.append({
-                        'batch_id': data.get('batch_id', ''),
-                        'batch_name': data.get('batch_name', ''),
-                        'status': data.get('status', ''),
-                        'total_runs': data.get('total_runs', 0),
-                        'completed_runs': data.get('completed_runs', 0),
-                        'failed_runs': data.get('failed_runs', 0),
-                        'started_at': data.get('started_at', ''),
-                    })
+                by_id[data.get('batch_id', f.stem)] = self._batch_summary(data)
             except Exception:
                 pass
-        return batches
+        for batch_id, data in self._batches.items():
+            by_id[batch_id] = self._batch_summary(data)
+        return sorted(by_id.values(),
+                      key=lambda b: b.get('started_at') or '', reverse=True)
 
 
 batch_runner = BatchRunner()
