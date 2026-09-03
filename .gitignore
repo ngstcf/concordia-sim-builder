@@ -61,8 +61,12 @@ sentence-transformers/
 
 LLM-Providers-Quick-Ref.md
 
-# Track all files under logs/
-
+# Simulation output. The nine demo runs already committed here stay tracked --
+# .gitignore does not untrack existing files -- so a clone still ships worked
+# examples that open with populated analytics and working exports. Everything a
+# local run writes from now on is ignored: those are per-instance research data,
+# often gigabytes, and nothing downstream should depend on them being in git.
+logs/
 logs.bak/
 
 

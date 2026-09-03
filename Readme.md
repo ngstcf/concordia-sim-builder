@@ -148,6 +148,12 @@ cd frontend
 npm install
 ```
 
+> **Try it before configuring a provider.** Nine complete runs ship in `logs/`,
+> so once the backend and frontend are up you can open **Recent Simulations**,
+> read a real transcript, browse the analytics, and export the full JSON or the
+> per-agent action CSV without an API key or a single LLM call. These runs
+> predate grounded variables, so that tab and its CSV are empty for them.
+
 ### Environment Configuration
 
 Create a `.env` file in the root directory:
@@ -618,7 +624,7 @@ concordia-sim-builder/
 │       ├── vaccine-hesitancy-study.md
 │       ├── phishing-attack-simulation.md
 │       └── urban-gentrification-simulation.md
-├── logs/                            # Simulation logs, checkpoints, and events/ journals
+├── logs/                            # 9 committed demo runs; local runs land here (gitignored)
 ├── CHANGELOG.md
 └── requirements.txt                 # Python dependencies (gdm-concordia pinned)
 ```
