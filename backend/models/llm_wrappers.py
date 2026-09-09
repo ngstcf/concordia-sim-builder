@@ -142,7 +142,7 @@ class CustomGPTModel:
     ) -> str:
         """Sample text from the model with retry logic for transient errors and enforced timeout."""
         import os
-        from openai import APITimeoutError, AuthenticationError, RateLimitError, APIError
+        from openai import APITimeoutError, APIConnectionError, AuthenticationError, RateLimitError, APIError
         from httpcore import ConnectTimeout, ConnectError
 
         # Allow environment variable overrides for timeout configuration
@@ -243,18 +243,25 @@ class CustomGPTModel:
 
                 return content
 
-            except (APITimeoutError, ConnectTimeout, ConnectError) as e:
+            except (APITimeoutError, APIConnectionError, ConnectTimeout, ConnectError) as e:
+                # APIConnectionError is the SDK's parent class for
+                # connection-level failures (APITimeoutError is one of its
+                # subclasses); listing it here catches drops that are not
+                # specifically timeouts (reset, DNS blip, TLS hiccup), which
+                # otherwise fell through to the unretried Exception handler
+                # below and killed an otherwise-healthy multi-hour run one
+                # dropped connection from completion.
                 elapsed = time.time() - attempt_start
                 if attempt < max_retries - 1:
                     # Reduced backoff: 3s, 6s (faster recovery)
                     wait_time = 3 * (2 ** attempt)
-                    llm_print(f"[LLM] Timeout after {elapsed:.1f}s on attempt {attempt + 1}/{max_retries}. "
-                          f"Retrying in {wait_time}s...")
+                    llm_print(f"[LLM] Connection issue ({type(e).__name__}) after {elapsed:.1f}s on "
+                          f"attempt {attempt + 1}/{max_retries}. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    llm_print(f"[LLM] Error: Timeout after {elapsed:.1f}s and {max_retries} retries")
+                    llm_print(f"[LLM] Error: {type(e).__name__} after {elapsed:.1f}s and {max_retries} retries")
                     llm_print(f"[LLM] Hint: Consider using a faster model or reducing simulation complexity")
-                    raise TimeoutError(f"LLM request timed out after {elapsed:.1f}s") from e
+                    raise TimeoutError(f"LLM request failed after {elapsed:.1f}s: {type(e).__name__}") from e
 
             except RateLimitError as e:
                 elapsed = time.time() - attempt_start
