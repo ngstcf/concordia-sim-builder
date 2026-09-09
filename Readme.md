@@ -80,6 +80,7 @@ Each simulation produces three output files:
 - **Measurements** — Inject measurements into any engine with Component Logs tab in results
 - **Grounded Variables** — Track simulation state variables with AI-powered post-processing, with optional joint constraints (`variable_groups`) for shares of a common whole that must sum to a declared total
 - **Agent Probe** — Administer a fixed multiple-choice question to every agent during the run and tally the answers, so a measured quantity has the roster as its denominator rather than a narrator's estimate (see [Measuring by Counting](#measuring-by-counting))
+- **Context Window & Feed Compaction** — For the async social-media Game Master, bound how much forum history each agent actively remembers, and choose what happens to posts once they age out: forgotten outright, or folded into a running AI-generated summary so large populations and long runs stay within the model's context window instead of failing mid-run (see [Managing Context at Scale](#managing-context-at-scale))
 - **Live Log Streaming** — Real-time terminal output mirrored to frontend via SSE with color-coded messages
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
 - **8 LLM Providers** — OpenAI, Azure OpenAI (up to two endpoints), DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
@@ -371,6 +372,90 @@ rescaled. Individual variables also accept `cumulative` (a running total
 that never decreases) and `max_delta` (the largest single-update
 increase), which together keep a counter from being unbounded above.
 
+## Managing Context at Scale
+
+In a broadcast forum (the async social-media Game Master) every post lands
+in every agent's history, roughly 140 tokens each. Left unbounded, a
+prompt's size grows with population × steps: 100 agents over 20 steps
+projects around 275,000 tokens, well past a typical 128k context, and a
+run built that way fails hours in rather than at the start. Two settings
+address this, both on the Game Master's **Social Media Activity Model**
+panel in the builder, no JSON required, though both round-trip through the
+config the same way every other parameter does.
+
+### Context window
+
+Bounds how much forum activity each agent, and the Game Master itself,
+actively remembers, to roughly the last *N* steps.
+
+```json
+"game_master": {
+  "parameters": {
+    "context_window_steps": 6
+  }
+}
+```
+
+Leave it unset for full history. `POST /validate` projects the peak prompt
+size for the population and step count you've configured and warns before
+you spend any compute if it won't fit, so an infeasible run is caught at
+setup rather than discovered mid-run. A window is *bounded attention*:
+posts older than the window are simply forgotten, permanently, with
+nothing to compensate. That is fine for small populations or short runs.
+For anything large enough to need the window in the first place, forgetting
+is usually the wrong tradeoff, which is what the second setting is for.
+
+### Feed compaction
+
+Instead of letting old posts fall out of memory, compaction folds them
+into one running summary, so a large or long-running study keeps some
+memory of everything rather than losing everything before the window.
+
+```json
+"game_master": {
+  "parameters": {
+    "context_window_steps": 6,
+    "feed_mode": "compacted",
+    "feed_recent_posts": 60,
+    "feed_digest_max_words": 250,
+    "feed_vote_summary_top": 20,
+    "feed_min_fold_batch": 25
+  }
+}
+```
+
+`feed_mode` defaults to `"full"` (today's unmodified behavior; set it to
+`"compacted"` to turn this on). Two things grow without bound in a
+broadcast forum even when per-agent history is windowed: the vote summary,
+which by default lists every post ever made, and the raw post count feeding
+the window itself. Compaction bounds both:
+
+- `feed_recent_posts` (default 60) is how many of the newest posts, across
+  the whole forum, stay exact text before they are eligible to fold. This
+  is a property of the *shared* forum record, separate from
+  `context_window_steps`, which bounds one *agent's own* memory buffer;
+  both apply at once.
+- Posts older than that tail are folded, in batches of at least
+  `feed_min_fold_batch` (default 25), into a single rolling digest, one
+  language-model call per fold, shared by the whole roster rather than
+  regenerated per agent. Each agent receives the digest as an ordinary
+  observation ("recap of older activity") exactly once per version, capped
+  at `feed_digest_max_words` (default 250).
+- The vote tally is capped to the top `feed_vote_summary_top` (default 20)
+  posts by votes, with the rest rolled into a single "+*N* more posts"
+  count, so the running tally stops growing with the total number of
+  posts ever made.
+
+The digest is generated text, not a database query, so it is a paraphrase
+of what it summarizes rather than the original: exact wording and minor
+posts are not guaranteed to survive a fold. It is not a silent
+implementation detail either — every fold is logged, the digest is carried
+in checkpoints, and if the digest model call fails, the previous digest is
+kept and the fold is retried later rather than the run losing its summary.
+Use compaction whenever `POST /validate`'s pre-flight check warns that a
+configuration will not fit; for populations and run lengths small enough
+to fit in full, there is nothing to gain from turning it on.
+
 ## Templates (38)
 
 | Category | Templates |
@@ -516,6 +601,8 @@ This is the GM-level mechanism behind the Builder's **Social Media Activity Mode
 **Update (Aug 2026): corrected activation semantics, vendored into the backend.** The fork patch's sampling rule normalized rates above 1.0 against the roster maximum, which gave a per-agent parameter global side effects (raising one agent's rate silently suppressed every other agent's activation) and made the rule discontinuous at 1.0 (an agent at rate 1.6 could act far less often than one at 0.8). The Builder now overrides the GM's next-acting component at build time with a vendored scheduler, [`backend/prefabs/activity_scheduler.py`](backend/prefabs/activity_scheduler.py): each agent's per-step probability is `min(1, rate / default_activity_rate)`, independent of every other agent's rate. Because the engine allows at most one act per agent per step, rates above `default_activity_rate` cannot be honored; they are clipped to 1.0 with a startup warning naming the affected agents. To express "agent X is N times as active," scale the *other* agents down instead. The fork's parameter plumbing is still used; only its sampling rule is superseded. The bundled Mastodon template follows the source study's implementation ([sandbox-social/mastodon-sim](https://github.com/sandbox-social/mastodon-sim)): voters act with per-step probability 0.8 and the malicious actor 0.9, the manipulation being carried by the agent's goal and content rather than posting volume.
 
 **Context-window control (Aug 2026).** In a broadcast forum every post lands in every agent's history (~140 tokens per entry), so prompts grow with population × steps: 100 agents × 20 steps projects ~275k tokens per prompt, beyond typical 128k contexts. For the async social media GM, `game_master.parameters.context_window_steps` bounds each agent's observation and self-perception history to a window expressed in engine steps (converted to an entry budget via the scheduler's expected actions per step) and bounds the GM's own observation buffer with the same budget. `POST /validate` now projects peak prompt tokens for these configs and warns when the projection exceeds ~100k, so an infeasible population is caught before compute is spent, not hours into a run. The control is exposed in the builder UI as the **"Context Window (steps)"** field on the async GM's Social Media Activity Model panel (empty = full history), and the validation projection surfaces through the builder's normal warnings display, so both are usable without touching JSON. Per-agent `components.observation_history_length` / `components.self_perception_history_length` remain individually settable and take precedence. Note the semantics: a window is bounded attention (agents forget older posts permanently); it is not equivalent to feed-based architectures where agents can re-query history.
+
+**Feed compaction (Sep 2026).** A window alone trades context growth for silent forgetting: content past it is gone with nothing to compensate. `game_master.parameters.feed_mode = "compacted"` (default `"full"` leaves the above unchanged) installs `CompactingForumObservation` (`backend/prefabs/feed_compaction.py`) over the prefab's observation key, the same override pattern as the activity scheduler: posts aging past a verbatim tail (`feed_recent_posts`, default 60) fold in batches (`feed_min_fold_batch`, default 25) into one rolling digest per language-model call, capped at `feed_digest_max_words` (default 250) and shared by the whole roster, while the vote summary is capped to the top `feed_vote_summary_top` (default 20) posts rather than enumerating every post ever made. Now exposed in the builder UI as the **"Beyond the Window"** selector on the same panel, with the four tunables behind an "Advanced summary settings" disclosure; previously JSON-only. Validated head-to-head: an arm that failed `context_length_exceeded` on every attempt at N=100 under `"full"` completed every attempt unmodified except for this setting. Full explanation for non-technical users: [Managing Context at Scale](#managing-context-at-scale).
 
 **2. `simultaneous_resolution_gm__GameMasterSimultaneous` — variable-clock wiring** *(minor)*
 
