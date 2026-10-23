@@ -1052,6 +1052,10 @@ async def get_simulation_log(filename: str):
 
     # Security: Ensure filename doesn't contain path traversal
     safe_filename = os.path.basename(filename)
+    # Only simulation logs are served here; logs/ also holds state and
+    # metadata files, which this route must not hand out.
+    if not safe_filename.endswith('.html'):
+        raise HTTPException(status_code=400, detail="Only .html simulation logs can be fetched here")
     log_path = Path("logs") / safe_filename
 
     if not log_path.exists():
@@ -3045,6 +3049,14 @@ def _slugify(name: str) -> str:
     return slug.strip('-')[:80] or 'untitled'
 
 
+def _without_api_key(settings):
+    """Saved configurations are served back to any caller and meant to be
+    shared, so they never carry an API key."""
+    if isinstance(settings, dict):
+        return {k: v for k, v in settings.items() if k != 'api_key'}
+    return settings
+
+
 @router.get("/configs")
 async def list_saved_configs():
     configs = []
@@ -3079,8 +3091,8 @@ async def save_config(body: dict):
     payload = {
         "name": name,
         "config": config,
-        "llm_settings": llm_settings,
-        "gm_llm_settings": body.get("gm_llm_settings"),
+        "llm_settings": _without_api_key(llm_settings),
+        "gm_llm_settings": _without_api_key(body.get("gm_llm_settings")),
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     path.write_text(json.dumps(payload, indent=2))
@@ -3093,9 +3105,14 @@ async def get_saved_config(slug: str):
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Configuration not found")
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text())
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Corrupted configuration file")
+    # Files saved before keys were stripped may still hold one.
+    for key in ("llm_settings", "gm_llm_settings"):
+        if key in data:
+            data[key] = _without_api_key(data[key])
+    return data
 
 
 @router.delete("/configs/{slug}")

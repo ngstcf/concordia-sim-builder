@@ -19,6 +19,19 @@ interface ExportedConfig {
   gm_llm_settings?: LLMSettings | null;
 }
 
+// API keys stay in this browser session. Saved and exported configurations are
+// meant to be shared, so they never carry a key, and loading one keeps the key
+// already entered rather than clearing it.
+function withoutKey(settings: LLMSettings): LLMSettings {
+  const copy = { ...settings };
+  delete copy.api_key;
+  return copy;
+}
+
+function keepSessionKey(loaded: LLMSettings, current?: LLMSettings | null): LLMSettings {
+  return { ...loaded, api_key: loaded.api_key ?? current?.api_key };
+}
+
 function isValidConfig(data: unknown): data is ExportedConfig {
   if (typeof data !== 'object' || data === null) return false;
   const obj = data as Record<string, unknown>;
@@ -67,8 +80,8 @@ export default function JsonImportExport() {
       await saveConfig({
         name: name.trim(),
         config,
-        llm_settings: llmSettings,
-        gm_llm_settings: gmLlmSettings,
+        llm_settings: withoutKey(llmSettings),
+        gm_llm_settings: gmLlmSettings ? withoutKey(gmLlmSettings) : gmLlmSettings,
       });
       setLastLoadedName(name.trim());
       if (showSaved) {
@@ -88,9 +101,9 @@ export default function JsonImportExport() {
       const data = await loadSavedConfig(slug);
       setConfig(data.config);
       if (data.llm_settings) {
-        setLLMSettings(data.llm_settings);
+        setLLMSettings(keepSessionKey(data.llm_settings, llmSettings));
       }
-      setGmLlmSettings(data.gm_llm_settings ?? null);
+      setGmLlmSettings(data.gm_llm_settings ? keepSessionKey(data.gm_llm_settings, gmLlmSettings) : null);
       setLastLoadedName(data.name);
       setShowSaved(false);
     } catch {
@@ -113,10 +126,10 @@ export default function JsonImportExport() {
   const handleExport = () => {
     const exported: ExportedConfig = {
       config,
-      llm_settings: llmSettings,
+      llm_settings: withoutKey(llmSettings),
     };
     if (gmLlmSettings) {
-      exported.gm_llm_settings = gmLlmSettings;
+      exported.gm_llm_settings = withoutKey(gmLlmSettings);
     }
     const dataStr = JSON.stringify(exported, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -141,8 +154,8 @@ export default function JsonImportExport() {
 
         if (isValidConfig(data)) {
           setConfig(data.config);
-          setLLMSettings(data.llm_settings);
-          setGmLlmSettings(data.gm_llm_settings ?? null);
+          setLLMSettings(keepSessionKey(data.llm_settings, llmSettings));
+          setGmLlmSettings(data.gm_llm_settings ? keepSessionKey(data.gm_llm_settings, gmLlmSettings) : null);
         } else if (isLegacyConfig(data)) {
           setConfig(data);
         } else {

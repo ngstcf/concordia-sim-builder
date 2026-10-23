@@ -261,8 +261,11 @@ def _save_resumable_state(
             "max_steps": max_steps,
             "engine_type": config.engine_type.value if hasattr(config.engine_type, 'value') else str(config.engine_type),
             "config": config.model_dump(mode='json'),
-            "llm_settings": llm_settings.model_dump(mode='json'),
-            "gm_llm_settings": gm_llm_settings.model_dump(mode='json') if gm_llm_settings else None,
+            # API keys never enter the state file, which is meant to be
+            # shareable as provenance; resume reads keys from the environment.
+            "llm_settings": llm_settings.model_dump(mode='json', exclude={'api_key'}),
+            "gm_llm_settings": (gm_llm_settings.model_dump(mode='json', exclude={'api_key'})
+                                if gm_llm_settings else None),
             "checkpoint_data": checkpoint_data,
         }
         with open(state_path, 'w', encoding='utf-8') as f:
