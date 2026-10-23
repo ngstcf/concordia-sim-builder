@@ -15,6 +15,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from backend.models.schemas import ExecutionRequest, LLMSettings, SimulationConfig
 from backend.services.simulation_state import simulation_state
+from backend.utils import event_journal
 
 
 BATCH_DIR = Path("logs")
@@ -92,6 +93,10 @@ class BatchRunner:
             current_task = batch.get('current_task_id')
             if current_task:
                 simulation_state.cancel_simulation(current_task)
+            # Persist here, not only from the run loop: if the SSE client
+            # disconnected, the loop's generator is gone and this is the only
+            # place the cancellation can be made durable.
+            self._save_batch_metadata(batch)
             return True
         return False
 
@@ -127,6 +132,8 @@ class BatchRunner:
             ],
         }
         self._batches[batch_id] = batch_state
+        event_journal.record("batch_started", batch_state['batch_name'],
+                             batch_id=batch_id, total_runs=total_runs)
 
         yield f"data: {json.dumps({'type': 'batch_start', 'batch_id': batch_id, 'total_runs': total_runs, 'param_combinations': batch_state['param_combinations']})}\n\n"
 
@@ -134,6 +141,10 @@ class BatchRunner:
         for combo in param_combinations:
             for repeat in range(num_runs):
                 if batch_state['status'] == 'cancelled':
+                    event_journal.record(
+                        "batch_cancelled", batch_state['batch_name'],
+                        batch_id=batch_id,
+                        completed_runs=batch_state['completed_runs'])
                     yield f"data: {json.dumps({'type': 'batch_cancelled', 'batch_id': batch_id, 'completed_runs': batch_state['completed_runs']})}\n\n"
                     self._save_batch_metadata(batch_state)
                     return
@@ -182,6 +193,13 @@ class BatchRunner:
                             continue
 
                         if inner_event_type == 'simulation_start':
+                            # Arm batch-level cancellation: cancel_batch
+                            # forwards to this id. Left unset, cancelling the
+                            # batch marks it cancelled but the in-flight
+                            # simulation keeps running to completion.
+                            if inner_event_data.get('task_id'):
+                                batch_state['current_task_id'] = (
+                                    inner_event_data['task_id'])
                             msg = inner_event_data.get('message')
                             if msg:
                                 run_status_event = {
@@ -203,6 +221,28 @@ class BatchRunner:
                             yield f"data: {json.dumps(run_progress_event)}\n\n"
                         elif inner_event_type == 'simulation_complete':
                             log_filename = inner_event_data.get('log_filename', '')
+                            # A run that died mid-way still emits
+                            # simulation_complete, because the runner salvages
+                            # partial results before reporting. Its 'completed'
+                            # flag is the authoritative outcome; without this
+                            # check a failed or cancelled run is recorded as a
+                            # successful one and failed_runs stays 0.
+                            if not inner_event_data.get('completed', True):
+                                error_msg = (
+                                    inner_event_data.get('error')
+                                    or inner_event_data.get('message')
+                                    or 'Simulation did not complete'
+                                )
+                                run_error_event = {
+                                    'type': 'run_error',
+                                    'batch_id': batch_id,
+                                    'run_index': run_index,
+                                    'total_runs': total_runs,
+                                    'error': error_msg,
+                                    'error_type': inner_event_data.get('error_type'),
+                                    'steps_completed': inner_event_data.get('steps_completed'),
+                                }
+                                yield f"data: {json.dumps(run_error_event)}\n\n"
                         elif inner_event_type == 'error':
                             error_msg = inner_event_data.get('error', 'Unknown error')
                             run_error_event = {
@@ -226,17 +266,26 @@ class BatchRunner:
                     run_result['status'] = 'failed'
                     run_result['error'] = error_msg
                     batch_state['failed_runs'] += 1
+                    event_journal.record(
+                        "batch_run_failed", error_msg[:300],
+                        batch_id=batch_id, run_index=run_index,
+                        total_runs=total_runs, log_filename=log_filename)
                 else:
                     run_result['status'] = 'completed'
                     batch_state['completed_runs'] += 1
 
                 batch_state['run_results'].append(run_result)
+                batch_state['current_task_id'] = None
 
                 yield f"data: {json.dumps({'type': 'run_complete', 'batch_id': batch_id, 'run_index': run_index, 'total_runs': total_runs, 'run_result': run_result, 'completed_runs': batch_state['completed_runs'], 'failed_runs': batch_state['failed_runs']})}\n\n"
 
         batch_state['status'] = 'completed'
         batch_state['completed_at'] = datetime.now().isoformat()
         self._save_batch_metadata(batch_state)
+        event_journal.record(
+            "batch_complete", batch_state['batch_name'], batch_id=batch_id,
+            completed_runs=batch_state['completed_runs'],
+            failed_runs=batch_state['failed_runs'])
 
         yield f"data: {json.dumps({'type': 'batch_complete', 'batch_id': batch_id, 'total_runs': total_runs, 'completed_runs': batch_state['completed_runs'], 'failed_runs': batch_state['failed_runs'], 'run_results': batch_state['run_results']})}\n\n"
 
@@ -249,25 +298,39 @@ class BatchRunner:
         except Exception as e:
             print(f"[BatchRunner] Failed to save batch metadata: {e}")
 
+    def _batch_summary(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            'batch_id': data.get('batch_id', ''),
+            'batch_name': data.get('batch_name', ''),
+            'status': data.get('status', ''),
+            'total_runs': data.get('total_runs', 0),
+            'completed_runs': data.get('completed_runs', 0),
+            'failed_runs': data.get('failed_runs', 0),
+            'started_at': data.get('started_at', ''),
+        }
+
     def list_batches(self) -> List[Dict[str, Any]]:
-        """List all batch metadata files."""
-        batches = []
+        """List all batches: live in-memory entries plus metadata files.
+
+        Metadata files are written at completion or cancellation, so a batch
+        that is still running (or whose SSE client disconnected mid-run)
+        exists only in memory. Previously this method read only the files,
+        which made such batches invisible here -- nothing that swept
+        /batch/list could find and cancel them. In-memory entries win on
+        conflict since the disk copy may lag.
+        """
+        by_id: Dict[str, Dict[str, Any]] = {}
         for f in sorted(BATCH_DIR.glob("batch_*.json"), reverse=True):
             try:
                 with open(f) as fh:
                     data = json.load(fh)
-                    batches.append({
-                        'batch_id': data.get('batch_id', ''),
-                        'batch_name': data.get('batch_name', ''),
-                        'status': data.get('status', ''),
-                        'total_runs': data.get('total_runs', 0),
-                        'completed_runs': data.get('completed_runs', 0),
-                        'failed_runs': data.get('failed_runs', 0),
-                        'started_at': data.get('started_at', ''),
-                    })
+                by_id[data.get('batch_id', f.stem)] = self._batch_summary(data)
             except Exception:
                 pass
-        return batches
+        for batch_id, data in self._batches.items():
+            by_id[batch_id] = self._batch_summary(data)
+        return sorted(by_id.values(),
+                      key=lambda b: b.get('started_at') or '', reverse=True)
 
 
 batch_runner = BatchRunner()

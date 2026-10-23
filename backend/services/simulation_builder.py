@@ -140,6 +140,48 @@ def build_simulation(
         )
         instances.append(initializer_config)
 
+    # Context-window control for the async social media GM: convert a window
+    # expressed in engine steps into per-agent history bounds, using the
+    # scheduler's expected actions per step. Without a bound, every broadcast
+    # post lands in every agent's prompt and context grows with population x
+    # steps (~140 tokens per entry), which exceeds a 128k window long before
+    # large populations finish. The GM's own observation buffer is bounded
+    # with the same value where the scheduler is installed below.
+    context_window_entries = None
+    _gm_p_early = config.game_master.parameters or {}
+    _feed_mode = str(_gm_p_early.get('feed_mode') or 'full').lower()
+    if (config.game_master.prefab == 'async_social_media__GameMaster'
+            and (_gm_p_early.get('context_window_steps')
+                 or _feed_mode == 'compacted')):
+        _gm_p = _gm_p_early
+        _default_rate = _gm_p.get('default_activity_rate', 1.0) or 1.0
+        _rates = _gm_p.get('per_agent_activity_rates', {}) or {}
+        _expected_acts = sum(
+            min(1.0, _rates.get(a.name, _default_rate) / _default_rate)
+            if _rates.get(a.name, _default_rate) > 0 else 0.0
+            for a in config.agents
+        )
+        # Compacted mode without an explicit window still needs bounded
+        # histories -- the digest is the compensation for what falls out, so
+        # a default 6-step window applies.
+        _window = float(_gm_p.get('context_window_steps') or 6.0)
+        # Factor 1.0: the budget holds exactly the window's expected activity.
+        # (An earlier 1.25 inflation made a 6-step window hold ~7.5 steps and,
+        # with per-entry token length growing late in long runs, overflowed a
+        # 128k context by 27 tokens at N=100 step 17.)
+        context_window_entries = int(_expected_acts * _window) + 8
+        for _agent in config.agents:
+            _comps = dict(_agent.components or {})
+            _comps.setdefault('observation_history_length',
+                              context_window_entries)
+            _comps.setdefault('self_perception_history_length',
+                              context_window_entries)
+            _agent.components = _comps
+        print(f"[INFO] context_window_steps={_window:g}: bounding agent and "
+              f"GM observation history to {context_window_entries} entries "
+              f"(~{context_window_entries * 140 // 1000}k tokens per prompt "
+              f"at ~140 tokens/entry)")
+
     # Create entity instances
     for agent_config in config.agents:
         entity_params = {
@@ -377,6 +419,22 @@ def build_simulation(
                 """Plotting not implemented for this use case."""
                 pass
 
+            def get_dimension_ranges(self) -> Dict[str, tuple[float, float]]:
+                """Per-dimension (min, max) score range.
+
+                Likert answers are scored as the 0-based choice index (see
+                QuestionnaireBase.process_answer), so a dimension spans
+                (0, n_choices - 1) using the widest choice list among its
+                questions. Choice-less dimensions default to (0.0, 1.0).
+                """
+                ranges: Dict[str, tuple[float, float]] = {}
+                for q in self.questions:
+                    n = len(q.choices) if getattr(q, "choices", None) else 0
+                    hi = float(n - 1) if n > 0 else 1.0
+                    _, prev_hi = ranges.get(q.dimension, (0.0, hi))
+                    ranges[q.dimension] = (0.0, max(prev_hi, hi))
+                return ranges
+
         # Convert dict questionnaires to QuestionnaireBase objects
         questionnaire_objects = []
         for qn_dict in questionnaires_data:
@@ -395,6 +453,16 @@ def build_simulation(
                     )
                     questions.append(question)
 
+                # Fall back to the set of per-question dimensions when the config
+                # omits a questionnaire-level `dimensions` list. The interviewer
+                # template only sets per-question `dimension`, leaving this None,
+                # which makes base_questionnaire._default_aggregate_results crash
+                # on `dimension in self.dimensions`. Deriving it here keeps
+                # aggregation working; the ICC path relies on per-answer
+                # dimensions and is unaffected either way.
+                derived_dimensions = qn_dict.get('dimensions') or sorted(
+                    {q.dimension for q in questions if q.dimension}
+                )
                 questionnaire = LikertQuestionnaire(
                     name=qn_dict['name'],
                     description=qn_dict['description'],
@@ -402,7 +470,7 @@ def build_simulation(
                     observation_preprompt=qn_dict['observation_preprompt'],
                     questions=questions,
                     preprompt=qn_dict.get('preprompt', ''),
-                    dimensions=qn_dict.get('dimensions')
+                    dimensions=derived_dimensions
                 )
                 questionnaire_objects.append(questionnaire)
                 debug_print(f"[DEBUG] Converted questionnaire: {questionnaire.name}")
@@ -426,10 +494,16 @@ def build_simulation(
             for var in config.game_master.grounded_variables
         ]
 
+        variable_groups = [
+            grp.model_dump() if hasattr(grp, 'model_dump') else grp
+            for grp in (config.game_master.variable_groups or [])
+        ]
+
         # Create the grounded variables component
         grounded_vars_component = create_grounded_variables_component(
             model=model,
-            variable_configs=variable_configs
+            variable_configs=variable_configs,
+            variable_groups=variable_groups,
         )
 
         # Add component to game master extra_components
@@ -441,6 +515,29 @@ def build_simulation(
         debug_print(f"[DEBUG] Component type: {type(grounded_vars_component).__name__}")
         debug_print(f"[DEBUG] Component name: {grounded_vars_component.name if hasattr(grounded_vars_component, 'name') else 'N/A'}")
         debug_print(f"[DEBUG] extra_components keys: {list(gm_params['extra_components'].keys())}")
+
+    # Add the per-agent probe if provided. Independent of grounded_variables:
+    # configuring both administers a tallied and a narrator-estimated series
+    # over the same run, which is what makes the two comparable.
+    agent_probe_component = None
+    if config.game_master.agent_probe and config.game_master.agent_probe.items:
+        from backend.prefabs.agent_probe import create_agent_probe_component
+
+        probe_cfg = config.game_master.agent_probe
+        agent_probe_component = create_agent_probe_component(
+            model=model,
+            items=[item.model_dump() if hasattr(item, 'model_dump') else item
+                   for item in probe_cfg.items],
+            interval=probe_cfg.interval,
+            memory_limit=probe_cfg.memory_limit,
+        )
+
+        if agent_probe_component is not None:
+            if 'extra_components' not in gm_params:
+                gm_params['extra_components'] = {}
+            gm_params['extra_components']['agent_probe_component'] = agent_probe_component
+            debug_print(f"[DEBUG] Agent probe added with {len(probe_cfg.items)} item(s), "
+                        f"interval {probe_cfg.interval}")
 
     # Add contrib GM components if provided
     if config.game_master.contrib_components:
@@ -459,6 +556,83 @@ def build_simulation(
             )
             gm_params['extra_components'][f'contrib_{cc.component_id}'] = component
             debug_print(f"[DEBUG] Added contrib GM component: {cc.component_id}")
+
+    # Replace the async social media GM's activity scheduler. The upstream one
+    # normalizes every agent's rate by the roster maximum, so raising one
+    # agent's rate silently suppresses all the others (see
+    # backend/prefabs/activity_scheduler.py). Overriding the same component key
+    # keeps the pinned fork untouched.
+    if config.game_master.prefab == 'async_social_media__GameMaster':
+        from backend.prefabs.activity_scheduler import IndependentActivityScheduler
+        from concordia.components import game_master as _gm_components
+
+        scheduler = IndependentActivityScheduler(
+            player_names=[a.name for a in config.agents],
+            default_activity_rate=gm_params.get('default_activity_rate', 1.0),
+            per_agent_activity_rates=gm_params.get('per_agent_activity_rates', {}),
+            activity_seed=gm_params.get('activity_seed'),
+        )
+        if 'extra_components' not in gm_params:
+            gm_params['extra_components'] = {}
+        gm_params['extra_components'][
+            _gm_components.next_acting.DEFAULT_NEXT_ACTING_COMPONENT_KEY
+        ] = scheduler
+
+        if context_window_entries:
+            # The GM accumulates the same broadcast stream as the agents, so
+            # an unbounded GM buffer hits the identical context wall; bound
+            # it with the same entry budget (override installed over the
+            # prefab's default LastNObservations key, fork untouched).
+            from concordia.components import agent as _actor_components
+            gm_params['extra_components'][
+                _actor_components.observation.DEFAULT_OBSERVATION_COMPONENT_KEY
+            ] = _actor_components.observation.LastNObservations(
+                history_length=context_window_entries)
+
+        # Feed compaction: bound delivery size and fold aged posts into a
+        # rolling digest (see backend/prefabs/feed_compaction.py). Default
+        # 'full' leaves the upstream ForumObservation in place untouched.
+        feed_mode = str(gm_params.get('feed_mode') or 'full').lower()
+        if feed_mode == 'compacted':
+            from backend.prefabs.feed_compaction import CompactingForumObservation
+            from concordia.components.game_master import (
+                make_observation as _mo_components,
+            )
+            compactor = CompactingForumObservation(
+                model=gm_model or model,
+                recent_posts=int(gm_params.get('feed_recent_posts', 60)),
+                digest_max_words=int(gm_params.get('feed_digest_max_words', 250)),
+                vote_summary_top=int(gm_params.get('feed_vote_summary_top', 20)),
+                min_fold_batch=int(gm_params.get('feed_min_fold_batch', 25)),
+            )
+            gm_params['extra_components'][
+                _mo_components.DEFAULT_MAKE_OBSERVATION_COMPONENT_KEY
+            ] = compactor
+            debug_print(
+                "[DEBUG] Installed CompactingForumObservation "
+                f"(recent_posts={compactor._recent_posts}, "
+                f"digest_max_words={compactor._digest_max_words})"
+            )
+        elif feed_mode != 'full':
+            print(f"[WARNING] Unknown feed_mode '{feed_mode}'; "
+                  "using 'full' (no compaction)")
+
+        clipped = scheduler.clipped_players()
+        if clipped:
+            # Not silently reinterpretable: one act per step is the engine's
+            # ceiling, so an amplification factor cannot be honoured.
+            reference = gm_params.get('default_activity_rate', 1.0)
+            detail = ', '.join(f'{n} ({r})' for n, r in sorted(clipped.items()))
+            print(
+                f"[WARNING] activity rates above default_activity_rate={reference} "
+                f"cannot be honoured (the engine allows at most one act per "
+                f"agent per step) and were clipped to 1.0: {detail}. To express "
+                f"relative amplification, scale the other agents down instead."
+            )
+        debug_print(
+            f"[DEBUG] Installed IndependentActivityScheduler for "
+            f"{len(config.agents)} players ({len(clipped)} rate(s) clipped)"
+        )
 
     gm_instance = prefab_lib.InstanceConfig(
         prefab=config.game_master.prefab,
@@ -557,8 +731,17 @@ def build_simulation(
 
     # Select engine based on config or GM prefab
     if config.game_master.prefab == 'interviewer__GameMaster':
-        from concordia.environment.engines import parallel
-        engine = parallel.ParallelQuestionnaireEngine()
+        # The interviewer / Likert (multiple-choice) questionnaire GM uses the
+        # game_master.questionnaire.Questionnaire component, whose JSON-list
+        # NEXT_ACTION_SPEC protocol only the ParallelQuestionnaireEngine drives.
+        # Upstream Concordia removed that engine (commit 030d2fa) in favor of the
+        # asynchronous engine for open-ended questionnaires; the multiple-choice
+        # path still needs it, so it is vendored in the backend to keep the
+        # pinned fork unmodified.  See backend/services/parallel_questionnaire_engine.py.
+        from backend.services.parallel_questionnaire_engine import (
+            ParallelQuestionnaireEngine,
+        )
+        engine = ParallelQuestionnaireEngine()
         debug_print(f"[DEBUG] Using ParallelQuestionnaireEngine for interviewer prefab")
     elif config.engine_type == EngineType.SIMULTANEOUS:
         from concordia.environment.engines import simultaneous
@@ -594,6 +777,47 @@ def build_simulation(
             gm._context_components['grounded_variables_component'] = grounded_vars_component
             debug_print(f"[DEBUG] Injected grounded_variables_component directly into '{gm.name}' "
                         f"(prefab '{config.game_master.prefab}' does not process extra_components)")
+
+    # The probe surveys the population, so it needs the entities, which do not
+    # exist until the simulation is constructed. Bind them here and inject the
+    # component for the same reason as above.
+    #
+    # Unlike the grounded variables, the probe is injected into the *named* game
+    # master rather than game_masters[0], which is the initializer whenever
+    # player_specific_context is set. The probe's cadence counts game master
+    # events, so letting it also count setup events would shift every
+    # administration by however many events initialization happened to take and
+    # would put the first reading before the formative memories exist.
+    if agent_probe_component is not None and sim.game_masters:
+        entities = list(getattr(sim, 'entities', []) or [])
+        if entities:
+            agent_probe_component.bind_entities(entities)
+            gm = next((g for g in sim.game_masters
+                       if getattr(g, 'name', None) == config.game_master.name),
+                      sim.game_masters[0])
+            if (hasattr(gm, '_context_components') and
+                    'agent_probe_component' not in gm._context_components):
+                gm._context_components['agent_probe_component'] = agent_probe_component
+                debug_print(f"[DEBUG] Injected agent_probe_component directly into '{gm.name}'")
+            # extra_components may have placed the probe on other game masters,
+            # including the initializer. Detach it everywhere but the named one.
+            for other in sim.game_masters:
+                if other is gm:
+                    continue
+                if getattr(other, '_context_components', None) and \
+                        other._context_components.get('agent_probe_component') is agent_probe_component:
+                    del other._context_components['agent_probe_component']
+                    debug_print(f"[DEBUG] Detached agent_probe_component from '{other.name}' "
+                                f"so setup events do not advance the probe cadence")
+            print(f"[BUILD] Agent probe bound to {len(entities)} entities, "
+                  f"measuring on '{gm.name}'")
+        else:
+            # Silently measuring nothing is the failure mode the probe exists
+            # to prevent, so refuse to run rather than export an empty series.
+            raise ValueError(
+                "agent_probe is configured but the simulation exposes no "
+                "entities to survey, so the probe would produce no data."
+            )
 
     # When allow_early_termination=False, ensure every GM has NeverTerminate
     # under DEFAULT_TERMINATE_COMPONENT_KEY so SwitchAct._terminate() short-

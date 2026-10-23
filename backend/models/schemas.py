@@ -34,6 +34,7 @@ class LLMProvider(str, Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
     AZURE = "azure"  # Azure OpenAI
+    AZURE2 = "azure2"  # Secondary Azure OpenAI endpoint (AZURE_OAI_ENDPOINT2/KEY2)
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
@@ -105,6 +106,109 @@ class VariableConfig(BaseModel):
     max_value: Optional[float] = Field(None, description="Maximum value (for numerical/percentage)")
     allowed_values: Optional[List[str]] = Field(None, description="Allowed values (for categorical)")
     update_rule: Optional[str] = Field(None, description="Description of how variable updates")
+    cumulative: bool = Field(
+        False,
+        description=(
+            "Treat as a running total: the Game Master carries the previous "
+            "value forward and adds to it, and the value is never allowed to "
+            "decrease. Use for counters (exposures, incidents, items "
+            "collected); leave false for state variables that are re-estimated "
+            "each step (support levels, morale, temperature)."
+        ),
+    )
+    max_delta: Optional[float] = Field(
+        None,
+        description=(
+            "Largest increase permitted in a single update. Strongly "
+            "recommended for cumulative counters, which are otherwise "
+            "unbounded above: a per-participant count should not be able to "
+            "rise by more than the population size in one step."
+        ),
+    )
+    group: Optional[str] = Field(
+        None,
+        description=(
+            "Name of the variable group this belongs to. Percentage variables "
+            "sharing a group are treated as shares of one whole and must sum "
+            "to 100; use game_master.variable_groups for any other total."
+        ),
+    )
+
+
+class VariableGroupConfig(BaseModel):
+    """A joint constraint across several grounded variables.
+
+    Per-variable bounds cannot express "these shares describe one
+    population", so two support percentages can each be a legal 0-100 value
+    while summing to an impossible total. Declaring the group makes the
+    constraint checkable at the moment of update.
+    """
+    name: str = Field(..., description="Group name, used in violation reports")
+    members: List[str] = Field(..., description="Names of the member variables")
+    sums_to: float = Field(..., description="Total the members must sum to")
+    tolerance: float = Field(
+        1.0,
+        description="Absolute deviation from the total tolerated without repair"
+    )
+    on_violation: Literal["renormalize", "reject", "flag"] = Field(
+        "renormalize",
+        description=(
+            "renormalize: rescale members to the declared total, preserving "
+            "proportions. reject: discard the offending update and keep the "
+            "previous values. flag: record the violation and change nothing."
+        ),
+    )
+
+
+class ProbeItemConfig(BaseModel):
+    """One forced-choice survey question put directly to every agent.
+
+    A grounded variable asks the game master to estimate a population quantity
+    from the events it narrated, which gives the figure no denominator: the
+    shares are not shares of any particular roster, so nothing constrains them
+    to sum, and a residual category has no reason to be the remainder. A probe
+    item asks each agent instead and counts the answers, so the resulting
+    shares partition a population that is known.
+    """
+    name: str = Field(..., description="Series name in the exported dataset")
+    question: str = Field(
+        ...,
+        description="The question as put to the agent, in the second person"
+    )
+    options: List[str] = Field(
+        ...,
+        description=(
+            "Permitted answers. Responses are constrained to this list, so the "
+            "tally is exhaustive and the shares sum to 100."
+        )
+    )
+    description: str = Field("", description="Optional note carried to export")
+
+
+class AgentProbeConfig(BaseModel):
+    """Longitudinal per-agent measurement, administered alongside the run."""
+    items: List[ProbeItemConfig] = Field(
+        ...,
+        description="Survey items to administer to every agent"
+    )
+    interval: int = Field(
+        25,
+        ge=1,
+        description=(
+            "Administer once every this many game master events. The "
+            "asynchronous engine gives each entity its own thread with no "
+            "shared step boundary, so game master events are the only clock "
+            "every agent is measured against."
+        )
+    )
+    memory_limit: int = Field(
+        40,
+        ge=1,
+        description=(
+            "How many of an agent's most recent memories to put in front of "
+            "it when it answers. Bounds probe cost per agent."
+        )
+    )
 
 
 class AvailableAction(BaseModel):
@@ -136,6 +240,21 @@ class GameMasterConfig(BaseModel):
     grounded_variables: Optional[List[VariableConfig]] = Field(
         None,
         description="Optional grounded variables to track during simulation"
+    )
+    variable_groups: Optional[List[VariableGroupConfig]] = Field(
+        None,
+        description=(
+            "Optional joint constraints across grounded variables, for shares "
+            "of a common whole that must sum to a declared total"
+        )
+    )
+    agent_probe: Optional[AgentProbeConfig] = Field(
+        None,
+        description=(
+            "Optional per-agent survey administered during the run. Can be "
+            "used alongside grounded_variables, in which case each run yields "
+            "both a tallied and a narrator-estimated series for comparison."
+        )
     )
     critical_decision_points: Optional[List[Dict[str, Any]]] = Field(
         None,
@@ -269,6 +388,12 @@ class LLMSettings(BaseModel):
     max_tokens: int = Field(16384, ge=1, le=65536, description="Maximum tokens to generate")
     api_version: Optional[str] = Field(None, description="API version for Azure OpenAI (e.g., '2024-02-15-preview'). Env: AZURE_OAI_API_VERSION")
     request_timeout: int = Field(300, ge=10, le=600, description="Per-request timeout in seconds for LLM calls")
+    extra_body: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Provider-specific request fields passed through to the "
+                    "API body verbatim (e.g., reasoning_effort or speed on "
+                    "reasoning-model deployments). OpenAI-compatible "
+                    "providers only.")
 
     # Validators to strip whitespace from string fields
     @field_validator('model_name', 'base_url', 'api_key', mode='before')
@@ -298,6 +423,20 @@ class ExecutionRequest(BaseModel):
     gm_llm_settings: Optional[LLMSettings] = Field(
         None,
         description="Optional separate LLM settings for the Game Master. If not set, uses llm_settings."
+    )
+
+
+class ResumeRequest(BaseModel):
+    """Request to resume a simulation from a saved checkpoint state file."""
+    state_filename: str = Field(
+        ...,
+        description="Basename of the .state.json file under the logs/ directory (e.g. '20260718_120000_Alice_Bob_My_premise_checkpoint_step5.state.json')"
+    )
+    additional_steps: Optional[int] = Field(
+        None,
+        ge=1,
+        le=1000,
+        description="Extra steps to run beyond the state's steps_completed. Required when the run already reached max_steps; optional for extending partial or early-terminated runs."
     )
 
     class Config:

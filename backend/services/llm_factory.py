@@ -153,7 +153,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set in settings or environment")
-        model = CustomGPTModel(api_key=api_key, model_name=model_name, base_url=base_url)
+        model = CustomGPTModel(api_key=api_key, model_name=model_name, base_url=base_url, extra_body=settings.extra_body)
 
     elif provider == LLMProvider.AZURE.value:
         # Azure OpenAI Service
@@ -172,7 +172,31 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key=api_key,
             model_name=model_name,
             base_url=azure_endpoint,
-            api_version=api_version
+            api_version=api_version,
+            extra_body=settings.extra_body,
+        )
+
+    elif provider == LLMProvider.AZURE2.value:
+        # Secondary Azure OpenAI endpoint (e.g. a Kimi-K2.5 deployment).
+        # Parameters from .env: AZURE_OAI_KEY2, AZURE_OAI_ENDPOINT2, and
+        # optionally AZURE_OAI_VERSION2 (falls back to AZURE_OAI_VERSION).
+        # User provides only: model_name (the endpoint-2 deployment name).
+        api_key = api_key or os.getenv('AZURE_OAI_KEY2')
+        azure_endpoint = base_url or os.getenv('AZURE_OAI_ENDPOINT2')
+        api_version = (settings.api_version or os.getenv('AZURE_OAI_VERSION2')
+                       or os.getenv('AZURE_OAI_VERSION', '2024-12-01-preview'))
+
+        if not api_key:
+            raise ValueError("AZURE_OAI_KEY2 not found in environment. Please add it to your .env file.")
+        if not azure_endpoint:
+            raise ValueError("AZURE_OAI_ENDPOINT2 not found in environment. Please add it to your .env file.")
+
+        model = CustomGPTModel(
+            api_key=api_key,
+            model_name=model_name,
+            base_url=azure_endpoint,
+            api_version=api_version,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.DEEPSEEK.value:
@@ -183,7 +207,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key=api_key,
             model_name=model_name,
-            base_url='https://api.deepseek.com'
+            base_url='https://api.deepseek.com',
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.GEMINI.value:
@@ -198,7 +223,7 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
             api_key = os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in settings or environment")
-        model = AnthropicModel(api_key=api_key, model_name=model_name, timeout=request_timeout)
+        model = AnthropicModel(api_key=api_key, model_name=model_name, timeout=request_timeout, extra_body=settings.extra_body)
 
     elif provider == LLMProvider.OLLAMA.value:
         # Ollama local — always uses localhost, no auth needed
@@ -206,7 +231,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key='ollama',
             model_name=model_name,
-            base_url=ollama_base_url
+            base_url=ollama_base_url,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.OLLAMA_REMOTE.value:
@@ -218,7 +244,8 @@ def get_model_and_embedder(settings: LLMSettings) -> Tuple[language_model.Langua
         model = CustomGPTModel(
             api_key=ollama_api_key,
             model_name=model_name,
-            base_url=ollama_base_url
+            base_url=ollama_base_url,
+            extra_body=settings.extra_body,
         )
 
     elif provider == LLMProvider.GLM.value:

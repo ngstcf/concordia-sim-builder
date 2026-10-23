@@ -11,13 +11,27 @@ interface SimulationLog {
   size: number;
   modified: number;
   created: number;
+  resumable: boolean;
+  state_filename: string | null;
+  outcome?: 'completed' | 'failed' | 'cancelled' | null;
+  outcome_error?: string | null;
+}
+
+interface CheckpointFile {
+  filename: string;
+  path: string;
+  size: number;
+  modified: number;
+  resumable: boolean;
+  state_filename: string | null;
 }
 
 interface RecentSimulationsProps {
   onLoadSimulation: (htmlContent: string, filename: string, modified: number) => void;
+  onResumeSimulation?: (stateFilename: string, additionalSteps?: number) => void;
 }
 
-export default function RecentSimulations({ onLoadSimulation }: RecentSimulationsProps) {
+export default function RecentSimulations({ onLoadSimulation, onResumeSimulation }: RecentSimulationsProps) {
   const [logs, setLogs] = useState<SimulationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +39,8 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   const [showCleanup, setShowCleanup] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
-  const [checkpoints, setCheckpoints] = useState<SimulationLog[]>([]);
+  const [checkpoints, setCheckpoints] = useState<CheckpointFile[]>([]);
+  const [extendState, setExtendState] = useState<{ filename: string; steps: number } | null>(null);
 
   useEffect(() => {
     loadRecentSimulations();
@@ -39,16 +54,16 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
         count: data.total_count || 0,
         size: data.total_size || 0
       });
-      // Convert checkpoint data to SimulationLog format
-      if (data.checkpoints && data.checkpoints.length > 0) {
-        setCheckpoints(data.checkpoints.map(cp => ({
-          filename: cp.filename,
-          path: cp.path,
-          size: cp.size,
-          modified: cp.modified,
-          created: cp.modified
-        })));
-      }
+      // Assigned unconditionally: after a sweep the list can legitimately be
+      // empty, and skipping the empty case left the deleted files on screen.
+      setCheckpoints((data.checkpoints ?? []).map(cp => ({
+        filename: cp.filename,
+        path: cp.path,
+        size: cp.size,
+        modified: cp.modified,
+        resumable: cp.resumable ?? false,
+        state_filename: cp.state_filename ?? null,
+      })));
     } catch (err) {
       console.error('Failed to load checkpoint info:', err);
       // Set empty state on error
@@ -61,7 +76,7 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
   };
 
   const handleDeleteCheckpoints = async () => {
-    if (!confirm('Are you sure you want to delete all checkpoint files? This cannot be undone.')) {
+    if (!confirm('Delete the checkpoint files that completed runs have made redundant? The most advanced checkpoint of any run that never finished is kept, so those runs can still be resumed. This cannot be undone.')) {
       return;
     }
 
@@ -69,10 +84,11 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
     try {
       const result = await deleteCheckpointFiles();
       alert(result.message);
-      setCheckpointInfo({ count: 0, size: 0 });
-      setCheckpoints([]);
       setShowCleanup(false);
       setShowCheckpoints(false);
+      // Re-read rather than zeroing: the sweep spares the resume point of any
+      // run that never finished, so some checkpoints legitimately remain.
+      loadCheckpointInfo();
       // Reload simulations list
       loadRecentSimulations();
     } catch (err: any) {
@@ -295,9 +311,71 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>{formatDate(log.modified)}</span>
                   <span>{formatFileSize(log.size)}</span>
+                  {log.outcome === 'failed' && (
+                    <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium" title={log.outcome_error || 'Run failed'}>
+                      failed
+                    </span>
+                  )}
+                  {log.outcome === 'cancelled' && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                      cancelled
+                    </span>
+                  )}
+                  {log.outcome === 'completed' && (
+                    <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                      ✓
+                    </span>
+                  )}
                 </div>
+                {/* Extend inline controls — rendered below title to avoid squeezing it */}
+                {log.resumable && log.state_filename && onResumeSimulation && extendState?.filename === log.filename && (
+                  <div className="mt-2 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={extendState.steps}
+                      onChange={e => setExtendState({ filename: log.filename, steps: Math.max(1, parseInt(e.target.value) || 1) })}
+                      className="w-16 px-1.5 py-0.5 text-xs border border-teal-300 rounded focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      title="Additional steps to run"
+                      autoFocus
+                    />
+                    <span className="text-xs text-gray-500">steps</span>
+                    <button
+                      onClick={() => {
+                        onResumeSimulation(log.state_filename!, extendState.steps);
+                        setExtendState(null);
+                      }}
+                      className="px-2.5 py-0.5 rounded text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+                    >
+                      Run
+                    </button>
+                    <button
+                      onClick={() => setExtendState(null)}
+                      className="px-1.5 py-0.5 rounded text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex-shrink-0 flex items-center gap-1">
+                {/* Extend button (idle state) */}
+                {log.resumable && log.state_filename && onResumeSimulation && extendState?.filename !== log.filename && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExtendState({ filename: log.filename, steps: 10 });
+                    }}
+                    className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors whitespace-nowrap"
+                    title="Extend this completed simulation with more steps"
+                  >
+                    <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Extend
+                  </button>
+                )}
                 <button
                   onClick={(e) => handleDelete(e, log.filename)}
                   className="p-1 text-gray-300 hover:text-red-500 transition-colors"
@@ -347,7 +425,23 @@ export default function RecentSimulations({ onLoadSimulation }: RecentSimulation
                       <span>{formatFileSize(checkpoint.size)}</span>
                     </div>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {checkpoint.resumable && checkpoint.state_filename && onResumeSimulation && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onResumeSimulation(checkpoint.state_filename!);
+                        }}
+                        className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors whitespace-nowrap"
+                        title="Resume simulation from this checkpoint"
+                      >
+                        <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Resume
+                      </button>
+                    )}
                     <svg className="h-5 w-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>

@@ -182,17 +182,31 @@ changes candidate support and trust in the information environment.""",
             "parameters": {
                 "forum_name": "MastoTown",
                 "default_activity_rate": 1.0,
+                # Rates follow the source study (Puelma Touzel et al. 2024,
+                # sandbox-social/mastodon-sim): voters act with per-episode
+                # probability 0.8 and the malicious actor 0.9 -- a modest bump,
+                # with the manipulation carried by goal/context, not volume.
+                # (An earlier version set Glenn_Boost to 10.0, misreading the
+                # paper's "base usage rate of 10 [times per day, of 48
+                # episodes]" as a 10x multiplier; the engine allows at most
+                # one act per agent per step, so rates above 1.0 are not
+                # achievable in any case.)
                 "per_agent_activity_rates": {
-                    "Glenn_Boost": 10.0,
-                    "Alicia_Civic": 1.2,
-                    "Omar_Transit": 0.9,
-                    "Nina_Facts": 1.6,
-                    "Diego_LocalBiz": 1.3,
+                    "Glenn_Boost": 0.9,
+                    "Alicia_Civic": 0.8,
+                    "Omar_Transit": 0.8,
+                    "Nina_Facts": 0.8,
+                    "Diego_LocalBiz": 0.8,
                     "Priya_Student": 0.8,
                 },
                 "activity_seed": 42,
             },
             "grounded_variables": [
+                # These three are shares of one discussion population, so
+                # per-variable bounds are not enough: each can sit inside 0-100
+                # while the three together describe an impossible electorate.
+                # The group below declares the joint constraint they were
+                # always under.
                 {
                     "name": "rivera_support",
                     "variable_type": "percentage",
@@ -200,6 +214,7 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 49,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "hale_support",
@@ -208,6 +223,7 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 45,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "undecided_rate",
@@ -216,15 +232,98 @@ changes candidate support and trust in the information environment.""",
                     "default_value": 6,
                     "min_value": 0,
                     "max_value": 100,
+                    "group": "electorate",
                 },
                 {
                     "name": "misinfo_exposure",
+                    # Specified as a running total, not a level. Wording that
+                    # reads as an instantaneous quantity ("count-like
+                    # indicator observed in the feed") invites the game master
+                    # to re-estimate it from the current event, so the value
+                    # rises while a claim is circulating and falls back once it
+                    # stops, which is useless as a manipulation check.
                     "variable_type": "numerical",
-                    "description": "Count-like indicator of misinformation exposures observed in the feed",
+                    "description": (
+                        "Running total of misinformation exposures since the"
+                        " simulation began: one per participant who saw a post"
+                        " or reply repeating an unsupported claim about the"
+                        " election"
+                    ),
                     "default_value": 0,
                     "min_value": 0,
+                    "cumulative": True,
+                    "update_rule": (
+                        "Add the number of participants who saw an unsupported"
+                        " claim this step to the previous total; never decrease"
+                    ),
                 },
             ],
+            # on_violation is "flag" on purpose. Rescaling would repair the
+            # numbers and destroy the evidence that they needed repairing,
+            # which is the one thing worth knowing about a narrator-estimated
+            # series; rejecting would freeze the series at its last legal
+            # value and quietly change the dynamics being studied. Flagging
+            # passes every value through unchanged and records each breach, so
+            # a run behaves exactly as it did before this group existed and
+            # the breach rate becomes a reportable property of it. Switch to
+            # renormalize only if a downstream analysis genuinely needs the
+            # shares to close, and report the count either way.
+            "variable_groups": [
+                {
+                    "name": "electorate",
+                    "members": [
+                        "rivera_support",
+                        "hale_support",
+                        "undecided_rate",
+                    ],
+                    "sums_to": 100,
+                    # 1 point absorbs the rounding of three integer
+                    # percentages and nothing more: a tolerance wide enough to
+                    # accommodate a real disagreement would defeat the check.
+                    "tolerance": 1.0,
+                    "on_violation": "flag",
+                },
+            ],
+            # The variables above are the game master's estimates, taken from
+            # the events it narrated. The probe below asks each resident
+            # directly and counts the answers, so its shares are shares of a
+            # known roster. Both run on the same simulation, which is what
+            # makes them comparable.
+            "agent_probe": {
+                "items": [
+                    {
+                        "name": "vote_intention",
+                        "question": (
+                            "The city election is coming up. Which candidate"
+                            " do you intend to vote for right now?"
+                        ),
+                        "options": ["Rivera", "Hale", "Undecided"],
+                        "description": (
+                            "Vote intention, tallied over the full resident"
+                            " roster"
+                        ),
+                    },
+                    {
+                        "name": "information_trust",
+                        "question": (
+                            "How much do you trust what you are reading about"
+                            " the election on MastoTown right now?"
+                        ),
+                        "options": ["Trust it", "Unsure", "Distrust it"],
+                        "description": (
+                            "Trust in the information environment, tallied"
+                            " over the full resident roster"
+                        ),
+                    },
+                ],
+                # Chosen so a 20-step run is surveyed about 20 times: this
+                # scenario produces roughly 22 game master events per step at
+                # this population size. Scale with the population, since a
+                # larger one produces proportionally more events per step and
+                # would otherwise be surveyed far more often.
+                "interval": 22,
+                "memory_limit": 40,
+            },
         },
         "shared_memories": [
             "MastoTown is a local Mastodon-like social network where residents debate city politics.",

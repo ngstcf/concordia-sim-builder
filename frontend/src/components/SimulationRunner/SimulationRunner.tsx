@@ -5,16 +5,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulation } from '../../contexts/SimulationContext';
-import { executeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
+import { API_BASE_URL, executeSimulationStream, resumeSimulationStream, validateConfig, cancelSimulation, getProviderModels, simulationPlay, simulationPause, simulationStep, simulationStop, getSimulationAnalytics, getLogConfig, connectLogStream, getSimulationStatus, getSimulationsStatus } from '../../utils/api';
 import RecentSimulations from './RecentSimulations';
 import StatisticalDashboard from './StatisticalDashboard';
 import TimelineVisualization from './TimelineVisualization';
 import ActionsView from './ActionsView';
 import NaturalLanguageSummary from './NaturalLanguageSummary';
 import GroundedVariablesChart from './GroundedVariablesChart';
+import AgentProbeChart from './AgentProbeChart';
 import CooperationRateChart from './CooperationRateChart';
 import SimulationAnalysis from './SimulationAnalysis';
 import BatchRunner from './BatchRunner';
+import HealthStrip from './HealthStrip';
 import LogViewer from './LogViewer';
 import type { LogEntry } from './LogViewer';
 
@@ -250,7 +252,7 @@ export default function SimulationRunner() {
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [showBatchRunner, setShowBatchRunner] = useState(false);
-  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'cooperation' | 'analysis' | 'measurements'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'statistics' | 'timeline' | 'actions' | 'summary' | 'grounded-variables' | 'agent-probe' | 'cooperation' | 'analysis' | 'measurements'>('log');
   const [taskId, setTaskId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [controllerState, setControllerState] = useState<'playing' | 'paused' | 'stepping' | 'stopped' | null>(null);
@@ -332,7 +334,6 @@ export default function SimulationRunner() {
   const startPollingRecovery = useCallback((tid: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
     let failCount = 0;
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
     const stopPolling = (clearBanner = true) => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -344,7 +345,7 @@ export default function SimulationRunner() {
       stopPolling();
       if (data.log_filename) {
         try {
-          const res = await fetch(`${API_BASE}/api/simulations/logs/${data.log_filename}`);
+          const res = await fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`);
           const logData = await res.json();
           setResults({ ...data, results: logData.html_content, timestamp: logData.modified });
         } catch {
@@ -623,6 +624,75 @@ export default function SimulationRunner() {
     console.log('[handleRun] executeSimulationStream completed');
   };
 
+  const handleResume = async (stateFilename: string, additionalSteps?: number) => {
+    console.log('[handleResume] Resuming from:', stateFilename, 'additionalSteps:', additionalSteps);
+    setRunning(true);
+    setError(null);
+    setResults(null);
+    setProgress(null);
+    setTaskId(null);
+    setDisconnected(false);
+    setStepDataLog([]);
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+
+    await resumeSimulationStream(
+      stateFilename,
+      additionalSteps,
+      // onProgress
+      (progressData: any) => {
+        if (progressData.task_id) setTaskId(progressData.task_id);
+        setProgress(progressData);
+      },
+      // onComplete
+      (result) => {
+        setResults(result);
+        setSimulationMeta({
+          llm_provider: result.llm_provider,
+          llm_model: result.llm_model,
+          gm_llm_provider: result.gm_llm_provider,
+          gm_llm_model: result.gm_llm_model,
+          elapsed_seconds: result.elapsed_seconds,
+          steps_completed: result.steps_completed,
+        });
+        setProgress(null);
+        setRunning(false);
+        setControllerState(null);
+      },
+      // onError
+      (errMsg) => {
+        setError(errMsg);
+        setProgress(null);
+        setRunning(false);
+        setControllerState(null);
+      },
+      // onStepData
+      (data) => {
+        setStepDataLog(prev => [...prev, { step: data.step, acting_entity: data.acting_entity, action: data.action }]);
+        setControllerState('paused');
+      },
+      // onControllerState
+      (data) => {
+        setControllerState(data.state as 'playing' | 'paused' | 'stepping' | 'stopped');
+        if (data.task_id) setTaskId(data.task_id);
+      },
+      // onDisconnect
+      () => {
+        setDisconnected(true);
+        setTaskId(prev => {
+          if (prev) {
+            startPollingRecovery(prev);
+          } else {
+            setError('Connection lost during resume. The simulation may still be running.');
+            setRunning(false);
+            setDisconnected(false);
+          }
+          return prev;
+        });
+      },
+    );
+    console.log('[handleResume] resumeSimulationStream completed');
+  };
+
   const handleCancel = async () => {
     if (!taskId) {
       setError('No simulation to cancel.');
@@ -813,6 +883,30 @@ export default function SimulationRunner() {
                   onChange={(e) => setLLMSettings({ ...llmSettings, request_timeout: parseInt(e.target.value) || 120 })}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Reasoning Effort
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments using the reasoning_effort field: gpt-5.6 none|low|medium|high|xhigh; DeepSeek none|low|high|max (default high). Anthropic uses different fields (thinking / output_config.effort): set those via JSON import. Unsupported values fail fast with a clear API error.">ⓘ</span>
+                </label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={(llmSettings.extra_body?.reasoning_effort as string) ?? ''}
+                  onChange={(e) => {
+                    const eb: Record<string, any> = { ...(llmSettings.extra_body || {}) };
+                    if (e.target.value === '') delete eb.reasoning_effort;
+                    else eb.reasoning_effort = e.target.value;
+                    setLLMSettings({ ...llmSettings, extra_body: Object.keys(eb).length ? eb : undefined });
+                  }}
+                >
+                  <option value="">Model default</option>
+                  <option value="none">none (fastest)</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="xhigh">xhigh</option>
+                  <option value="max">max</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -931,6 +1025,30 @@ export default function SimulationRunner() {
                       />
                     )}
                   </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Reasoning Effort
+                  <span className="text-gray-400 ml-1" title="Reasoning-model deployments using the reasoning_effort field: gpt-5.6 none|low|medium|high|xhigh; DeepSeek none|low|high|max (default high). Anthropic uses different fields (thinking / output_config.effort): set those via JSON import. Unsupported values fail fast with a clear API error.">ⓘ</span>
+                </label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={(gmLlmSettings.extra_body?.reasoning_effort as string) ?? ''}
+                  onChange={(e) => {
+                    const eb: Record<string, any> = { ...(gmLlmSettings.extra_body || {}) };
+                    if (e.target.value === '') delete eb.reasoning_effort;
+                    else eb.reasoning_effort = e.target.value;
+                    setGmLlmSettings({ ...gmLlmSettings, extra_body: Object.keys(eb).length ? eb : undefined });
+                  }}
+                >
+                  <option value="">Model default</option>
+                  <option value="none">none (fastest)</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="xhigh">xhigh</option>
+                  <option value="max">max</option>
+                </select>
+              </div>
                 </div>
               )}
             </div>
@@ -1117,7 +1235,7 @@ export default function SimulationRunner() {
           </div>
 
           {/* Recent Simulations */}
-          <RecentSimulations onLoadSimulation={handleLoadSimulation} />
+          <RecentSimulations onLoadSimulation={handleLoadSimulation} onResumeSimulation={handleResume} />
           </div>
           )}
         </div>
@@ -1125,6 +1243,8 @@ export default function SimulationRunner() {
         {/* Right Column - Results */}
         <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Validation Status */}
+          <HealthStrip />
+
           {validation && (
             <div className={`rounded-xl p-4 ${validation.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
               <div className="flex items-start">
@@ -1461,6 +1581,19 @@ export default function SimulationRunner() {
                     >
                       Grounded Variables
                     </button>
+                    {/* Next to Grounded Variables on purpose: the two measure the
+                        same kind of quantity by different means, and comparing
+                        them is the point. */}
+                    <button
+                      onClick={() => setActiveTab('agent-probe')}
+                      className={`${
+                        activeTab === 'agent-probe'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors min-w-fit`}
+                    >
+                      Agent Probe
+                    </button>
                     <button
                       onClick={() => setActiveTab('cooperation')}
                       className={`${
@@ -1559,6 +1692,10 @@ export default function SimulationRunner() {
                     simulationId={results.task_id || null}
                     llmSettings={llmSettings}
                   />
+                )}
+
+                {activeTab === 'agent-probe' && (
+                  <AgentProbeChart filename={results.log_filename || null} />
                 )}
 
                 {activeTab === 'cooperation' && (

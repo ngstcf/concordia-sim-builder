@@ -78,6 +78,91 @@ export interface VariableConfig {
   max_value?: number;
   allowed_values?: string[];
   update_rule?: string;
+  // Treat as a running total: the Game Master carries the previous value
+  // forward and adds to it, and it is never allowed to decrease.
+  cumulative?: boolean;
+  // Largest increase permitted in one update. Without it a cumulative
+  // counter is unbounded above.
+  max_delta?: number;
+  // Name of a variable group this belongs to; see VariableGroupConfig.
+  group?: string;
+}
+
+// A joint constraint across several grounded variables. Per-variable bounds
+// cannot express "these shares describe one population": each share can be a
+// legal 0-100 value while the total is impossible.
+export interface VariableGroupConfig {
+  name: string;
+  members: string[];
+  sums_to: number;
+  tolerance?: number;
+  on_violation?: 'renormalize' | 'reject' | 'flag';
+}
+
+// One forced-choice question put directly to every agent.
+export interface ProbeItemConfig {
+  name: string;
+  question: string;
+  options: string[];
+  description?: string;
+}
+
+// Longitudinal per-agent measurement administered alongside the run.
+export interface AgentProbeConfig {
+  items: ProbeItemConfig[];
+  // Counted in Game Master events, not engine steps: the asynchronous engine
+  // gives each entity its own loop with no shared step boundary.
+  interval: number;
+  memory_limit?: number;
+}
+
+// What one administration of one item recorded. n_responding is carried
+// separately from n_population because an item answered by half the roster is
+// a different measurement from one answered by all of it, and the shares alone
+// cannot tell them apart.
+export interface ProbeAdministration {
+  event_index: number;
+  shares: Record<string, number>;
+  counts: Record<string, number>;
+  n_responding: number;
+  n_population: number;
+  timestamp?: string;
+}
+
+export interface ProbeResponse {
+  event_index: number;
+  timestamp?: string;
+  item: string;
+  agent: string;
+  answer: string;
+}
+
+export interface ProbeFailure {
+  event_index: number;
+  item: string;
+  reason: string;
+}
+
+// What the probe managed to measure, as opposed to what it was asked to.
+export interface ProbeIntegrity {
+  population: number;
+  items: string[];
+  interval: number;
+  administrations: number;
+  events_seen: number;
+  failures: number;
+  per_item: Record<string, {
+    administrations: number;
+    min_responding: number;
+    max_responding: number;
+  }>;
+}
+
+export interface AgentProbeResults {
+  series: Record<string, ProbeAdministration[]>;
+  responses: ProbeResponse[];
+  failures: ProbeFailure[];
+  integrity: ProbeIntegrity;
 }
 
 // Available Action
@@ -114,6 +199,8 @@ export interface GameMasterConfig {
   acting_order: ActingOrder;
   parameters: Record<string, any>;
   grounded_variables?: VariableConfig[];
+  variable_groups?: VariableGroupConfig[];
+  agent_probe?: AgentProbeConfig;
   critical_decision_points?: CriticalDecisionPoint[];
   contrib_components?: ContribComponentConfig[];
   allow_early_termination?: boolean;
@@ -161,6 +248,7 @@ export interface LLMSettings {
   max_tokens: number;
   api_version?: string;  // For Azure OpenAI
   request_timeout: number;
+  extra_body?: Record<string, any>;  // Provider-specific request fields (e.g. reasoning_effort)
 }
 
 // Execution Request

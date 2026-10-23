@@ -23,6 +23,7 @@ from backend.models.schemas import (
     ValidationResult,
     PrefabInfo,
     ExecutionRequest,
+    ResumeRequest,
     ComponentValidationRequest,
     GroundedVariablesExtractionRequest,
     PersonaGenerationRequest,
@@ -46,6 +47,7 @@ from backend.services.llm_factory import get_available_providers
 from backend.services.simulation_state import simulation_state
 from backend.utils.debug_print import debug_print, DEBUG_ENABLED, LLM_LOGGING_ENABLED
 from backend.utils.log_broadcaster import broadcaster
+from backend.utils import event_journal
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
@@ -430,6 +432,66 @@ async def validate_config(config: SimulationConfig):
     if len(agent_names) != len(set(agent_names)):
         warnings.append("Agent names should be unique for clarity")
 
+    # Context feasibility projection for the async social media GM: every
+    # broadcast post lands in every agent's history (~140 tokens per entry),
+    # so prompts grow with population x steps unless a window bounds them.
+    gm_p_any = config.game_master.parameters or {}
+    feed_mode = str(gm_p_any.get('feed_mode') or 'full').lower()
+    if feed_mode not in ('full', 'compacted'):
+        errors.append(
+            f"game_master.parameters.feed_mode must be 'full' or 'compacted', "
+            f"got '{gm_p_any.get('feed_mode')}'")
+    elif (feed_mode != 'full'
+          and config.game_master.prefab != 'async_social_media__GameMaster'):
+        warnings.append(
+            f"feed_mode='{feed_mode}' has no effect: feed compaction applies "
+            f"only to 'async_social_media__GameMaster'")
+
+    if config.game_master.prefab == 'async_social_media__GameMaster':
+        gm_p = config.game_master.parameters or {}
+        default_rate = gm_p.get('default_activity_rate', 1.0) or 1.0
+        rates = gm_p.get('per_agent_activity_rates', {}) or {}
+        expected_acts = sum(
+            min(1.0, rates.get(a.name, default_rate) / default_rate)
+            if rates.get(a.name, default_rate) > 0 else 0.0
+            for a in config.agents)
+        window = gm_p.get('context_window_steps')
+        compacted = feed_mode == 'compacted'
+        if compacted:
+            # Compacted mode auto-bounds histories to a 6-step window when no
+            # explicit one is set, and replaces forgotten posts with a rolling
+            # digest, so the projection horizon is always the window.
+            horizon = float(window) if window else 6.0
+        else:
+            horizon = float(window) if window else float(config.max_steps or 20)
+        entries = expected_acts * horizon
+        est_tokens = int(entries * 140) + 8000
+        if compacted:
+            digest_words = int(gm_p.get('feed_digest_max_words', 250))
+            est_tokens += int(digest_words * 1.4)
+        if est_tokens > 100_000:
+            if compacted:
+                warnings.append(
+                    f"feed_mode='compacted' with a {horizon:g}-step window still "
+                    f"projects ~{est_tokens // 1000}k tokens per prompt "
+                    f"(~{entries:.0f} history entries at ~140 tokens each); "
+                    f"reduce context_window_steps or the population.")
+            elif window:
+                warnings.append(
+                    f"context_window_steps={window} projects ~{est_tokens // 1000}k "
+                    f"tokens per prompt (~{entries:.0f} history entries at ~140 "
+                    f"tokens each); 128k-context models will truncate or fail. "
+                    f"Reduce the window or the population.")
+            else:
+                warnings.append(
+                    f"Unbounded agent memory with {len(config.agents)} agents x "
+                    f"{config.max_steps} steps projects ~{est_tokens // 1000}k tokens "
+                    f"per prompt by the final step (~{entries:.0f} entries at ~140 "
+                    f"tokens each), beyond typical 128k contexts. Set "
+                    f"game_master.parameters.context_window_steps to bound it, or "
+                    f"feed_mode='compacted' to bound it with a digest of older "
+                    f"activity.")
+
     # Validate game master
     if not config.game_master.name:
         errors.append("Game master must have a name")
@@ -561,6 +623,84 @@ async def execute_simulation_simple(request: ExecutionRequest):
     return results
 
 
+@router.post("/resume")
+async def resume_simulation(request: ResumeRequest):
+    """
+    Resume a simulation from a saved resumable state file (.state.json).
+
+    The state file must have been created automatically alongside an HTML
+    checkpoint (every checkpoint_interval steps or on emergency save).
+    Returns a streaming SSE response identical to /execute — the frontend
+    can handle it with the same event loop.
+
+    Note: sims built with player_specific_context (formative memories
+    initializer) may re-run initializer steps on resume.  Check the
+    resumable flag from GET /logs/checkpoints to confirm the file exists.
+    """
+    import json
+    from pathlib import Path as _P
+    from fastapi.responses import StreamingResponse
+    from backend.services.simulation_runner import LOGS_DIR
+
+    # Sanitise: only allow a plain filename (no path traversal)
+    state_filename = _P(request.state_filename).name
+    if not state_filename.endswith('.state.json'):
+        raise HTTPException(status_code=400, detail="state_filename must end with .state.json")
+
+    state_path = LOGS_DIR / state_filename
+    if not state_path.is_file():
+        raise HTTPException(status_code=404, detail=f"State file not found: {state_filename}")
+
+    try:
+        with open(state_path, 'r', encoding='utf-8') as f:
+            resume_state = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse state file: {e}")
+
+    # Reconstruct config and LLM settings from the saved payload
+    try:
+        from backend.models.schemas import SimulationConfig, LLMSettings
+        config = SimulationConfig(**resume_state['config'])
+        llm_settings = LLMSettings(**resume_state['llm_settings'])
+        gm_llm_settings = (
+            LLMSettings(**resume_state['gm_llm_settings'])
+            if resume_state.get('gm_llm_settings')
+            else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not reconstruct simulation config: {e}")
+
+    steps_completed = int(resume_state.get('steps_completed', 0))
+
+    if request.additional_steps:
+        # Extend: run this many more steps beyond what was already done.
+        # Works for both completed runs (remaining == 0) and partial/early-terminated runs.
+        config.max_steps = steps_completed + request.additional_steps
+        print(f"[RESUME] Extending from {state_filename} "
+              f"(step {steps_completed} + {request.additional_steps} additional)")
+    else:
+        remaining = config.max_steps - steps_completed
+        if remaining <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Simulation already complete ({steps_completed}/{config.max_steps} steps). "
+                    "Provide additional_steps to extend."
+                )
+            )
+        print(f"[RESUME] Starting resume from {state_filename} "
+              f"(step {steps_completed}/{config.max_steps})")
+
+    return StreamingResponse(
+        run_simulation_stream(config, llm_settings, gm_llm_settings, resume_state=resume_state),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/export-template")
 async def export_template():
     """Export a blank simulation configuration template."""
@@ -634,6 +774,10 @@ async def get_recent_simulations(limit: int = 20):
     if not logs_dir.exists():
         return []
 
+    # Outcome badges come from the tiny per-task journals, never from
+    # .metadata.json (which reaches gigabytes on large runs).
+    outcomes = event_journal.run_outcomes()
+
     # Get all HTML files in logs directory, excluding checkpoints
     log_files = []
     for file_path in logs_dir.glob("*.html"):
@@ -645,12 +789,19 @@ async def get_recent_simulations(limit: int = 20):
                 continue
 
             stat = file_path.stat()
+            state_file = file_path.with_suffix('.state.json')
+            resumable = state_file.is_file()
+            outcome = outcomes.get(file_path.name)
             log_files.append({
                 "filename": file_path.name,
                 "path": str(file_path),
                 "size": stat.st_size,
                 "modified": stat.st_mtime,
-                "created": stat.st_ctime
+                "created": stat.st_ctime,
+                "resumable": resumable,
+                "state_filename": state_file.name if resumable else None,
+                "outcome": outcome["outcome"] if outcome else None,
+                "outcome_error": outcome.get("error") if outcome else None,
             })
         except Exception:
             continue
@@ -732,11 +883,15 @@ async def get_checkpoint_files():
 
         for file_path in all_checkpoint_files:
             stat = file_path.stat()
+            state_file = file_path.with_suffix('.state.json')
+            resumable = state_file.is_file()
             checkpoints.append({
                 "filename": file_path.name,
                 "size": stat.st_size,
                 "modified": stat.st_mtime,
-                "path": str(file_path)
+                "path": str(file_path),
+                "resumable": resumable,
+                "state_filename": state_file.name if resumable else None,
             })
             total_size += stat.st_size
 
@@ -760,20 +915,27 @@ async def get_checkpoint_files():
 
 
 @router.delete("/logs/checkpoints")
-async def delete_checkpoint_files():
+async def delete_checkpoint_files(include_unfinished: bool = False):
     """
-    Delete all checkpoint files from the logs directory.
+    Delete the checkpoint files a completed run has made redundant.
 
     Checkpoint files include:
     - Regular checkpoints: '*_checkpoint_stepN.html' + '.metadata.json'
     - Emergency checkpoints: '*_EMERGENCY_CHECKPOINT.html' + '.metadata.json'
     - Watchdog emergency: '*_WATCHDOG_EMERGENCY*.html' + '.metadata.json'
+    ...each with its '.state.json' resumable sidecar.
+
+    A run that never reached its final save has no resume point other than a
+    checkpoint, so by default the sweep spares the most advanced checkpoint of
+    every unfinished run and deletes the rest. Pass include_unfinished=true to
+    clear the directory regardless, which also discards those resume points.
 
     Returns:
-        Summary of deleted files
+        Summary of deleted and spared files
     """
-    import os
     from pathlib import Path
+
+    from backend.utils.checkpoint_sweep import partition
 
     try:
         logs_dir = Path("logs")
@@ -781,38 +943,70 @@ async def delete_checkpoint_files():
             return {
                 "success": False,
                 "message": "Logs directory not found",
-                "deleted_count": 0
+                "deleted_count": 0,
+                "deleted_files": [],
+                "bytes_reclaimed": 0,
+                "spared_count": 0,
+                "spared_files": [],
+                "unfinished_runs": 0
             }
 
-        # Find all checkpoint files and their metadata (regular, emergency, and watchdog)
-        checkpoint_files = list(logs_dir.glob("*_checkpoint_step*.html"))
-        checkpoint_meta = list(logs_dir.glob("*_checkpoint_step*.metadata.json"))
-        emergency_files = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.html"))
-        emergency_meta = list(logs_dir.glob("*_EMERGENCY_CHECKPOINT.metadata.json"))
-        watchdog_files = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.html"))
-        watchdog_meta = list(logs_dir.glob("*_WATCHDOG_EMERGENCY*.metadata.json"))
+        # Every checkpoint type, with its metadata and resumable state sidecar.
+        patterns = ("*_checkpoint_step*", "*_EMERGENCY_CHECKPOINT*",
+                    "*_WATCHDOG_EMERGENCY*")
+        checkpoints = {
+            path.name: path
+            for pattern in patterns
+            for path in logs_dir.glob(pattern)
+            if path.is_file() and path.name.endswith(
+                (".html", ".metadata.json", ".state.json"))
+        }
 
-        # Combine all checkpoint types
-        all_checkpoint_files = (checkpoint_files + checkpoint_meta +
-                                emergency_files + emergency_meta +
-                                watchdog_files + watchdog_meta)
+        spared_files: list[str] = []
+        unfinished_runs = 0
+        if include_unfinished:
+            doomed = sorted(checkpoints)
+        else:
+            # The final artifacts have to be in view as well: whether a
+            # checkpoint is redundant depends on whether its own run finished.
+            sweep = partition(
+                path.name for path in logs_dir.iterdir() if path.is_file()
+            )
+            doomed = sorted(set(sweep.redundant) & checkpoints.keys())
+            spared_files = sorted(set(sweep.spared) & checkpoints.keys())
+            unfinished_runs = sweep.unfinished_runs
 
         deleted_count = 0
         deleted_files = []
+        bytes_reclaimed = 0
 
-        for file_path in all_checkpoint_files:
+        for name in doomed:
+            file_path = checkpoints[name]
             try:
+                size = file_path.stat().st_size
                 file_path.unlink()
                 deleted_count += 1
-                deleted_files.append(str(file_path.name))
+                bytes_reclaimed += size
+                deleted_files.append(name)
             except Exception as e:
                 print(f"Failed to delete {file_path}: {e}")
+
+        message = f"Deleted {deleted_count} checkpoint file(s)"
+        if spared_files:
+            message += (
+                f"; kept {len(spared_files)} as the only resume point of"
+                f" {unfinished_runs} unfinished run(s)"
+            )
 
         return {
             "success": True,
             "deleted_count": deleted_count,
             "deleted_files": deleted_files,
-            "message": f"Deleted {deleted_count} checkpoint file(s)"
+            "bytes_reclaimed": bytes_reclaimed,
+            "spared_count": len(spared_files),
+            "spared_files": spared_files,
+            "unfinished_runs": unfinished_runs,
+            "message": message
         }
 
     except Exception as e:
@@ -918,10 +1112,12 @@ async def get_simulation_analytics(filename: str):
     has_grounded_variables = False
     has_components = False
     has_measurements = False
+    has_agent_probe = False
     nested_sim_data = {}
     grounded_variables_data = {}
     component_data = {}
     measurements_data = {}
+    agent_probe_data = {}
 
     if metadata_path.exists():
         try:
@@ -947,6 +1143,16 @@ async def get_simulation_analytics(filename: str):
                     has_grounded_variables = True
                     grounded_variables_data["variables"] = metadata["game_master"]["grounded_variables"]
                     debug_print(f"[DEBUG] Found {len(grounded_variables_data['variables'])} grounded variables")
+
+                # Passed through whole. The probe's series is already the
+                # analysis unit, and its integrity block is what lets a
+                # reader tell a measured series from a partial one, so
+                # reshaping here would only lose the distinction.
+                if metadata.get("game_master", {}).get("agent_probe"):
+                    has_agent_probe = True
+                    agent_probe_data = metadata["game_master"]["agent_probe"]
+                    debug_print(f"[DEBUG] Found agent probe with "
+                                f"{len(agent_probe_data.get('series', {}))} item(s)")
 
                 # NEW: Detect components
                 for agent in metadata.get("agents", []):
@@ -1020,11 +1226,13 @@ async def get_simulation_analytics(filename: str):
             "has_grounded_variables": has_grounded_variables,
             "has_components": has_components,
             "has_measurements": has_measurements,
+            "has_agent_probe": has_agent_probe,
             # NEW: Feature-specific data (populated from metadata)
             "nested_simulations": nested_sim_data,
             "grounded_variables": grounded_variables_data.get("variables", []),
             "components": component_data,
-            "measurements": measurements_data
+            "measurements": measurements_data,
+            "agent_probe": agent_probe_data
         }
 
         # Detect v2.4+ structured log format (content is in embedded JSON, not static HTML)
@@ -2273,6 +2481,38 @@ async def step_controller_stop(task_id: str):
 async def get_simulations_status():
     """Get status of all tracked simulations."""
     return simulation_state.get_all_simulations()
+
+
+@router.get("/health")
+async def get_health_status(incidents: int = 50):
+    """Failure-observability snapshot for the browser: running tasks with
+    time since last step progress, LLM-call liveness, and the most recent
+    journaled incidents (durable, unlike the live log ring buffer).
+
+    Liveness comes from `llm`, not from `seconds_since_progress`. Step
+    progress is a poor liveness signal under the asynchronous engine, which
+    reports a step only when entity 0 happens to act, so a healthy run can
+    go two full steps between progress events. LLM-call recency advances
+    many times per step regardless of engine or population size.
+    """
+    from backend.services.llm_factory import get_llm_activity
+    act = get_llm_activity()
+    now = time.time()
+    last_call = max(act.get("last_call_start") or 0.0,
+                    act.get("last_call_end") or 0.0)
+    return {
+        "server_time": now,
+        "tasks": list(simulation_state.get_all_simulations().values()),
+        # Process-global (the backend runs one simulation at a time), so
+        # this sits at the top level rather than per task.
+        "llm": {
+            "calls_in_flight": act.get("calls_in_flight", 0),
+            "total_calls": act.get("total_calls", 0),
+            "seconds_since_call": (round(now - last_call)
+                                   if last_call else None),
+        },
+        "incidents": event_journal.tail(incidents),
+    }
 
 
 @router.get("/status/{task_id}")

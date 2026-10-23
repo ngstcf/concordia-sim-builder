@@ -44,17 +44,6 @@ Template inventory is updated over time; the latest template count is always ref
 - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md)
 - [Urban Gentrification Simulation](docs/research-use-cases/urban-gentrification-simulation.md)
 
----
-
-**v2.4.1 — Checkpoint Resume & Extend** is available on the `feat/resume-from-checkpoint` branch (tag: `v2.4.1`). This version adds two capabilities built on Concordia's native save/restore API:
-
-- **Resume interrupted runs** — when a run is stopped (server restart, network loss, manual cancel), click **Resume** on any checkpoint in the Checkpoints panel to continue from that point. No template reload or re-entry of LLM settings required; all agent state, memories, and configuration are restored from a `.state.json` sidecar saved alongside each checkpoint HTML file.
-- **Extend completed runs** — when a simulation finishes (whether the LLM terminated early or `max_steps` was reached), an **Extend** button appears on the Recent Simulations row. Enter how many additional steps to run and the simulation continues from its final state with full memory intact.
-
-**Limitations:** resumption is not supported for simulations using `player_specific_context` (formative memory initializer may re-run); step-controller, interview, and survey engines are untested; `.state.json` sidecars store the API key in plaintext (avoid placing the `logs/` directory in shared or publicly accessible storage); the Extend button only appears for runs completed after upgrading to v2.4.1.
-
----
-
 ## Sample Simulation Results
 
 Nine completed simulation runs are included in the [`logs/`](logs/) directory, spanning 8 distinct scenarios across 3 Game Master types. Each run was configured and executed entirely through the web interface using different LLM provider combinations.
@@ -62,7 +51,7 @@ Nine completed simulation runs are included in the [`logs/`](logs/) directory, s
 Each simulation produces three output files:
 
 - **`.html`** — Concordia simulation log (structured entries with full narrative)
-- **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration)
+- **`.metadata.json`** — Run metadata (agents, LLM config, GM config, timestamps, duration, plus outcome fields: completion status, steps completed vs. max steps, and error details when a run fails)
 - **`_analysis.md`** — LLM-powered analysis report (executive summary, effectiveness assessment, insights, recommendations)
 
 | # | Scenario | GM Type | Agents | Agent LLM | GM LLM | Duration |
@@ -89,13 +78,16 @@ Each simulation produces three output files:
 - **Formative Memories** — Generate agent backstories with standalone endpoint and in-editor button
 - **Nested Simulations** — PhoneGameMaster pattern for running mini-simulations within simulations
 - **Measurements** — Inject measurements into any engine with Component Logs tab in results
-- **Grounded Variables** — Track simulation state variables with AI-powered post-processing
+- **Grounded Variables** — Track simulation state variables with AI-powered post-processing, with optional joint constraints (`variable_groups`) for shares of a common whole that must sum to a declared total
+- **Agent Probe** — Administer a fixed multiple-choice question to every agent during the run and tally the answers, so a measured quantity has the roster as its denominator rather than a narrator's estimate (see [Measuring by Counting](#measuring-by-counting))
+- **Context Window & Feed Compaction** — For the async social-media Game Master, bound how much forum history each agent actively remembers, and choose what happens to posts once they age out: forgotten outright, or folded into a running AI-generated summary so large populations and long runs stay within the model's context window instead of failing mid-run (see [Managing Context at Scale](#managing-context-at-scale))
 - **Live Log Streaming** — Real-time terminal output mirrored to frontend via SSE with color-coded messages
 - **9-Tab Analytics Dashboard** — Simulation Log, Statistical Dashboard, Timeline, Grounded Variables, Cooperation, Actions, AI Summary, Analysis, Component Logs
-- **8 LLM Providers** — OpenAI, Azure OpenAI, DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
+- **8 LLM Providers** — OpenAI, Azure OpenAI (up to two endpoints), DeepSeek, Anthropic, Gemini, GLM, Ollama Local, Ollama Remote
 - **Separate GM LLM** — Independent model selection for Game Master
-- **Checkpoint System** — Automatic checkpoints with metadata, watchdog emergency saves, scenario-named files
+- **Checkpoint, Resume & Extend** — Automatic mid-run HTML checkpoints + resumable `.state.json` sidecars every N steps; a green **Resume** button on any checkpoint restores full agent/GM memory state and continues from where the run stopped. A teal **Extend** button appears on every completed run in Recent Simulations — enter how many additional steps to run and continue from the final state, whether the simulation ended early (LLM decision) or reached `max_steps`. All state is persisted via Concordia's native `load_from_checkpoint` API; LLM settings, agent config, and all memories are restored from the sidecar — no template reload needed. **Limitations:** (1) Resumable state is written only for the *streaming* execution path (`/execute`), not the simple path (`/execute-simple`); (2) Sims using `player_specific_context` (formative memories initializer) may re-run initializer steps on resume — verify before relying on it for those templates; (3) Resuming batch runs is not supported; (4) Concordia's JSON serialisation silently drops non-serializable component attributes (e.g. live model references) — these are re-injected from the reconstructed config, so the simulation continues correctly but those attributes are not checkpointed verbatim. **Disk:** a state file is roughly the size of the run's memory banks and reaches tens of megabytes on a long run, so checkpoints dominate `logs/` over time. The emergency copy written between the engine loop and the final save is retired automatically once the final log and state are on disk, and the DELETE sweep below clears whatever completed runs have made redundant while sparing the resume point of any run that never finished.
 - **Simulation Management** — Mid-run cancellation with LLM-level interrupt (cancels before the next API call, not just between steps), partial results saved, per-simulation delete, server shutdown
+- **Failure Observability** — Durable event journal, run outcome badges, a Health strip with stall detection, and opt-in browser notifications, so the browser can answer "did anything fail?" even after disconnects or overnight runs (see [Monitoring Long-Running Simulations](#monitoring-long-running-simulations))
 - **Save & Load Configurations** — Save named configs to the server, reload from "My Configs" panel, or export/import as JSON files
 
 For the complete building guide, see [SIMULATION_BUILDING_GUIDE.md](docs/SIMULATION_BUILDING_GUIDE.md).
@@ -157,6 +149,12 @@ cd frontend
 npm install
 ```
 
+> **Try it before configuring a provider.** Nine complete runs ship in `logs/`,
+> so once the backend and frontend are up you can open **Recent Simulations**,
+> read a real transcript, browse the analytics, and export the full JSON or the
+> per-agent action CSV without an API key or a single LLM call. These runs
+> predate grounded variables, so that tab and its CSV are empty for them.
+
 ### Environment Configuration
 
 Create a `.env` file in the root directory:
@@ -170,6 +168,10 @@ ANTHROPIC_API_KEY=sk-xxx
 AZURE_OAI_KEY=xxx
 AZURE_OAI_ENDPOINT=https://your-resource.openai.azure.com
 
+# Optional: second Azure OpenAI resource (provider id "azure2")
+# AZURE_OAI_KEY2=xxx
+# AZURE_OAI_ENDPOINT2=https://your-second-resource.openai.azure.com
+
 # Optional: Separate GM LLM (defaults to agent LLM if not set)
 # GM_LLM_PROVIDER=openai
 # GM_LLM_MODEL=gpt-4o
@@ -182,6 +184,7 @@ AZURE_OAI_ENDPOINT=https://your-resource.openai.azure.com
 LLM_TIMEOUT=180                  # Per-request timeout in seconds (default: 180)
 LLM_REASONING_TIMEOUT=300        # Timeout for reasoning models like O3 (default: 300)
 LLM_MAX_RETRIES=2                # Retry attempts (default: 2)
+LLM_MAX_CONCURRENCY=64           # Max concurrent LLM requests per model instance (default: 16)
 WATCHDOG_TIMEOUT_SECONDS=600     # Hang detection timeout (default: 600)
 WATCHDOG_ENABLED=true            # Set false to disable hang detection
 
@@ -192,6 +195,8 @@ LLM_LOGGING_ENABLED=true         # Control [LLM] API call details
 # Frontend
 VITE_SIMULATION_TIMEOUT=10800000  # Simulation timeout in ms (default: 3 hours)
 ```
+
+**Provider-specific request fields (`extra_body`).** LLM settings accept an optional `extra_body` object whose fields are sent verbatim in the API request body, for deployment-specific parameters that have no first-class setting. The main use is reasoning effort on reasoning-model deployments, e.g. `"extra_body": {"reasoning_effort": "none"}`. Verified menus: gpt-5.6 family `reasoning_effort: none | low | medium | high | xhigh` (`none` turns a reasoning model into a fast non-reasoning one); DeepSeek `reasoning_effort: none | low | high | max` plus a `"thinking": {"type": "enabled"|"disabled"}` toggle (V4 models default to `high`; `none` alone disables thinking, and when both fields are sent the `thinking` toggle takes precedence in both directions, verified via reasoning-token usage). Anthropic's native API has no `reasoning_effort` field: its thinking toggle is `"thinking": {"type": ...}` (verified) and effort control is `"output_config": {"effort": ...}` on models that support it (claude-haiku-4-5 does not). Values are provider-defined and can vary by deployment; an unsupported value fails fast with a clear 400 naming the allowed set. Supported on all OpenAI-compatible providers and Anthropic.
 
 ## Running the Application
 
@@ -212,6 +217,244 @@ npm run dev
 ```
 
 Frontend: `http://localhost:5173`
+
+## Monitoring Long-Running Simulations
+
+Long runs outlive browser sessions: connections drop, laptops sleep, and a
+failure at 3 a.m. used to be visible only in the server terminal. The
+platform therefore keeps a **durable failure journal** on the server and
+surfaces it in the UI, so you can close the browser, come back later, and
+still answer *"did anything fail while I was away?"*
+
+### What you see in the UI
+
+- **Health strip** (top of the Runner page). For every running simulation
+  it shows `step ≥X/Y · active Ns ago`, colored by time since the last
+  LLM call: green (fresh), amber (>5 min), red (>15 min). A grey chip
+  shows total LLM calls this backend session and how many are in flight.
+  Click **show incidents** to expand the recent event feed (failures in
+  red). Click **🔔 enable alerts** once to grant browser-notification
+  permission; you will then get a desktop notification on run failures,
+  content-filter events, watchdog warnings, and stalls (>15 min with no
+  LLM activity) while the tab is open, even in a background window.
+- **Outcome badges** in Recent Simulations: **✓** (completed), red
+  **failed** (hover for the error message), amber **cancelled**. Runs
+  executed before this feature have no journal and show no badge.
+
+Interpreting stalls: "active Ns ago" measures time since the last LLM
+call started or returned, and a call in flight counts as active however
+long the provider takes — a slow response is work in progress, not a
+stall. Liveness deliberately does *not* use the step counter: the
+asynchronous social-media engine reports a step only when its first
+entity happens to act, so a healthy large-population run can go two full
+steps between step events (hence `step ≥X`, a lower bound on true engine
+progress). Large populations legitimately take minutes per step, so amber
+during a heavy run is normal; red is the signal worth investigating
+(start with the incident feed, then the live log panel).
+
+### Where the data lives
+
+Events append to JSONL files under `logs/events/` — one global file per
+day (`events-YYYYMMDD.jsonl`) and one small file per run
+(`task-{task_id}.jsonl`). They survive backend restarts, are safe to
+delete (you lose only badges and incident history, never simulation
+data), and are grep-friendly:
+
+```json
+{"ts": 1788178119.6, "time": "2026-08-31T21:28:39", "kind": "run_failed",
+ "task_id": "d5c1…", "log_filename": "20260831_212839_….html",
+ "steps_completed": 0, "error": "Error code: 404 - …", "error_type": "NotFoundError"}
+```
+
+Journaled event kinds:
+
+| Group | Kinds |
+|-------|-------|
+| Run lifecycle | `run_registered`, `run_completed`, `run_failed`, `run_cancelled` |
+| Batch lifecycle | `batch_started`, `batch_run_failed`, `batch_complete`, `batch_cancelled` |
+| Captured from server output | `content_filter`, `watchdog`, `checkpoint`, `emergency_save`, `provider_error`, `provider_retry`, `error` |
+
+### API
+
+- `GET /api/simulations/health?incidents=50` — running tasks (with
+  `steps_completed` and `seconds_since_progress`), an `llm` block
+  (`calls_in_flight`, `total_calls`, `seconds_since_call`) that is the
+  liveness signal, plus the most recent journaled incidents. This is what
+  the Health strip polls every 30 s.
+- `GET /api/simulations/recent` — each entry now carries `outcome`
+  (`completed` / `failed` / `cancelled` / `null`) and `outcome_error`.
+
+Scope note: this is *observability through the browser* — detection still
+requires polling from an open tab. Server-side alerting that needs no tab
+at all (webhooks, scheduled sentinels) is planned as part of a dedicated
+long-run operating mode.
+
+## Measuring by Counting
+
+Grounded variables are estimated by the Game Master: asked what share of a
+population holds some view, it reads the current situation and narrates a
+figure. That is useful as situational state carried in the narrative, but
+nothing ties the number to the agents that exist, so it should not be read
+as a measurement of them. Two features address this. Both are configured in
+the Game Master form (Agent Probe, and Joint Constraints under Grounded
+Variables) and both round-trip through the simulation config JSON, so they
+can equally be set by hand or through `POST /api/simulations/execute`.
+
+### Agent probe
+
+Puts a fixed multiple-choice question to every agent at a set cadence and
+tallies the answers. The denominator is the roster by construction, so the
+shares cannot fail to sum to 100, and every point is attributable to named
+respondents.
+
+```json
+"game_master": {
+  "agent_probe": {
+    "items": [{
+      "name": "vote_intention",
+      "question": "Which candidate do you currently intend to vote for?",
+      "options": ["Candidate A", "Candidate B", "Undecided"]
+    }],
+    "interval": 54,
+    "memory_limit": 40
+  }
+}
+```
+
+`interval` counts **Game Master events, not engine steps**. Under the
+asynchronous engine each entity runs its own loop with no shared step
+boundary, so events are the only clock every agent is measured against.
+Cost scales with population, so an interval tuned for a small cast
+oversamples a large one by the same factor the cast grew: size it from the
+number of agents expected to act, not from a fixed number of steps. The
+Game Master form does that conversion for you: pick a cadence in steps and
+it derives the event interval from the cast and their activity rates, then
+previews how many measurements the run will yield and what they will cost
+in model calls.
+
+The probe reads memory and never makes an agent act or observe, so it does
+not perturb the run. Results land at the top level of the JSON export
+under `agent_probe`, in four blocks: `series` (the tally per item over
+time), `responses` (every individual answer, with the agent that gave it),
+`failures` (each reading that did not come back, with a reason), and
+`integrity` (administrations, events seen, and failure count).
+
+Read `integrity` before the series. An agent that cannot be surveyed is
+recorded as a failure and left out of that reading's denominator, rather
+than being given a default answer, so a series that moved because fewer
+agents answered is distinguishable from one that moved because the
+population changed. If a component is configured but cannot be found at
+harvest time, the run says so loudly rather than exporting nothing.
+
+### Variable groups
+
+Per-variable bounds cannot express that several variables describe one
+whole: each share can be a legal 0-100 value while the total is
+impossible. `variable_groups` declares the joint constraint.
+
+```json
+"game_master": {
+  "variable_groups": [{
+    "name": "poll_shares",
+    "members": ["rivera_support", "hale_support", "undecided_rate"],
+    "sums_to": 100.0,
+    "tolerance": 1.0,
+    "on_violation": "renormalize"
+  }]
+}
+```
+
+`on_violation` is `renormalize` (rescale to the declared total, preserving
+proportions), `reject` (discard the offending update, keep the previous
+values), or `flag` (record it and change nothing). Violations are recorded
+under all three, so a rescaled series still shows where it had to be
+rescaled. Individual variables also accept `cumulative` (a running total
+that never decreases) and `max_delta` (the largest single-update
+increase), which together keep a counter from being unbounded above.
+
+## Managing Context at Scale
+
+In a broadcast forum (the async social-media Game Master) every post lands
+in every agent's history, roughly 140 tokens each. Left unbounded, a
+prompt's size grows with population × steps: 100 agents over 20 steps
+projects around 275,000 tokens, well past a typical 128k context, and a
+run built that way fails hours in rather than at the start. Two settings
+address this, both on the Game Master's **Social Media Activity Model**
+panel in the builder, no JSON required, though both round-trip through the
+config the same way every other parameter does.
+
+### Context window
+
+Bounds how much forum activity each agent, and the Game Master itself,
+actively remembers, to roughly the last *N* steps.
+
+```json
+"game_master": {
+  "parameters": {
+    "context_window_steps": 6
+  }
+}
+```
+
+Leave it unset for full history. `POST /validate` projects the peak prompt
+size for the population and step count you've configured and warns before
+you spend any compute if it won't fit, so an infeasible run is caught at
+setup rather than discovered mid-run. A window is *bounded attention*:
+posts older than the window are simply forgotten, permanently, with
+nothing to compensate. That is fine for small populations or short runs.
+For anything large enough to need the window in the first place, forgetting
+is usually the wrong tradeoff, which is what the second setting is for.
+
+### Feed compaction
+
+Instead of letting old posts fall out of memory, compaction folds them
+into one running summary, so a large or long-running study keeps some
+memory of everything rather than losing everything before the window.
+
+```json
+"game_master": {
+  "parameters": {
+    "context_window_steps": 6,
+    "feed_mode": "compacted",
+    "feed_recent_posts": 60,
+    "feed_digest_max_words": 250,
+    "feed_vote_summary_top": 20,
+    "feed_min_fold_batch": 25
+  }
+}
+```
+
+`feed_mode` defaults to `"full"` (today's unmodified behavior; set it to
+`"compacted"` to turn this on). Two things grow without bound in a
+broadcast forum even when per-agent history is windowed: the vote summary,
+which by default lists every post ever made, and the raw post count feeding
+the window itself. Compaction bounds both:
+
+- `feed_recent_posts` (default 60) is how many of the newest posts, across
+  the whole forum, stay exact text before they are eligible to fold. This
+  is a property of the *shared* forum record, separate from
+  `context_window_steps`, which bounds one *agent's own* memory buffer;
+  both apply at once.
+- Posts older than that tail are folded, in batches of at least
+  `feed_min_fold_batch` (default 25), into a single rolling digest, one
+  language-model call per fold, shared by the whole roster rather than
+  regenerated per agent. Each agent receives the digest as an ordinary
+  observation ("recap of older activity") exactly once per version, capped
+  at `feed_digest_max_words` (default 250).
+- The vote tally is capped to the top `feed_vote_summary_top` (default 20)
+  posts by votes, with the rest rolled into a single "+*N* more posts"
+  count, so the running tally stops growing with the total number of
+  posts ever made.
+
+The digest is generated text, not a database query, so it is a paraphrase
+of what it summarizes rather than the original: exact wording and minor
+posts are not guaranteed to survive a fold. It is not a silent
+implementation detail either — every fold is logged, the digest is carried
+in checkpoints, and if the digest model call fails, the previous digest is
+kept and the fold is retried later rather than the run losing its summary.
+Use compaction whenever `POST /validate`'s pre-flight check warns that a
+configuration will not fit; for populations and run lengths small enough
+to fit in full, there is nothing to gain from turning it on.
 
 ## Templates (38)
 
@@ -239,6 +482,9 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/models/{provider}` | GET | List models for a provider |
 | `/api/simulations/validate` | POST | Validate simulation configuration |
 | `/api/simulations/execute` | POST | Run simulation with real-time SSE streaming |
+| `/api/simulations/execute-simple` | POST | Run simulation and return complete results (non-streaming; no resumable state written) |
+| `/api/simulations/import` | POST | Import and validate a configuration from JSON |
+| `/api/simulations/export-template` | GET | Export a blank configuration template |
 | `/api/simulations/configs` | GET | List saved configurations |
 | `/api/simulations/configs` | POST | Save a named configuration |
 | `/api/simulations/configs/{slug}` | GET | Load a saved configuration |
@@ -250,25 +496,40 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/status` | GET | Status of all running simulations |
 | `/api/simulations/status/{task_id}` | GET | Status of specific simulation |
+| `/api/simulations/health` | GET | Running tasks, LLM-call liveness, and recent journaled incidents (`?incidents=N`) |
 | `/api/simulations/cancel/{task_id}` | POST | Cancel a running simulation (saves partial results) |
 | `/api/simulations/control/{task_id}/pause` | POST | Pause (step controller engine) |
-| `/api/simulations/control/{task_id}/resume` | POST | Resume |
+| `/api/simulations/control/{task_id}/play` | POST | Resume continuous execution |
 | `/api/simulations/control/{task_id}/step` | POST | Advance one step |
 | `/api/simulations/control/{task_id}/stop` | POST | Stop |
-| `/api/simulations/shutdown` | POST | Shutdown server |
+| `/api/server/shutdown` | POST | Shutdown server |
 
 ### Logs & Analytics
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/simulations/recent` | GET | List recent simulation logs |
+| `/api/simulations/recent` | GET | List recent simulation logs (includes `resumable` flag, `state_filename`, and journal-derived `outcome` / `outcome_error`) |
 | `/api/simulations/logs/{filename}` | GET | Get simulation log HTML |
 | `/api/simulations/logs/{filename}` | DELETE | Delete simulation log + metadata |
 | `/api/simulations/logs/{filename}/analytics` | GET | Analytics data for all 9 result tabs |
-| `/api/simulations/logs/checkpoints` | GET | List checkpoint files |
-| `/api/simulations/logs/checkpoints` | DELETE | Delete checkpoint files |
+| `/api/simulations/logs/{filename}/export-json` | GET | Full structured export (grounded-variable histories, action records) |
+| `/api/simulations/logs/{filename}/export-csv` | GET | Structured export as CSV (`?data_type=variables\|actions\|...`) |
+| `/api/simulations/logs/checkpoints` | GET | List checkpoint files (includes `resumable` flag + `state_filename`) |
+| `/api/simulations/logs/checkpoints` | DELETE | Delete the checkpoint files + `.state.json` sidecars that completed runs have made redundant; the most advanced checkpoint of a run that never finished is spared, since it is that run's only resume point. `?include_unfinished=true` clears those too |
+| `/api/simulations/resume` | POST | Resume or extend simulation from a `.state.json` sidecar (SSE stream); accepts optional `additional_steps` to run beyond the saved state |
 | `/api/simulations/logs/config` | GET | Log streaming config (debug/LLM flags) |
 | `/api/simulations/logs/stream` | GET | SSE endpoint for live log streaming |
+
+### Batch Runs & Reliability
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/simulations/batch/execute` | POST | Run a batch of simulations with optional parameter sweeps |
+| `/api/simulations/batch/list` | GET | List completed batch runs |
+| `/api/simulations/batch/{batch_id}/status` | GET | Current status of a batch run |
+| `/api/simulations/batch/{batch_id}/cancel` | POST | Cancel a running batch |
+| `/api/simulations/batch/{batch_id}/export-csv` | GET | Aggregated CSV across all runs in a batch |
+| `/api/simulations/batch/{batch_id}/reliability` | GET | ICC(3,1) reliability report for questionnaire outcomes |
 
 ### Analysis & Variables
 
@@ -277,7 +538,11 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 | `/api/simulations/analyze-simulation` | POST | LLM-powered analysis report |
 | `/api/simulations/grounded-variables/extract` | POST | Extract variable history from log using AI |
 | `/api/simulations/grounded-variables/{simulation_id}` | GET | Get grounded variables data |
-| `/api/simulations/formative-memories/generate` | POST | Generate agent backstory |
+| `/api/simulations/generate-formative-memories` | POST | Generate formative backstory memories for an agent |
+| `/api/simulations/generate-personas` | POST | Generate diverse personas via Concordia's persona generators |
+| `/api/simulations/generate-personas-census` | POST | Generate personas by sampling a demographic distribution |
+| `/api/simulations/parse-distribution` | POST | Parse a distribution spec from JSON or CSV content |
+| `/api/simulations/upload-distribution` | POST | Parse an uploaded CSV/JSON file into a distribution spec |
 
 ### Components & Templates
 
@@ -285,7 +550,8 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 |----------|--------|-------------|
 | `/api/simulations/components/templates` | GET | Psychological component templates |
 | `/api/simulations/components/validate` | POST | Validate component parameters |
-| `/api/simulations/templates/{template-name}` | GET | Get template configuration (38 templates; more are added based on user feedback as the project grows) |
+| `/api/simulations/contrib-components` | GET | Registry of available contrib GM components |
+| `/api/simulations/templates/{template-name}` | GET | Get template configuration (39 templates; more are added based on user feedback as the project grows) |
 
 ## Supported Prefabs
 
@@ -318,23 +584,43 @@ See [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md) for deta
 
 The Builder runs against Concordia **v2.4.0** with two small local patches to Game Master prefabs — the tree that produced the published Mastodon influence experiment results. The patches are published as a public fork, [**`ngstcf/concordia@5ed8813`**](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), which `requirements.txt` pins directly. They are also captured as a standalone tracked patch for review and offline use: [`patches/concordia-2.4.0-local.patch`](patches/concordia-2.4.0-local.patch).
 
-> **⚠️ Reproducibility:** the stock PyPI `gdm-concordia==2.4.0` does **not** contain these changes — with the unpatched library, per-agent activity rates are silently ignored (every agent posts on every step) and the Mastodon experiment will not reproduce. `requirements.txt` therefore pins the patched fork above, so `pip install -r requirements.txt` is sufficient.
+> **⚠️ Reproducibility:** the stock PyPI `gdm-concordia==2.4.0` does **not** contain these changes. The Builder's vendored activation scheduler (see item 1's update below) now provides per-agent activity sampling at runtime regardless of the library tree, but the pinned fork remains the supported, tested configuration and still carries the variable-clock patch (item 2). `requirements.txt` pins the fork, so `pip install -r requirements.txt` is sufficient.
 
 ### What changed and why
 
-**1. `async_social_media__GameMaster` — per-agent stochastic activation** *(material)*
+**1. `async_social_media__GameMaster` — per-agent stochastic activation** *(material; sampling rule now superseded at runtime, see the update below)*
 
-Stock v2.4.0 activates **every** eligible player on **every** step — its next-acting component simply returns all player names, with no notion of posting frequency. The Mastodon influence experiment depends on *differential* posting volume: a malicious actor posting at ~10× the baseline to dominate the feed, with the effect diluting as the honest population grows. That mechanism did not survive Concordia's upstream port of the prefab, so we re-introduced it at the GM level:
+Stock v2.4.0 activates **every** eligible player on **every** step — its next-acting component simply returns all player names, with no notion of posting frequency. Per-agent posting schedules did not survive Concordia's upstream port of the prefab, so the fork re-introduced them at the GM level:
 
 - Added `default_activity_rate`, `per_agent_activity_rates`, and `activity_seed` parameters.
-- Added probabilistic per-agent sampling in the next-acting component (rate ≤ 1.0 → probability; rate > 1.0 → relative intensity, normalized to the most active agent).
+- Added probabilistic per-agent sampling in the next-acting component.
 - Seeded the RNG for reproducibility, and guaranteed the engine still advances when no agent is sampled in a step.
 
-This is the GM-level mechanism behind the Builder's **Social Media Activity Model** sliders. Without it, the experiment's central manipulation — influence by posting volume — cannot be expressed.
+This is the GM-level mechanism behind the Builder's **Social Media Activity Model** sliders.
+
+**Update (Aug 2026): corrected activation semantics, vendored into the backend.** The fork patch's sampling rule normalized rates above 1.0 against the roster maximum, which gave a per-agent parameter global side effects (raising one agent's rate silently suppressed every other agent's activation) and made the rule discontinuous at 1.0 (an agent at rate 1.6 could act far less often than one at 0.8). The Builder now overrides the GM's next-acting component at build time with a vendored scheduler, [`backend/prefabs/activity_scheduler.py`](backend/prefabs/activity_scheduler.py): each agent's per-step probability is `min(1, rate / default_activity_rate)`, independent of every other agent's rate. Because the engine allows at most one act per agent per step, rates above `default_activity_rate` cannot be honored; they are clipped to 1.0 with a startup warning naming the affected agents. To express "agent X is N times as active," scale the *other* agents down instead. The fork's parameter plumbing is still used; only its sampling rule is superseded. The bundled Mastodon template follows the source study's implementation ([sandbox-social/mastodon-sim](https://github.com/sandbox-social/mastodon-sim)): voters act with per-step probability 0.8 and the malicious actor 0.9, the manipulation being carried by the agent's goal and content rather than posting volume.
+
+**Context-window control (Aug 2026).** In a broadcast forum every post lands in every agent's history (~140 tokens per entry), so prompts grow with population × steps: 100 agents × 20 steps projects ~275k tokens per prompt, beyond typical 128k contexts. For the async social media GM, `game_master.parameters.context_window_steps` bounds each agent's observation and self-perception history to a window expressed in engine steps (converted to an entry budget via the scheduler's expected actions per step) and bounds the GM's own observation buffer with the same budget. `POST /validate` now projects peak prompt tokens for these configs and warns when the projection exceeds ~100k, so an infeasible population is caught before compute is spent, not hours into a run. The control is exposed in the builder UI as the **"Context Window (steps)"** field on the async GM's Social Media Activity Model panel (empty = full history), and the validation projection surfaces through the builder's normal warnings display, so both are usable without touching JSON. Per-agent `components.observation_history_length` / `components.self_perception_history_length` remain individually settable and take precedence. Note the semantics: a window is bounded attention (agents forget older posts permanently); it is not equivalent to feed-based architectures where agents can re-query history.
+
+**Feed compaction (Sep 2026).** A window alone trades context growth for silent forgetting: content past it is gone with nothing to compensate. `game_master.parameters.feed_mode = "compacted"` (default `"full"` leaves the above unchanged) installs `CompactingForumObservation` (`backend/prefabs/feed_compaction.py`) over the prefab's observation key, the same override pattern as the activity scheduler: posts aging past a verbatim tail (`feed_recent_posts`, default 60) fold in batches (`feed_min_fold_batch`, default 25) into one rolling digest per language-model call, capped at `feed_digest_max_words` (default 250) and shared by the whole roster, while the vote summary is capped to the top `feed_vote_summary_top` (default 20) posts rather than enumerating every post ever made. Now exposed in the builder UI as the **"Beyond the Window"** selector on the same panel, with the four tunables behind an "Advanced summary settings" disclosure; previously JSON-only. Validated head-to-head: an arm that failed `context_length_exceeded` on every attempt at N=100 under `"full"` completed every attempt unmodified except for this setting. Full explanation for non-technical users: [Managing Context at Scale](#managing-context-at-scale).
 
 **2. `simultaneous_resolution_gm__GameMasterSimultaneous` — variable-clock wiring** *(minor)*
 
 The contrib clock already supported variable time increments, but the prefab never forwarded the configuration. The patch threads `use_variable_increments` and `variable_increment_rules` from GM params into the clock, enabling multi-interval / variable-step schedules from the Builder.
+
+**3. Vendored `ParallelQuestionnaireEngine` — backend, not a fork patch** *(material for questionnaires)*
+
+Upstream Concordia removed this engine (and `EntityAgent.stateless_act`) in commit `030d2fa`, but it is the only engine that can drive the multiple-choice questionnaire component's JSON-list protocol used by the `interviewer__GameMaster` prefab — without it, interviewer runs record no answers and batch ICC reliability is empty. Rather than patching the fork further, the engine is vendored into the backend at `backend/services/parallel_questionnaire_engine.py` (recovered verbatim from the commit before its removal, with a module-level replica of `stateless_act`; provenance in the module docstring). The pinned fork stays limited to the two patches above.
+
+**4. Asynchronous engine — progress reporting** *(reporting only; not in the pinned commit)*
+
+The asynchronous engine gives each entity its own loop and documents `checkpoint_callback` as running "after each iteration," but the call sat past the two `continue` statements taken when the entity draws no turn, so an iteration in which it did not act passed through silently — and only entity 0 receives the callback at all. The backend counted invocations, so it measured `max_steps × activity_rate(first agent in the roster)`: a completed 20-step run with that agent acting at rate 0.8 reported **16 of 20** and looked truncated. Because the rate that governs the count belongs to whichever agent happens to be listed first, the size of the undercount also varies with configuration: two setups that differ only in that agent's activity rate report different completed-step totals for the same `max_steps`, which can be mistaken for a real difference in how long the runs went.
+
+The iterations were always real: exported action records reach the final step with the full cast acting, and action volumes are unaffected. Only the reporting was short — but it also misaligned interval checkpointing, since a state saved every 5 callbacks landed at true iterations ~6, ~13, ~19, so a checkpoint labelled step 10 was not one.
+
+Both skip paths now report, and `save_checkpoint` puts the engine's own loop index into `checkpoint_data` as `engine_step` so callers need not reconstruct it (`checkpoint_counter` cannot serve that purpose — `make_checkpoint_data()` increments it, and emergency and final saves happen outside the loop, so it counts snapshots rather than steps). The backend prefers `engine_step` and falls back to counting on an unpatched tree, so it works either way.
+
+Tracked separately as [`patches/concordia-async-step-reporting.patch`](patches/concordia-async-step-reporting.patch), which applies onto `5ed8813`. It is deliberately **not** folded into the pinned commit or `patches/concordia-2.4.0-local.patch`: that tree is the one every published result was produced on, and this patch postdates all of them. Apply it for accurate progress on asynchronous runs; nothing about simulation behavior changes with or without it.
 
 ### Reproducing the patched environment
 
@@ -376,7 +662,7 @@ concordia-sim-builder/
 ├── backend/
 │   ├── api/
 │   │   ├── simulations.py           # API endpoints + analytics
-│   │   └── templates/               # 38 template modules (growing over time based on user feedback)
+│   │   └── templates/               # 39 template modules (growing over time based on user feedback)
 │   ├── models/
 │   │   ├── schemas.py               # Pydantic models
 │   │   └── llm_wrappers.py          # LLM provider wrappers
@@ -388,7 +674,16 @@ concordia-sim-builder/
 │   ├── utils/
 │   │   ├── log_broadcaster.py       # SSE log broadcaster
 │   │   ├── stdout_tee.py            # stdout interceptor for log streaming
-│   │   └── debug_print.py           # Gated debug/LLM print functions
+│   │   ├── debug_print.py           # Gated debug/LLM print functions
+│   │   ├── logger.py                # Centralized backend logging config
+│   │   ├── logging_config.py        # Console-output suppression
+│   │   ├── event_journal.py         # Durable failure-event journal (logs/events/)
+│   │   ├── data_exporter.py         # Structured JSON/CSV export
+│   │   ├── grounded_variables_post_processor.py  # Variable-update extraction
+│   │   ├── checkpoint_sweep.py      # Decides which checkpoints a sweep may delete
+│   │   ├── simulation_analyzer.py   # LLM-powered content analysis
+│   │   └── thought_chain_fix.py     # LLM response-parsing repairs
+│   ├── tests/                       # Pure unit tests (no network/credentials)
 │   └── main.py                      # FastAPI app
 ├── frontend/
 │   ├── src/
@@ -416,7 +711,7 @@ concordia-sim-builder/
 │       ├── vaccine-hesitancy-study.md
 │       ├── phishing-attack-simulation.md
 │       └── urban-gentrification-simulation.md
-├── logs/                            # Simulation logs (see inventory below)
+├── logs/                            # 9 committed demo runs; local runs land here (gitignored)
 ├── CHANGELOG.md
 └── requirements.txt                 # Python dependencies (gdm-concordia pinned)
 ```
@@ -464,23 +759,26 @@ Licensed under the Apache 2.0 License — see the LICENSE file for details.
 
 ## Citation
 
-If you use this software in your research, please cite the SIMULTECH 2026 paper (accepted manuscript archived on Zenodo: [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283)):
+If you use this software in your research, please cite the SIMULTECH 2026 paper (published version DOI [10.5220/0014756100004094](https://doi.org/10.5220/0014756100004094); accepted manuscript archived on Zenodo: [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283)):
 
 ```bibtex
 @inproceedings{concordia_sim_builder,
   title={Democratizing AI Social Simulation: A No-Code Web Interface for the Concordia Framework},
   author={Chong, Ng S. T.},
-  booktitle={Proceedings of the 16th International Conference on Simulation and Modeling Methodologies, Technologies and Applications (SIMULTECH 2026)},
+  booktitle={Proceedings of the 16th International Conference on Simulation and
+             Modeling Methodologies, Technologies and Applications - SIMULTECH},
   year={2026},
-  organization={INSTICC},
-  url={https://github.com/ngstcf/concordia-sim-builder},
-  institution={United Nations University}
+  pages={537--548},
+  publisher={SciTePress},
+  isbn={978-989-758-857-0},
+  doi={10.5220/0014756100004094},
+  url={https://github.com/ngstcf/concordia-sim-builder}
 }
 ```
 
 ### Artifact Availability
 
-- **Paper (accepted manuscript):** Zenodo [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) (concept DOI — always resolves to the latest version).
+- **Paper:** published version DOI [10.5220/0014756100004094](https://doi.org/10.5220/0014756100004094) (SciTePress); accepted manuscript on Zenodo [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) (concept DOI — always resolves to the latest version).
 - **Builder source:** <https://github.com/ngstcf/concordia-sim-builder>
 - **Patched Concordia 2.4.0:** [`ngstcf/concordia@5ed8813`](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), pinned in `requirements.txt` — see [Local Modifications to Concordia](#local-modifications-to-concordia-v240).
 

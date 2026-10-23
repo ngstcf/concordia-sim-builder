@@ -30,6 +30,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Node dependencies (package.json is tracked; the installed tree is not)
+node_modules/
+
 # IDE
 .vscode/
 .idea/
@@ -58,8 +61,12 @@ sentence-transformers/
 
 LLM-Providers-Quick-Ref.md
 
-# Track all files under logs/
-
+# Simulation output. The nine demo runs already committed here stay tracked --
+# .gitignore does not untrack existing files -- so a clone still ships worked
+# examples that open with populated analytics and working exports. Everything a
+# local run writes from now on is ignored: those are per-instance research data,
+# often gigabytes, and nothing downstream should depend on them being in git.
+logs/
 logs.bak/
 
 
@@ -101,7 +108,16 @@ test_glm_models_concordia.pyarxiv_paper.md
 test.py
 test2.py
 images/
-backend/tests/
+# Ignored by default: most of these are live LLM compatibility harnesses that
+# reference endpoints and keys. Pure unit tests, which need neither network nor
+# credentials, are whitelisted below so the behavior they pin ships with the code.
+backend/tests/*
+!backend/tests/test_agent_probe.py
+!backend/tests/test_export_parsing.py
+!backend/tests/test_grounded_variable_invariants.py
+!backend/tests/test_watchdog_finalization.py
+!backend/tests/test_checkpoint_sweep.py
+!backend/tests/test_feed_compaction.py
 
 # Development backups
 *.bak
@@ -122,3 +138,13 @@ concordia-upstream/
 CONCORDIA_ISSUES.md
 
 simultech/
+
+# Assistant memory notes that land in the working tree. These describe
+# in-progress work rather than the code, so they do not belong in a public
+# repository. Anchored to the root: backend packages named memory/ are tracked.
+/memory/
+
+# Structured exports pulled from the analytics dashboard for local inspection
+# (browser downloads, including duplicate "(1).json" copies). Run output is
+# reproducible from the logs and is not tracked.
+/exportjson/

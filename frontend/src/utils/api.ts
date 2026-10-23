@@ -9,11 +9,12 @@ import type {
   PrefabsResponseData,
   ProviderInfo,
   SimulationTemplate,
-  BatchReliabilityReport
+  BatchReliabilityReport,
+  AgentProbeResults
 } from '../types/simulation';
 
 // API base URL - default to localhost in development
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Simulation timeout in milliseconds (default: 5 hours)
 // Can be overridden via VITE_SIMULATION_TIMEOUT environment variable
@@ -209,13 +210,14 @@ export async function executeSimulationStream(
                   case 'simulation_complete':
                     streamCompleted = true;
                     console.log('[executeSimulationStream] Calling onComplete');
+                    // Call immediately so the spinner clears without waiting for the log fetch
+                    onComplete?.(data);
                     if (data.log_filename) {
                       console.log('[executeSimulationStream] Fetching log content from:', data.log_filename);
                       fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
                         .then(response => response.json())
                         .then(logData => {
                           console.log('[executeSimulationStream] Log content fetched, length:', logData.html_content?.length);
-                          // Add the HTML content to the completion data
                           onComplete?.({
                             ...data,
                             results: logData.html_content,
@@ -224,11 +226,7 @@ export async function executeSimulationStream(
                         })
                         .catch(err => {
                           console.error('[executeSimulationStream] Failed to fetch log content:', err);
-                          // Still call onComplete even if fetch fails
-                          onComplete?.(data);
                         });
-                    } else {
-                      onComplete?.(data);
                     }
                     eventCount++;
                     break;
@@ -277,6 +275,128 @@ export async function executeSimulationStream(
 }
 
 /**
+ * Resume a simulation from a saved .state.json checkpoint file.
+ * Streams SSE events identical to executeSimulationStream.
+ */
+export async function resumeSimulationStream(
+  stateFilename: string,
+  additionalSteps: number | undefined,
+  onProgress?: (progress: { step: number; max_steps: number; elapsed: number; est_remaining: number; est_time_str: string }) => void,
+  onComplete?: (result: any) => void,
+  onError?: (error: string) => void,
+  onStepData?: (data: { step: number; acting_entity: string; action: string; entity_actions: Record<string, string> }) => void,
+  onControllerState?: (data: { state: string; message?: string; task_id?: string }) => void,
+  onDisconnect?: () => void,
+): Promise<void> {
+  console.log('[resumeSimulationStream] Starting resume from:', stateFilename, 'additionalSteps:', additionalSteps);
+
+  let streamCompleted = false;
+  let simulationStarted = false;
+
+  try {
+    const body: Record<string, unknown> = { state_filename: stateFilename };
+    if (additionalSteps !== undefined) body.additional_steps = additionalSteps;
+    const response = await fetch(`${API_BASE_URL}/api/simulations/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    if (!reader) throw new Error('Response body is null');
+
+    let buffer = '';
+    let eventCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        console.log('[resumeSimulationStream] Stream done. Total events:', eventCount);
+        if (!streamCompleted) {
+          console.warn('[resumeSimulationStream] Stream ended without completion event — connection lost');
+          onDisconnect?.();
+        }
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.startsWith('event:')) {
+          const eventType = line.substring(6).trim();
+          if (i + 1 < lines.length) {
+            const dataLine = lines[i + 1];
+            if (dataLine.startsWith('data:')) {
+              try {
+                const data = JSON.parse(dataLine.substring(5).trim());
+                switch (eventType) {
+                  case 'simulation_start':
+                    simulationStarted = true;
+                    if (data.task_id) {
+                      onProgress?.({ step: 0, max_steps: 0, elapsed: 0, est_remaining: 0, est_time_str: '', task_id: data.task_id } as any);
+                    }
+                    eventCount++;
+                    break;
+                  case 'step_progress':
+                    onProgress?.(data);
+                    eventCount++;
+                    break;
+                  case 'simulation_complete':
+                    streamCompleted = true;
+                    onComplete?.(data);
+                    if (data.log_filename) {
+                      fetch(`${API_BASE_URL}/api/simulations/logs/${data.log_filename}`)
+                        .then(r => r.json())
+                        .then(logData => onComplete?.({ ...data, results: logData.html_content, timestamp: logData.modified }))
+                        .catch(() => { /* onComplete already called above */ });
+                    }
+                    eventCount++;
+                    break;
+                  case 'step_data':
+                    onStepData?.(data);
+                    eventCount++;
+                    break;
+                  case 'controller_state':
+                    onControllerState?.(data);
+                    eventCount++;
+                    break;
+                  case 'error':
+                    streamCompleted = true;
+                    onError?.(data.error || 'Unknown error');
+                    eventCount++;
+                    break;
+                }
+              } catch (e) {
+                console.error('[resumeSimulationStream] Failed to parse SSE data:', e);
+              }
+              i++;
+            }
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error('[resumeSimulationStream] Error:', error);
+    if (simulationStarted && !streamCompleted) {
+      onDisconnect?.();
+    } else {
+      onError?.(error.message || 'Failed to resume simulation');
+    }
+  }
+}
+
+/**
  * Execute a simulation (simple non-streaming version for testing)
  */
 export async function executeSimulationSimple(
@@ -289,8 +409,52 @@ export async function executeSimulationSimple(
     config: configToUse,
     llm_settings: llmSettings
   }, {
-    timeout: SIMULATION_TIMEOUT, // Configurable timeout (default: 30 minutes)
+    timeout: SIMULATION_TIMEOUT, // Configurable timeout (default: 5 hours)
   });
+  return response.data;
+}
+
+export interface HealthTask {
+  task_id: string;
+  started_at: string;
+  status: string;
+  steps_completed: number;
+  seconds_since_progress: number;
+  error: string | null;
+  config: { premise: string; max_steps: number; num_agents: number };
+}
+
+export interface HealthIncident {
+  ts: number;
+  time: string;
+  kind: string;
+  message: string;
+  [key: string]: any;
+}
+
+export interface HealthStatus {
+  server_time: number;
+  tasks: HealthTask[];
+  /**
+   * Process-global LLM-call liveness. This, not seconds_since_progress, is
+   * the stall signal: the asynchronous engine reports a step only when its
+   * first entity acts, so a healthy large-population run can go two full
+   * steps between progress events.
+   */
+  llm?: {
+    calls_in_flight: number;
+    total_calls: number;
+    seconds_since_call: number | null;
+  };
+  incidents: HealthIncident[];
+}
+
+/**
+ * Failure-observability snapshot: running tasks with time since last
+ * progress, plus recent journaled incidents (durable across reconnects).
+ */
+export async function getHealth(incidents = 50): Promise<HealthStatus> {
+  const response = await api.get(`/api/simulations/health?incidents=${incidents}`);
   return response.data;
 }
 
@@ -631,7 +795,15 @@ export async function healthCheck(): Promise<{ status: string }> {
 /**
  * Get recent simulation logs
  */
-export async function getRecentSimulations(limit: number = 20): Promise<any[]> {
+export async function getRecentSimulations(limit: number = 20): Promise<Array<{
+  filename: string;
+  path: string;
+  size: number;
+  modified: number;
+  created: number;
+  resumable: boolean;
+  state_filename: string | null;
+}>> {
   const response = await api.get('/api/simulations/recent', { params: { limit } });
   return response.data;
 }
@@ -719,11 +891,13 @@ export interface SimulationAnalytics {
   has_grounded_variables: boolean;
   has_components: boolean;
   has_measurements: boolean;
+  has_agent_probe?: boolean;
   // NEW: Feature-specific data
   nested_simulations: Record<string, NestedSimulationData>;
   grounded_variables: GroundedVariableData[];
   components: ComponentAnalysisData;
   measurements: Record<string, any[]>;
+  agent_probe?: AgentProbeResults;
 }
 
 export async function getSimulationAnalytics(filename: string): Promise<SimulationAnalytics> {
@@ -873,6 +1047,8 @@ export async function getCheckpointFiles(): Promise<{
     size: number;
     modified: number;
     path: string;
+    resumable: boolean;
+    state_filename: string | null;
   }>;
   total_count: number;
   total_size: number;
@@ -882,15 +1058,25 @@ export async function getCheckpointFiles(): Promise<{
 }
 
 /**
- * Delete all checkpoint files
+ * Delete the checkpoint files that completed runs have made redundant.
+ *
+ * The most advanced checkpoint of a run that never finished is spared, since
+ * it is the only point that run can be resumed from. Pass includeUnfinished to
+ * clear those as well.
  */
-export async function deleteCheckpointFiles(): Promise<{
+export async function deleteCheckpointFiles(includeUnfinished = false): Promise<{
   success: boolean;
   deleted_count: number;
   deleted_files: string[];
+  bytes_reclaimed: number;
+  spared_count: number;
+  spared_files: string[];
+  unfinished_runs: number;
   message: string;
 }> {
-  const response = await api.delete('/api/simulations/logs/checkpoints');
+  const response = await api.delete('/api/simulations/logs/checkpoints', {
+    params: { include_unfinished: includeUnfinished },
+  });
   return response.data;
 }
 

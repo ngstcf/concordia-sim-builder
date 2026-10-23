@@ -2,7 +2,9 @@
 Service for running simulations with streaming output.
 """
 import asyncio
+import contextlib
 import json
+from collections import abc
 import datetime
 import os
 import re
@@ -117,10 +119,224 @@ def _save_checkpoint_metadata(
         json.dump(metadata, f, indent=2)
 
 
+@contextlib.contextmanager
+def _mark_run_loop_completion(sim, finished_flag: list):
+    """Record when the engine's run loop ends, before sim.play() returns.
+
+    play() does not return once the loop is done: it then builds a
+    SimulationLog from the raw log, which on a large run is minutes of pure
+    CPU with no LLM calls and no step events. From outside that is
+    indistinguishable from a hang. The step counter cannot stand in for "the
+    loop is done" because under the asynchronous engine it undercounts, so
+    mark the transition at its source.
+
+    Restores the original method on exit, and is a no-op if the simulation
+    exposes no engine, leaving watchdog behavior exactly as it was.
+    """
+    engine = getattr(sim, '_engine', None)
+    original_run_loop = getattr(engine, 'run_loop', None)
+    if original_run_loop is None:
+        yield
+        return
+
+    def _run_loop_marking_completion(*args, **kwargs):
+        try:
+            return original_run_loop(*args, **kwargs)
+        finally:
+            # Also on failure: the error path does heavy work of its own and
+            # must not be mistaken for a hang either.
+            finished_flag[0] = True
+
+    # run_loop is normally a class method, so assigning it back on exit would
+    # leave an instance attribute shadowing it. Remember which it was and undo
+    # the wrap exactly, leaving the engine as it was found.
+    shadowed_own_attribute = 'run_loop' in getattr(engine, '__dict__', {})
+    engine.run_loop = _run_loop_marking_completion
+    try:
+        yield
+    finally:
+        if shadowed_own_attribute:
+            engine.run_loop = original_run_loop
+        else:
+            try:
+                del engine.run_loop
+            except AttributeError:
+                engine.run_loop = original_run_loop
+
+
+def _classify_watchdog_state(
+    *,
+    llm_stalled: bool,
+    time_since_progress: float,
+    timeout: float | None,
+    run_loop_finished: bool,
+    enabled: bool = True,
+) -> str:
+    """Name what a quiet simulation is actually doing.
+
+    Returns 'ok' while there is LLM work or recent progress, 'finalizing' when
+    the run loop has ended and the results log is still being built, and
+    'hung' when neither explains the silence. Only 'hung' warrants an
+    emergency save; treating 'finalizing' as 'hung' cost a spurious
+    multi-hundred-megabyte write at the end of long runs.
+    """
+    if not (enabled and timeout and llm_stalled
+            and time_since_progress > timeout):
+        return 'ok'
+    return 'finalizing' if run_loop_finished else 'hung'
+
+
+def _find_gm_component(game_master, class_name: str):
+    """Locate a component on a game master by class name.
+
+    Prefabs differ in whether they accept extra_components and in where they
+    keep the ones they do accept, so a component that was certainly attached
+    can still be absent from the first place you look.
+    """
+    # Mapping, not dict: get_all_context_components() hands back a mappingproxy,
+    # which is not a dict subclass. Testing for dict silently skipped the one
+    # accessor that actually has the components, and the search then reported
+    # a correctly attached component as missing.
+    def _components():
+        for accessor in ('get_all_context_components', 'context_components'):
+            try:
+                value = getattr(game_master, accessor, None)
+                if callable(value):
+                    value = value()
+                if isinstance(value, abc.Mapping):
+                    yield value
+            except Exception:  # noqa: BLE001
+                continue
+        act_component = getattr(game_master, 'act_component', None)
+        nested = getattr(act_component, '_components', None)
+        if isinstance(nested, abc.Mapping):
+            yield nested
+
+    for mapping in _components():
+        for component in mapping.values():
+            if component.__class__.__name__ == class_name:
+                return component
+
+
+def _find_component_on_any_gm(game_masters, class_name: str):
+    """Locate a component across every game master in a simulation.
+
+    game_masters[0] is the initializer whenever player_specific_context is set,
+    so a component that deliberately lives on the game master that runs the
+    simulation is absent from the first entry. Searching only the first entry
+    finds nothing and, worse, finds nothing quietly.
+    """
+    for game_master in game_masters or ():
+        found = _find_gm_component(game_master, class_name)
+        if found is not None:
+            return found
+    return None
+    return None
+
+
+def _save_resumable_state(
+    base_path: Path,
+    checkpoint_data: dict,
+    config: SimulationConfig,
+    llm_settings: LLMSettings,
+    gm_llm_settings: LLMSettings | None,
+    steps_completed: int,
+    max_steps: int,
+) -> bool:
+    """Persist Concordia's full checkpoint_data alongside an HTML checkpoint.
+
+    Writes a ``.state.json`` sidecar next to *base_path* containing everything
+    needed to reconstruct and resume the simulation from *steps_completed*.
+
+    Returns True on success, False on error (errors are logged but never raised
+    so they cannot crash an ongoing simulation run).
+    """
+    import json
+
+    state_path = base_path.with_suffix('.state.json')
+    try:
+        payload = {
+            "format_version": 1,
+            "steps_completed": steps_completed,
+            "max_steps": max_steps,
+            "engine_type": config.engine_type.value if hasattr(config.engine_type, 'value') else str(config.engine_type),
+            "config": config.model_dump(mode='json'),
+            "llm_settings": llm_settings.model_dump(mode='json'),
+            "gm_llm_settings": gm_llm_settings.model_dump(mode='json') if gm_llm_settings else None,
+            "checkpoint_data": checkpoint_data,
+        }
+        with open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+        print(f"[CHECKPOINT] ✓ Resumable state saved: {state_path.name} ({state_path.stat().st_size:,} bytes)")
+        return True
+    except (TypeError, ValueError) as e:
+        # raw_log may contain non-JSON-serializable objects — log and continue
+        print(f"[WARNING] Could not save resumable state (serialisation error): {e}")
+        return False
+    except Exception as e:
+        print(f"[WARNING] Could not save resumable state: {e}")
+        return False
+
+
+def _retire_superseded_checkpoint(checkpoint_path: Path, final_path: Path) -> int:
+    """Delete an emergency checkpoint once the final artifacts supersede it.
+
+    The emergency copy written when the engine loop returns insures one narrow
+    window: HTML conversion and metadata extraction run between there and the
+    final save, and a failure in either would otherwise lose a run that had
+    already finished computing. Once the final log and its state sidecar are on
+    disk that insurance has expired, and what is left behind is a second copy
+    of the same checkpoint -- ``make_checkpoint_data()`` is called on both sides
+    with no stepping in between, so for a run that completed the two payloads
+    agree byte for byte. Keeping it costs one full state file per completed
+    run, which on a large run is hundreds of megabytes, retained for the life
+    of the logs directory.
+
+    Refuses to delete anything unless the final log and state are present and
+    non-empty, and leaves the state sidecar in place unless it is exactly the
+    size of the final one. An assumption that stops holding therefore costs
+    disk space, never a recovery point.
+
+    Returns the number of bytes reclaimed.
+    """
+    final_state = final_path.with_suffix('.state.json')
+    try:
+        if not (final_path.is_file() and final_path.stat().st_size > 0):
+            return 0
+        final_state_size = final_state.stat().st_size if final_state.is_file() else 0
+        if final_state_size <= 0:
+            return 0
+    except OSError:
+        return 0
+
+    checkpoint_state = checkpoint_path.with_suffix('.state.json')
+    reclaimed = 0
+    for path in (checkpoint_path,
+                 checkpoint_path.with_suffix('.metadata.json'),
+                 checkpoint_state):
+        try:
+            if not path.is_file():
+                continue
+            size = path.stat().st_size
+            if path == checkpoint_state and size != final_state_size:
+                print(
+                    f"[CHECKPOINT] Kept {path.name}: {size:,} bytes against a"
+                    f" final state of {final_state_size:,}, so it is not the"
+                    " duplicate it is expected to be"
+                )
+                continue
+            path.unlink()
+            reclaimed += size
+        except OSError as exc:
+            print(f"[WARNING] Could not retire {path.name}: {exc}")
+    return reclaimed
+
+
 async def run_simulation_stream(
     config: SimulationConfig,
     llm_settings: LLMSettings,
     gm_llm_settings: LLMSettings | None = None,
+    resume_state: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Run a simulation and yield SSE events.
@@ -129,6 +345,9 @@ async def run_simulation_stream(
         config: Simulation configuration
         llm_settings: LLM provider settings
         gm_llm_settings: Optional separate LLM settings for the Game Master
+        resume_state: When set, load Concordia checkpoint from this dict and run
+            only the remaining steps instead of starting from scratch.  The dict
+            must have the structure written by _save_resumable_state.
 
     Yields:
         SSE-formatted event strings
@@ -195,13 +414,38 @@ async def run_simulation_stream(
             'config': config.model_dump(mode='json')
         })
 
+        # For extend runs (resuming a *completed* simulation), disable early
+        # termination so the GM doesn't immediately say "Yes" before the first
+        # new step runs.  The user explicitly requested more steps, so the
+        # YOLO terminate check should not fire at step 0.
+        if resume_state:
+            src_completed = int(resume_state.get('steps_completed', 0))
+            src_max = int(resume_state.get('max_steps', 0))
+            if src_completed >= src_max > 0:
+                if getattr(config.game_master, 'allow_early_termination', False):
+                    config.game_master.allow_early_termination = False
+                    print("[RESUME] Extend mode: early termination disabled for this run")
+
         # Build simulation
         print("🔨 Building simulation from configuration...")
         sim = build_simulation(config, model, embedder, gm_model=gm_model)
         print("✓ Simulation built successfully\n")
 
+        # ── Resume path: restore Concordia state from a saved checkpoint ──
+        _already_completed = 0
+        if resume_state:
+            try:
+                concordia_checkpoint = resume_state['checkpoint_data']
+                _already_completed = int(resume_state.get('steps_completed', 0))
+                sim.load_from_checkpoint(concordia_checkpoint)
+                print(f"[RESUME] ✓ Loaded checkpoint: {_already_completed} steps already completed")
+                print(f"[RESUME]   Remaining: {config.max_steps - _already_completed} steps to run")
+            except Exception as _resume_err:
+                raise RuntimeError(f"Failed to restore simulation state: {_resume_err}") from _resume_err
+
         yield _format_sse(EventType.SIMULATION_START, {
-            'message': 'Simulation built successfully. Starting execution...'
+            'message': 'Resuming from checkpoint...' if resume_state else 'Simulation built successfully. Starting execution...',
+            'resumed_from_step': _already_completed if resume_state else None,
         })
 
         # Run simulation with streaming and progress tracking
@@ -209,12 +453,14 @@ async def run_simulation_stream(
         import asyncio
         progress_queue: asyncio.Queue = asyncio.Queue()
 
-        step_count_tracker = [0]  # Use list for mutable access in callback
+        # When resuming, seed counters so progress display and checkpoint gating
+        # continue correctly from where we left off.
+        step_count_tracker = [_already_completed]
         max_steps = config.max_steps
         start_time_progress = [time.time()]
 
         # Variables for partial checkpointing
-        last_checkpoint_step = [0]  # Use list for mutable access
+        last_checkpoint_step = [_already_completed]  # avoids re-triggering checkpoint at resume step
         checkpoint_interval = getattr(config, 'checkpoint_interval', 5) or 5
 
         print("🎮 Running simulation...")
@@ -234,7 +480,8 @@ async def run_simulation_stream(
             """Sync progress callback for Concordia - prints terminal progress and queues SSE events.
 
             Args:
-                checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+                checkpoint_data: Concordia checkpoint data; carries 'engine_step'
+                    on the patched fork, and 'checkpoint_counter' on any build.
 
             Raises:
                 SimulationCancelled: If cancellation was requested, stops the engine loop.
@@ -244,10 +491,32 @@ async def run_simulation_stream(
                 raise SimulationCancelled(f"Cancelled by user after step {step_count_tracker[0]}")
 
             try:
-                # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
-                step = checkpoint_data.get('checkpoint_counter', 0) + 1
-                step_count_tracker[0] = step
+                # Prefer the engine's own loop index. Counting callbacks instead
+                # undercounts on the asynchronous engine, where each entity runs
+                # its own loop and an iteration in which it did not act used to
+                # skip the callback: a finished run reported max_steps times the
+                # first agent's activity rate (20 x 0.8 = 16 of 20) and looked
+                # truncated. checkpoint_counter is not usable here — it counts
+                # snapshots, so emergency and final saves inflate it.
+                # Kept monotonic because the sequential engine reports its skip
+                # phase one lower than the step it is in.
+                engine_step = checkpoint_data.get('engine_step')
+                if engine_step is None:
+                    step_count_tracker[0] += 1
+                else:
+                    step_count_tracker[0] = max(
+                        step_count_tracker[0],
+                        _already_completed + int(engine_step),
+                    )
+                step = step_count_tracker[0]
                 elapsed = time.time() - start_time_progress[0]
+
+                # Keep the task registry in sync: reattaching clients poll
+                # /status/{task_id}.steps_completed, which otherwise stays 0
+                # for streamed runs (only the non-stream path updated it).
+                simulation_state.update_simulation_status(
+                    task_id, steps_completed=step
+                )
 
                 # Log timestamp for debugging hangs
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -317,6 +586,12 @@ async def run_simulation_stream(
                                 start_time, step, max_steps
                             )
 
+                            # Save full Concordia state so this checkpoint is resumable
+                            _save_resumable_state(
+                                checkpoint_path, checkpoint_data, config,
+                                llm_settings, gm_llm_settings, step, max_steps
+                            )
+
                             print(f"[CHECKPOINT] ✓ Partial results saved to: {checkpoint_filename} ({len(styled_partial):,} chars)")
                         except Exception as checkpoint_error:
                             print(f"[WARNING] Failed to save checkpoint: {checkpoint_error}")
@@ -360,18 +635,29 @@ async def run_simulation_stream(
                 'task_id': task_id,
             })
 
+        # Set once the engine's run loop ends, while sim.play() is still busy
+        # building the results log. See _mark_run_loop_completion.
+        run_loop_finished = [False]
+
         def run_simulation_blocking():
             from backend.services.llm_factory import set_active_task_id
             set_active_task_id(task_id)
             try:
+                steps_to_run = (max_steps - _already_completed) if resume_state else max_steps
+                # When resuming, pass premise="" to suppress re-observation of the opening
+                # premise (sequential engine's run_loop only calls observe() when `if premise:`).
+                resume_premise = "" if resume_state else None
                 kwargs = dict(
-                    max_steps=max_steps,
+                    max_steps=steps_to_run,
                     get_state_callback=sync_progress_callback,
                 )
+                if resume_premise is not None:
+                    kwargs['premise'] = resume_premise
                 if step_ctrl is not None:
                     kwargs['step_controller'] = step_ctrl
                     kwargs['step_callback'] = step_data_callback
-                return sim.play(**kwargs)
+                with _mark_run_loop_completion(sim, run_loop_finished):
+                    return sim.play(**kwargs)
             finally:
                 set_active_task_id(None)
 
@@ -382,6 +668,9 @@ async def run_simulation_stream(
         watchdog_enabled = os.getenv('WATCHDOG_ENABLED', 'true').lower() == 'true'
         watchdog_timeout = float(os.getenv('WATCHDOG_TIMEOUT_SECONDS', '600')) if watchdog_enabled else None  # Default: 10 minutes
         last_progress_time = [time.time()]  # Use list for mutable access
+        # One emergency save + throttled warnings per hang episode; re-armed
+        # when progress resumes (a hung run used to save a file every 5 s).
+        watchdog_episode = {"saved": False, "last_warn": 0.0}
 
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
@@ -414,16 +703,60 @@ async def run_simulation_stream(
                         if activity['calls_in_flight'] > 0:
                             waiting = time.time() - activity['last_call_start']
                             print(f"[WATCHDOG] {current_time} - Step {step_count_tracker[0]}/{max_steps} | LLM call in progress ({waiting:.0f}s) | {activity['total_calls']} calls total")
+                        elif run_loop_finished[0]:
+                            print(f"[WATCHDOG] {current_time} - Run loop complete, building results log ({time_since_progress:.0f}s since last step event)")
                         else:
                             print(f"[WATCHDOG] {current_time} - No progress for {time_since_progress:.0f}s, last step: {step_count_tracker[0]}/{max_steps}")
 
-                    if watchdog_enabled and watchdog_timeout and time_since_progress > watchdog_timeout:
-                        print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
-                        print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
-                        print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
+                    # A hang means "no LLM work happening", not "no step
+                    # progress reported". Under the asynchronous engine a step
+                    # is reported only when entity 0 acts, so at N=100
+                    # (~10 min/step) two steps can pass without a progress
+                    # event and the timeout fired on healthy runs — 7 spurious
+                    # WATCHDOG_EMERGENCY saves on the N=100 legs, including at
+                    # step 0, where a single step already exceeds the default
+                    # 600 s. LLM-call recency advances many times per step.
+                    _llm_stalled = True
+                    if watchdog_enabled and watchdog_timeout:
+                        from backend.services.llm_factory import get_llm_activity
+                        _act = get_llm_activity()
+                        _last_llm = max(_act.get('last_call_start') or 0.0,
+                                        _act.get('last_call_end') or 0.0)
+                        _llm_stalled = (
+                            _act.get('calls_in_flight', 0) <= 0
+                            and (not _last_llm
+                                 or time.time() - _last_llm > watchdog_timeout)
+                        )
 
-                        # Try to save emergency checkpoint if hung
+                    _watchdog_state = _classify_watchdog_state(
+                        llm_stalled=_llm_stalled,
+                        time_since_progress=time_since_progress,
+                        timeout=watchdog_timeout,
+                        run_loop_finished=run_loop_finished[0],
+                        enabled=watchdog_enabled,
+                    )
+
+                    if _watchdog_state == 'finalizing':
+                        # Quiet by design, not stalled: keep it visible so a
+                        # genuine stall while serializing is still reportable,
+                        # but do not write an emergency copy of a run that is
+                        # about to save itself a few lines below.
+                        _now = time.time()
+                        if _now - watchdog_episode["last_warn"] >= 300:
+                            watchdog_episode["last_warn"] = _now
+                            print(f"[WATCHDOG] Run loop complete; results log still building after {time_since_progress:.0f}s. Emergency save suppressed.")
+                    elif _watchdog_state == 'hung':
+                        _now = time.time()
+                        if _now - watchdog_episode["last_warn"] >= 300:
+                            watchdog_episode["last_warn"] = _now
+                            print(f"[WATCHDOG] ⚠️  WARNING: No progress for {time_since_progress:.0f}s - simulation may be hung")
+                            print(f"[WATCHDOG] Last completed step: {step_count_tracker[0]}/{max_steps}")
+                            print(f"[WATCHDOG] Hint: Check if LLM API is responsive or try a faster model")
+
+                        # Try to save one emergency checkpoint per hang episode
                         try:
+                            if watchdog_episode["saved"]:
+                                raise StopIteration  # already saved this episode
                             print(f"[WATCHDOG] Attempting emergency checkpoint save...")
                             hung_raw_log = sim.get_raw_log()
                             hung_html = _raw_log_to_html(hung_raw_log)
@@ -447,10 +780,17 @@ async def run_simulation_stream(
                             )
 
                             print(f"[WATCHDOG] ✓ Emergency checkpoint saved: {hung_filename} ({len(hung_styled):,} chars)")
+                            watchdog_episode["saved"] = True
+                        except StopIteration:
+                            pass
                         except Exception as hung_error:
                             print(f"[WATCHDOG] Failed to save emergency checkpoint: {hung_error}")
 
                         # Don't kill the simulation - just warn and continue monitoring
+                    elif watchdog_episode["saved"] or watchdog_episode["last_warn"]:
+                        # Progress resumed: re-arm for a future hang episode.
+                        watchdog_episode["saved"] = False
+                        watchdog_episode["last_warn"] = 0.0
                     # Check if simulation is done
                     continue
 
@@ -521,7 +861,10 @@ async def run_simulation_stream(
         print(f"{'='*60}\n")
 
         # EMERGENCY CHECKPOINT: Save results immediately after simulation completes
-        # This ensures we have a saved copy even if HTML conversion fails
+        # This ensures we have a saved copy even if HTML conversion fails.
+        # It is retired again once the final artifacts land -- see the call to
+        # _retire_superseded_checkpoint below.
+        emergency_path: Path | None = None
         try:
             print("[CHECKPOINT] Saving emergency checkpoint before HTML processing...")
             emergency_raw_log = sim.get_raw_log()
@@ -543,6 +886,14 @@ async def run_simulation_stream(
             _save_checkpoint_metadata(
                 emergency_path, config, llm_settings, gm_llm_settings,
                 start_time, step_count_tracker[0], max_steps
+            )
+
+            # Save the latest Concordia state — this is the primary resume point when
+            # a run dies mid-way (crashed / timed out / killed).
+            emergency_concordia_state = sim.make_checkpoint_data()
+            _save_resumable_state(
+                emergency_path, emergency_concordia_state, config,
+                llm_settings, gm_llm_settings, step_count_tracker[0], max_steps
             )
 
             print(f"[CHECKPOINT] ✓ Emergency checkpoint saved: {emergency_filename} ({len(emergency_styled):,} chars)")
@@ -672,6 +1023,47 @@ async def run_simulation_stream(
                 import traceback
                 traceback.print_exc()
 
+        # Extract the per-agent probe series if one was administered.
+        #
+        # Searched across every game master rather than game_masters[0], which
+        # is the initializer whenever player_specific_context is set. The probe
+        # deliberately lives on the game master that runs the simulation, so
+        # looking only at the first one finds nothing.
+        agent_probe_results = None
+        if sim.game_masters and getattr(config.game_master, 'agent_probe', None):
+            probe_component = _find_component_on_any_gm(
+                sim.game_masters, 'AgentProbeComponent')
+            if probe_component is None:
+                # Loud, because the alternative is a run that looks complete
+                # and silently carries no measurement.
+                print("[ERROR] Agent probe was configured but its component was "
+                      "not found on the game master; no probe data was recorded.")
+            else:
+                try:
+                    summary = probe_component.get_integrity_summary()
+                    agent_probe_results = {
+                        'series': {
+                            name: [
+                                {'event_index': event_index, **entry}
+                                for event_index, entry in series
+                            ]
+                            for name, series in
+                            probe_component.get_all_history().items()
+                        },
+                        # Individual answers, so a shift in the aggregate stays
+                        # traceable to the agents who changed their minds.
+                        'responses': probe_component.get_responses(),
+                        'failures': probe_component.get_failures(),
+                        'integrity': summary,
+                    }
+                    print(f"[PROBE] {summary['administrations']} administration(s) "
+                          f"over {summary['population']} agents, "
+                          f"{summary['failures']} failure(s)")
+                except Exception as e:
+                    print(f"[ERROR] Failed to extract agent probe results: {e}")
+                    import traceback
+                    traceback.print_exc()
+
         # Special handling for interviewer prefab to extract questionnaire results
         if config.game_master.prefab == 'interviewer__GameMaster' and sim.game_masters:
             debug_print(f"[DEBUG] Interviewer prefab detected, extracting questionnaire results")
@@ -689,14 +1081,22 @@ async def run_simulation_stream(
                     debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
                     debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
-                    results_df = questionnaire_component.get_questionnaires_results()
+                    # Capture raw per-question answers FIRST: this is what the
+                    # ICC(3,1) reliability path consumes and it must survive even
+                    # when aggregation fails. get_questionnaires_results() raises
+                    # for questionnaires whose `dimensions` attribute is None
+                    # (base_questionnaire._default_aggregate_results evaluates
+                    # `dimension in self.dimensions`), so run it separately and
+                    # never let an aggregation error discard the answers.
                     answers = questionnaire_component.get_answers()
                     questionnaire_answers = answers
-                    if results_df is not None and not results_df.empty:
-                        try:
+                    results_df = None
+                    try:
+                        results_df = questionnaire_component.get_questionnaires_results()
+                        if results_df is not None and not results_df.empty:
                             questionnaire_aggregates = results_df.to_dict()
-                        except Exception:
-                            questionnaire_aggregates = None
+                    except Exception as agg_err:
+                        print(f"[WARNING] Questionnaire aggregation failed (answers still captured): {agg_err}")
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")
@@ -1014,11 +1414,26 @@ async def run_simulation_stream(
                 "model": gm_llm_settings.model_name,
             }
 
+        # Outcome fields. Without them the metadata records only that a run
+        # happened, not whether it finished: recovering the step count meant
+        # inferring it from grounded-variable tick counts after the fact.
+        if was_cancelled:
+            run_status = "cancelled"
+        elif simulation_error:
+            run_status = "failed"
+        else:
+            run_status = "completed"
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
             "completed_at": end_time_iso,
             "elapsed_seconds": round(elapsed, 1),
+            "status": run_status,
+            "steps_completed": step_count_tracker[0],
+            "max_steps": max_steps,
+            "error": simulation_error,
+            "error_type": simulation_error_type,
             "llm": {
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
@@ -1051,6 +1466,15 @@ async def run_simulation_stream(
 
             agent_metadata["game_master"]["grounded_variables"] = grounded_vars_data
             debug_print(f"[DEBUG] Added {len(grounded_vars_data)} grounded variables to metadata")
+
+        # Probe results sit beside the grounded variables rather than replacing
+        # them: when both are configured the export carries a tallied and a
+        # narrator-estimated series for the same run, which is what makes the
+        # two instruments comparable.
+        if agent_probe_results:
+            agent_metadata["game_master"]["agent_probe"] = agent_probe_results
+            debug_print(f"[DEBUG] Added agent probe results for "
+                        f"{len(agent_probe_results['series'])} item(s)")
 
         for agent in config.agents:
             agent_info = {
@@ -1125,6 +1549,35 @@ async def run_simulation_stream(
         import json
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(agent_metadata, f, indent=2)
+
+        # Save resumable state sidecar alongside the final log so completed
+        # runs can be extended from the UI via the additional_steps flow.
+        final_state_saved = False
+        try:
+            final_concordia_state = sim.make_checkpoint_data()
+            final_state_saved = _save_resumable_state(
+                log_path, final_concordia_state, config, llm_settings,
+                gm_llm_settings,
+                steps_completed=step_count_tracker[0],
+                max_steps=step_count_tracker[0],
+            )
+            if final_state_saved:
+                print(f"[CHECKPOINT] ✓ Final resumable state saved: {log_path.stem}.state.json")
+        except Exception as _frs_err:
+            print(f"[WARNING] Failed to save final resumable state: {_frs_err}")
+
+        # The emergency copy has served its purpose now that the run is saved
+        # properly. Retire it only for a run that finished cleanly: a cancelled
+        # or failed run may have no other resume point, and its emergency state
+        # records the step budget the run was aiming at rather than the step it
+        # actually stopped on, which is the more useful of the two to keep.
+        if final_state_saved and run_status == "completed" and emergency_path is not None:
+            _reclaimed = _retire_superseded_checkpoint(emergency_path, log_path)
+            if _reclaimed:
+                print(
+                    "[CHECKPOINT] ✓ Retired superseded emergency checkpoint"
+                    f" ({_reclaimed:,} bytes reclaimed)"
+                )
 
         print(f"✓ Log saved to: {log_filename}")
         print(f"   Size: {len(styled_html):,} characters")
@@ -1259,7 +1712,8 @@ async def run_simulation_simple(
             """Called after each step completes to show progress.
 
             Args:
-                checkpoint_data: Dictionary containing checkpoint data with 'checkpoint_counter' key
+                checkpoint_data: Concordia checkpoint data; carries 'engine_step'
+                    on the patched fork, and 'checkpoint_counter' on any build.
 
             Raises:
                 SimulationCancelled: If cancellation was requested, stops the engine loop.
@@ -1268,9 +1722,15 @@ async def run_simulation_simple(
                 print(f"[CANCEL] Cancellation requested — stopping after step {step_count[0]}")
                 raise SimulationCancelled(f"Cancelled by user after step {step_count[0]}")
 
-            # checkpoint_counter is 0-indexed; add 1 for the human-facing step number
-            step = checkpoint_data.get('checkpoint_counter', 0) + 1
-            step_count[0] = step
+            # See sync_progress_callback: the engine's index, not a callback
+            # tally, since the asynchronous engine skips callbacks for
+            # iterations in which its entity did not act.
+            engine_step = checkpoint_data.get('engine_step')
+            if engine_step is None:
+                step_count[0] += 1
+            else:
+                step_count[0] = max(step_count[0], int(engine_step))
+            step = step_count[0]
             elapsed = time.time() - start_time_progress[0]
 
             # Calculate estimated time remaining
@@ -1307,7 +1767,6 @@ async def run_simulation_simple(
             results = sim.play(
                 max_steps=config.max_steps,
                 get_state_callback=progress_callback,
-                verbose=True
             )
         except SimulationCancelled:
             was_cancelled = True
@@ -1381,14 +1840,22 @@ async def run_simulation_simple(
                     debug_print(f"[DEBUG] Questionnaire component type: {type(questionnaire_component).__name__}")
                     debug_print(f"[DEBUG] Questionnaire state: {questionnaire_component.get_state() if hasattr(questionnaire_component, 'get_state') else 'N/A'}")
 
-                    results_df = questionnaire_component.get_questionnaires_results()
+                    # Capture raw per-question answers FIRST: this is what the
+                    # ICC(3,1) reliability path consumes and it must survive even
+                    # when aggregation fails. get_questionnaires_results() raises
+                    # for questionnaires whose `dimensions` attribute is None
+                    # (base_questionnaire._default_aggregate_results evaluates
+                    # `dimension in self.dimensions`), so run it separately and
+                    # never let an aggregation error discard the answers.
                     answers = questionnaire_component.get_answers()
                     questionnaire_answers = answers
-                    if results_df is not None and not results_df.empty:
-                        try:
+                    results_df = None
+                    try:
+                        results_df = questionnaire_component.get_questionnaires_results()
+                        if results_df is not None and not results_df.empty:
                             questionnaire_aggregates = results_df.to_dict()
-                        except Exception:
-                            questionnaire_aggregates = None
+                    except Exception as agg_err:
+                        print(f"[WARNING] Questionnaire aggregation failed (answers still captured): {agg_err}")
 
                     debug_print(f"[DEBUG] Results DataFrame: {results_df}")
                     debug_print(f"[DEBUG] Answers dict: {answers}")
@@ -1698,11 +2165,18 @@ async def run_simulation_simple(
                 "model": gm_llm_settings.model_name,
             }
 
+        # Outcome fields, as in the streaming path. This entry point has no
+        # error capture of its own, so only cancellation is distinguishable.
+        run_status = "cancelled" if was_cancelled else "completed"
+
         agent_metadata = {
             "timestamp": timestamp,
             "started_at": start_time_iso,
             "completed_at": end_time_iso,
             "elapsed_seconds": round(elapsed, 1),
+            "status": run_status,
+            "steps_completed": step_count[0],
+            "max_steps": config.max_steps,
             "llm": {
                 "provider": llm_settings.provider.value if hasattr(llm_settings.provider, 'value') else str(llm_settings.provider),
                 "model": llm_settings.model_name,
@@ -1722,6 +2196,15 @@ async def run_simulation_simple(
                 var.model_dump() if hasattr(var, 'model_dump') else var
                 for var in config.game_master.grounded_variables
             ]
+
+        # This path records the declared configuration, not what the run
+        # measured; the streamed path is the one that harvests component
+        # histories. Say so rather than letting a configured probe produce an
+        # export with no series in it and no indication why.
+        if getattr(config.game_master, 'agent_probe', None):
+            print("[PROBE] Simulation ran on the simple path, which does not "
+                  "harvest component histories: no probe series will appear in "
+                  "this export. Use the streaming endpoint to collect it.")
 
         for agent in config.agents:
             agent_info = {

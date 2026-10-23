@@ -28,6 +28,10 @@ class LogBroadcaster:
         self._lock = threading.Lock()
 
     def emit(self, category: LogCategory, message: str):
+        # Persist failure-relevant lines; the ring buffer alone is
+        # ephemeral and a disconnected browser would never see them.
+        from backend.utils import event_journal
+        event_journal.ingest(category.value, message)
         entry = LogEntry(timestamp=time.time(), category=category, message=message)
         with self._lock:
             self._buffer.append(entry)

@@ -390,7 +390,9 @@ export default function GroundedVariablesChart({
             {/* Y-Axis Labels */}
             <div className="relative h-64 mb-4">
               {/* Y-axis */}
-              <div className="absolute left-0 top-0 bottom-8 w-12 flex flex-col justify-between text-xs text-gray-500">
+              {/* Spans the full plot height, not h-64 minus the x-axis strip:
+                  the labels have to sit on the gridlines they name. */}
+              <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-gray-500 -my-2">
                 <span>{yMax}</span>
                 <span>{Math.round((yMax + yMin) / 2)}</span>
                 <span>{yMin}</span>
@@ -415,16 +417,26 @@ export default function GroundedVariablesChart({
 
                   return (
                     <svg key={varName} className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
-                      <polyline
-                        fill="none"
-                        stroke={color}
-                        strokeWidth="2"
-                        points={data.map((point, i) => {
-                          const x = (i / (data.length - 1)) * 100;
-                          const y = 100 - ((point.value as number - yMin) / yRange) * 100;
-                          return `${x}%,${y}%`;
-                        }).join(' ')}
-                      />
+                      {/* Nested in its own stretched viewBox: the points attribute
+                          takes user-space numbers, and percentages made it drop the
+                          line silently while the markers still drew. */}
+                      <svg
+                        className="absolute inset-0 w-full h-full"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                      >
+                        <polyline
+                          fill="none"
+                          stroke={color}
+                          strokeWidth="2"
+                          vectorEffect="non-scaling-stroke"
+                          points={data.map((point, i) => {
+                            const x = (i / (data.length - 1)) * 100;
+                            const y = 100 - ((point.value as number - yMin) / yRange) * 100;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                        />
+                      </svg>
 
                       {/* Data points */}
                       {data.map((point, i) => {
