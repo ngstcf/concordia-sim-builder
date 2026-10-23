@@ -65,7 +65,7 @@ async def root():
         return FileResponse(str(_DIST / "index.html"))
     return {
         "message": "Concordia Simulation Builder API",
-        "version": "2.4.0",
+        "version": "2.4.2",
         "docs": "/docs",
     }
 

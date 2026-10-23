@@ -19,7 +19,7 @@ Concordia is a powerful research framework, but coding a simulation from scratch
 | Write custom scripts for data extraction and analysis | Structured CSV/JSON export, cooperation metrics, grounded variable tracking |
 | Manual agent creation, one at a time | Census-based generation from demographic distributions, persona generator |
 | Re-run manually with different parameters | Batch runs with parameter sweeps over temperature and step count |
-| Every new scenario is a new coding effort | 38 ready-to-run templates covering research, policy, game theory, upstream DeepMind examples, and more |
+| Every new scenario is a new coding effort | 39 ready-to-run templates covering research, policy, game theory, upstream DeepMind examples, and more |
 
 ![Simulation Builder](https://img.shields.io/badge/Concordia-Simulation%20Builder-blue)
 ![Version](https://img.shields.io/badge/Version-2.4.0-green)
@@ -43,6 +43,23 @@ Template inventory is updated over time; the latest template count is always ref
 - [Vaccine Hesitancy Study](docs/research-use-cases/vaccine-hesitancy-study.md)
 - [Phishing Attack Simulation](docs/research-use-cases/phishing-attack-simulation.md)
 - [Urban Gentrification Simulation](docs/research-use-cases/urban-gentrification-simulation.md)
+
+---
+
+**What's new in v2.4.2** (since [v2.4.0](https://github.com/ngstcf/concordia-sim-builder/releases/tag/v2.4.0), the SIMULTECH 2026 release)
+
+- **Resume and extend**: continue an interrupted run from any checkpoint, with agent memories, Game Master state, and configuration restored from its `.state.json` file (v2.4.1), or extend a completed run by more steps.
+- **Agent probe and joint constraints**: put a fixed multiple-choice item to every agent on a set cadence and tally the answers, and declare constraints across grounded variables, such as shares that must sum to 100. See [Measuring by Counting](#measuring-by-counting).
+- **Context window and feed compaction** for the asynchronous social-media Game Master: bound how much history each agent holds, fold older posts into a rolling digest, and check the projected prompt size before a run starts. See [Managing Context at Scale](#managing-context-at-scale).
+- **Independent activity rates**: each agent's rate now sets its own per-step probability, so raising one agent's rate no longer changes the others.
+- **Failure observability**: a durable event journal, run outcome badges, and a health strip with stall detection. See [Monitoring Long-Running Simulations](#monitoring-long-running-simulations).
+- **Providers**: a second Azure OpenAI endpoint (`azure2`), reasoning-effort controls passed through to providers, an optional content-filter fallback, and a cap on concurrent requests.
+- **Reliability fixes**: batch cancellation now stops the running simulation, failed runs are no longer recorded as successes, and dropped connections (`APIConnectionError`) are retried.
+- **API keys kept out of files**: state files, saved configurations, and exported JSON no longer contain an API key typed into the UI, and the log route serves only `.html` logs.
+
+**Resume limitations:** simulations using `player_specific_context` may re-run the formative-memory initializer on resume; the step-controller, interview, and survey engines have not been tested with resume; the Extend button appears only for runs completed on v2.4.1 or later. Because state files carry no API keys, resume reads provider keys from `.env`: a run started with a key typed into the UI can be resumed once that key is in `.env`.
+
+---
 
 ## Sample Simulation Results
 
@@ -69,7 +86,7 @@ Each simulation produces three output files:
 ## Features
 
 - **Form-Based Configuration** — Intuitive web UI for building agent-based simulations without coding
-- **38 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, and 5 adapted Google DeepMind upstream examples (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
+- **39 Simulation Templates** — Pre-built scenarios covering peace negotiation, game theory, SDG research, cybersecurity, a published social-media manipulation study, and 5 adapted Google DeepMind upstream examples (see [SIMULATION_TEMPLATES_GUIDE.md](docs/SIMULATION_TEMPLATES_GUIDE.md))
 - **Template Growth** — More templates are added based on user feedback as the project grows
 - **Multi-Agent System** — Define agents with unique goals, memories, psychological components, and behavioral prefabs
 - **Psychological Components** — Personality, cognitive bias, social identity, emotions, values, Theory of Planned Behavior
@@ -456,14 +473,14 @@ Use compaction whenever `POST /validate`'s pre-flight check warns that a
 configuration will not fit; for populations and run lengths small enough
 to fit in full, there is nothing to gain from turning it on.
 
-## Templates (38)
+## Templates (39)
 
 | Category | Templates |
 |----------|-----------|
 | **Quick Start** | Coffee Shop Demo (5 steps), Peace Negotiation (20 steps) |
 | **Prefab Demos** | Planning Agent, Scripted Entity, Context-Aware Moderator, Dialogic Conversation, Strategic Game, Interviewer, Formative Memories, Marketplace |
 | **Research** | Vaccine Hesitancy, Urban Gentrification, Phishing Attack, AI Policy Red Team, Music Career Crossroads |
-| **General Scenarios** | Rational Negotiators, Philosophy Roundtable, Social Media Debate, Sealed-Bid Auction, Wizard-of-Oz CS Training, Spaceship Crisis |
+| **General Scenarios** | Rational Negotiators, Philosophy Roundtable, Social Media Debate, Sealed-Bid Auction, Wizard-of-Oz CS Training, Spaceship Crisis, Mastodon Influence Experiment |
 | **Advanced Scenarios** | Nested Simulation, Grounded Variables, Hostage Negotiation (step controller), Colony Survival (contrib GM), Bookstore Reunion (formative mem), Ethics Board (measurements), Diplomatic Crisis (nested sim) |
 | **SDG Scenarios** | State Formation (16), Labor Strike (8), Fishery Management (14), Flood Evacuation (11/13), Educational Opportunity (10) |
 | **Upstream Examples** | Robot Alchemy Forum (async), Philosophy Exam Prep, Romantic Trig Tutor, General Store: Crime & Punishment (simultaneous, 7 agents), Pub Coordination: London (game theory) |
@@ -780,6 +797,8 @@ If you use this software in your research, please cite the SIMULTECH 2026 paper 
 
 - **Paper:** published version DOI [10.5220/0014756100004094](https://doi.org/10.5220/0014756100004094) (SciTePress); accepted manuscript on Zenodo [10.5281/zenodo.18417283](https://doi.org/10.5281/zenodo.18417283) (concept DOI — always resolves to the latest version).
 - **Builder source:** <https://github.com/ngstcf/concordia-sim-builder>
+- **Conference version:** release [`v2.4.0`](https://github.com/ngstcf/concordia-sim-builder/releases/tag/v2.4.0), the code the SIMULTECH 2026 paper describes.
+- **Extended article:** its experiments ran on the commits listed in the reproducibility bundle, DOI [10.5281/zenodo.22169332](https://doi.org/10.5281/zenodo.22169332); its E6 and later arms also applied [`patches/concordia-async-step-reporting.patch`](patches/concordia-async-step-reporting.patch).
 - **Patched Concordia 2.4.0:** [`ngstcf/concordia@5ed8813`](https://github.com/ngstcf/concordia/commit/5ed88134f7a08f2a13209b2e01bbb70a76d6771f) (branch `v2.4.0-simbuilder`), pinned in `requirements.txt` — see [Local Modifications to Concordia](#local-modifications-to-concordia-v240).
 
 ## Acknowledgments

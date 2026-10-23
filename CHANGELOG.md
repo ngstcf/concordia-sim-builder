@@ -1,6 +1,70 @@
 # Concordia Compatibility Changelog
 
-## Version 2.4.0 (Current - 2026-05-05)
+## Version 2.4.2 (2026-10-23)
+
+Feature release on Concordia 2.4; the patched fork pin (`ngstcf/concordia@5ed8813`) is unchanged. This is the code the extended SIMULTECH 2026 article's experiments ran on; its reproducibility bundle records the exact commit behind each experiment.
+
+### New Features
+
+**Resume**
+- Extend completed runs with additional steps. Early termination is disabled for the extension, and the UI offers Extend on completed runs and Resume on interrupted ones
+
+**Measurement**
+- Agent probe: a fixed multiple-choice item put to every agent on a set cadence and tallied over the roster, configured and read in the UI
+- Joint constraints across grounded variables (`variable_groups`): a required total with a tolerance, and flag, renormalize, or reject on violation
+- Cumulative grounded variables, carried forward by the platform; a total the Game Master walks back is recorded, not silently repaired
+
+**Context at scale (asynchronous social-media Game Master)**
+- Context-window control (`context_window_steps`) with a pre-flight projection of peak prompt tokens, in the UI
+- Feed compaction (`feed_mode=compacted`): posts past a verbatim tail fold into a rolling digest, in the UI
+
+**Providers and requests**
+- Secondary Azure OpenAI endpoint (`azure2`)
+- `extra_body` passthrough for provider-specific fields (OpenAI-compatible providers and Anthropic), with reasoning-effort dropdowns for agent and Game Master models
+- Optional content-filter fallback mode
+- Cap on concurrent LLM requests (`LLM_MAX_CONCURRENCY`)
+
+**Observability**
+- Durable event journal, run outcome badges, and a health strip with stall detection; liveness follows LLM activity
+
+**Templates**
+- Mastodon Influence Experiment: activity rates set to the source study's design (voters 0.8, manipulator 0.9), a cumulative misinformation counter, a default agent probe, and a declared electorate sum invariant
+
+### Behavior Changes
+- Per-agent activity rates no longer depend on the roster: each rate is measured against the default rate and capped at one act per step, and clipped rates are reported (vendored activity scheduler)
+
+### Security
+- State files, saved configurations, and exported configuration JSON no longer contain an API key typed into the UI; loading or importing a configuration keeps the key already entered in the session. Resume reads provider keys from `.env`
+- `GET /api/simulations/logs/{filename}` serves only `.html` simulation logs; it previously returned any file in `logs/` by name, state files included
+- If you typed an API key into the UI on v2.4.1, its state files and any saved configurations may hold that key in plaintext: delete them or rotate the key
+
+### Fixes
+- Batch cancellation reaches the in-flight simulation
+- Failed runs are no longer recorded as successful batch runs; run metadata records status, steps completed, and errors
+- `APIConnectionError`, the SDK's parent class for connection failures, is retried
+- The asynchronous engine reports its true step index, so interval checkpoints land on the intended steps (see `patches/concordia-async-step-reporting.patch`)
+- Interviewer and Likert questionnaires work again, through a vendored questionnaire engine
+- The watchdog writes one emergency save per hang and no longer treats results-log construction as a hang
+- Emergency checkpoints that duplicate a completed run's final files are retired
+- Export recognizes asynchronous Game Master narrations and reports parse failures
+- The grounded-variable chart draws its lines, with aligned y-axis labels
+- `NeverTerminate` is injected universally when early termination is off; grounded variables are injected into the dialogic Game Master; the grounded-variable prompt shows allowed values; resume no longer fails on description lines in grounded-variable state; the step display uses a local counter
+
+### Notes
+- Version strings in `backend/main.py` and `frontend/package.json` now report 2.4.2 (they had stayed at 2.4.0 through v2.4.1)
+
+## Version 2.4.1 (2026-07-18)
+
+### New Features
+- Resume interrupted runs from any checkpoint: a resumable `.state.json` file saved with each checkpoint restores agent memories, Game Master state, and configuration through `POST /api/simulations/resume`
+- The backend serves the built frontend at localhost:8000
+
+### Fixes
+- Request timeouts enforced for Gemini, Anthropic, and GLM clients (default 300 s)
+- Server-hang prevention and SSE disconnect recovery
+- `action_spec_parser` handles verbose LLM JSON responses
+
+## Version 2.4.0 (2026-05-05)
 
 Upgraded from gdm-concordia 2.1.0 to 2.4.0. Major platform expansion with new simulation engines, GM components, a redesigned frontend, and quantitative research features.
 
